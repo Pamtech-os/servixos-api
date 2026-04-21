@@ -6,4 +6,8 @@ import { Business, BusinessModel } from './schemas/business.schema';
 export class BusinessRepository {
   private readonly businessModel: ReturnModelType<typeof Business> =
     BusinessModel;
+
+  async findById(id: string): Promise<Business | null> {
+    return this.businessModel.findById(id).lean<Business>().exec();
+  }
 }

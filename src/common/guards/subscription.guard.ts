@@ -32,7 +32,9 @@ export class SubscriptionGuard implements CanActivate {
     // No @RequirePlan() decorator — no plan restriction
     if (!featureKey) return true;
 
-    const { businessId } = context.switchToHttp().getRequest().user;
+    const { businessId } = context
+      .switchToHttp()
+      .getRequest<{ user: { businessId: string } }>().user;
     const business = await this.businessRepository.findById(businessId);
     if (!business) throw new NotFoundException(TENANT_MESSAGES.ERROR.NOT_FOUND);
 
