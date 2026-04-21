@@ -18,21 +18,24 @@ export class DecryptionMiddleware implements NestMiddleware {
     private readonly reflector: Reflector,
   ) {}
 
-  use(req: Request, res: Response, next: NextFunction) {
+  use(req: Request, _res: Response, next: NextFunction) {
     // Only decrypt when the matched route is decorated with @Encrypt()
+    type RouteHandler = (...args: unknown[]) => unknown;
+    const routeHandler = (req.route as { handler?: RouteHandler } | undefined)
+      ?.handler;
     const shouldDecrypt = this.reflector.get<boolean>(
       ENCRYPT_KEY,
-      req.route?.handler,
+      routeHandler as RouteHandler,
     );
 
-    if (!shouldDecrypt || !req.body?.payload) {
+    if (!shouldDecrypt || !(req.body as Record<string, unknown>)?.payload) {
       return next();
     }
 
     try {
       const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
       const plaintext = decrypt(req.body as EncryptedEnvelope, secret);
-      req.body = JSON.parse(plaintext);
+      req.body = JSON.parse(plaintext) as Record<string, unknown>;
     } catch {
       throw new BadRequestException(COMMON_MESSAGES.ERROR.BAD_REQUEST);
     }
