@@ -40,8 +40,11 @@ export class Business {
   @prop({ required: true, trim: true })
   name: string;
 
+  @prop({ ref: 'BusinessCategory', type: Types.ObjectId, required: true })
+  categoryId: Types.ObjectId;
+
   @prop({ required: true, trim: true })
-  category: string;
+  categoryName: string;
 
   @prop({ trim: true })
   description?: string;
@@ -85,6 +88,9 @@ export class Business {
     default: () => ({}),
   })
   notifications: NotificationPreferences;
+
+  @prop({ default: 'UTC' })
+  timezone: string;
 
   @prop()
   deletedAt?: Date;

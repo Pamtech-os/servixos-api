@@ -57,6 +57,12 @@ export class User {
   lastLoginAt?: Date;
 
   @prop()
+  passwordResetToken?: string;
+
+  @prop()
+  passwordResetTokenExpiry?: Date;
+
+  @prop()
   deletedAt?: Date;
 }
 
