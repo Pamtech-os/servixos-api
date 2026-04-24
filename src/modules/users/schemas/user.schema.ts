@@ -14,6 +14,8 @@ export enum UserRole {
 @index({ email: 1 }, { unique: true })
 @modelOptions({ schemaOptions: { collection: 'users', timestamps: true } })
 export class User {
+  _id: Types.ObjectId;
+
   @prop({ required: true, trim: true })
   firstName: string;
 
@@ -26,8 +28,8 @@ export class User {
   @prop({ required: true })
   passwordHash: string;
 
-  @prop({ required: true })
-  pinHash: string;
+  @prop()
+  pinHash?: string;
 
   @prop({ trim: true })
   phone?: string;
@@ -55,6 +57,12 @@ export class User {
 
   @prop()
   lastLoginAt?: Date;
+
+  @prop()
+  emailVerificationOtp?: string;
+
+  @prop()
+  emailVerificationOtpExpiry?: Date;
 
   @prop()
   passwordResetToken?: string;

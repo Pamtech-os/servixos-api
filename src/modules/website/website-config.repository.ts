@@ -25,4 +25,18 @@ export class WebsiteConfigRepository {
       .lean<WebsiteConfig>()
       .exec();
   }
+
+  async updateByBusinessId(
+    businessId: string,
+    update: Partial<WebsiteConfig>,
+  ): Promise<WebsiteConfig | null> {
+    return this.model
+      .findOneAndUpdate(
+        { businessId: new Types.ObjectId(businessId) },
+        { $set: update },
+        { new: true },
+      )
+      .lean<WebsiteConfig>()
+      .exec();
+  }
 }

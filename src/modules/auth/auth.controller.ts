@@ -8,26 +8,26 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { VerifyPinDto } from './dto/verify-pin.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { CreateAccountDto } from './dto/create-account.dto';
+import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendOtpDto } from './dto/resend-otp.dto';
+import { SetPinDto } from './dto/set-pin.dto';
+import { CreateBusinessDto } from './dto/create-business.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { Encrypt } from 'src/common/decorators/encrypt.decorator';
 
+@Encrypt()
 @Public()
 @UseGuards(ApiKeyGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
-
-  @Post('register')
-  @HttpCode(HttpStatus.CREATED)
-  register(@Body() dto: RegisterDto) {
-    return this.authService.register(dto);
-  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -66,5 +66,35 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   resetPassword(@Body() dto: ResetPasswordDto) {
     return this.authService.resetPassword(dto);
+  }
+
+  @Post('onboarding/account')
+  @HttpCode(HttpStatus.CREATED)
+  createAccount(@Body() dto: CreateAccountDto) {
+    return this.authService.createAccount(dto);
+  }
+
+  @Post('onboarding/verify-email')
+  @HttpCode(HttpStatus.OK)
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('onboarding/resend-otp')
+  @HttpCode(HttpStatus.OK)
+  resendOtp(@Body() dto: ResendOtpDto) {
+    return this.authService.resendEmailOtp(dto);
+  }
+
+  @Post('onboarding/set-pin')
+  @HttpCode(HttpStatus.OK)
+  setPin(@Body() dto: SetPinDto) {
+    return this.authService.setPin(dto);
+  }
+
+  @Post('onboarding/business')
+  @HttpCode(HttpStatus.CREATED)
+  createBusiness(@Body() dto: CreateBusinessDto) {
+    return this.authService.createBusiness(dto);
   }
 }

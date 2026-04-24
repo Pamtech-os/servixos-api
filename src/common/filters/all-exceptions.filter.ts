@@ -6,13 +6,17 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Response } from 'express';
 import { COMMON_MESSAGES } from '../constants/messages/common.messages';
 import { ApiResponse } from '../dto/response.dto';
+import { encrypt } from '../utils/crypto.util';
 
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
+
+  constructor(private readonly config: ConfigService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -50,6 +54,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
     };
 
-    response.status(statusCode).json(body);
+    const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
+    response.status(statusCode).json(encrypt(JSON.stringify(body), secret));
   }
 }

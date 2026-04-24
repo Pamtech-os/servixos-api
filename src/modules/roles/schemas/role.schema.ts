@@ -3,6 +3,7 @@ import {
   getModelForClass,
   index,
   modelOptions,
+  PropType,
 } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
@@ -96,13 +97,15 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<DefaultRole, Permission[]> = {
 @index({ businessId: 1, name: 1 }, { unique: true })
 @modelOptions({ schemaOptions: { collection: 'roles', timestamps: true } })
 export class Role {
+  _id: Types.ObjectId;
+
   @prop({ ref: 'Business', type: Types.ObjectId, required: true })
   businessId: Types.ObjectId;
 
   @prop({ required: true, trim: true })
   name: string;
 
-  @prop({ type: () => [String], default: [] })
+  @prop({ type: () => String, default: [] }, PropType.ARRAY)
   permissions: string[];
 
   /** System roles cannot be deleted and are seeded on business creation */

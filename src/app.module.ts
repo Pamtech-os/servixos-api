@@ -16,6 +16,8 @@ import { databaseConfig } from './config/database.config';
 import { jwtConfig } from './config/jwt.config';
 import { redisConfig } from './config/redis.config';
 import { encryptionConfig } from './config/encryption.config';
+import { mailConfig } from './config/mail.config';
+import { aiConfig } from './config/ai.config';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
@@ -33,12 +35,20 @@ import { WebsiteModule } from './modules/website/website.module';
 import { BusinessCategoriesModule } from './modules/business-categories/business-categories.module';
 import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
+import { AgendaModule } from './modules/agenda/agenda.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      load: [databaseConfig, jwtConfig, redisConfig, encryptionConfig],
+      load: [
+        databaseConfig,
+        jwtConfig,
+        redisConfig,
+        encryptionConfig,
+        mailConfig,
+        aiConfig,
+      ],
     }),
     MongooseModule.forRootAsync({
       inject: [ConfigService],
@@ -49,6 +59,7 @@ import { EmailModule } from './modules/email/email.module';
     }),
     RedisModule,
     EmailModule,
+    AgendaModule,
     AuthModule,
     UsersModule,
     BusinessModule,

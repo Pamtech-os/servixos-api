@@ -19,4 +19,22 @@ export class BusinessRepository {
     const [business] = await this.businessModel.create([data], { session });
     return business.toObject() as Business;
   }
+
+  async findBySubdomain(subdomain: string): Promise<Business | null> {
+    return this.businessModel
+      .findOne({ subdomain, deletedAt: null })
+      .lean<Business>()
+      .exec();
+  }
+
+  async findSubdomainsStartingWith(base: string): Promise<string[]> {
+    const docs = await this.businessModel
+      .find(
+        { subdomain: { $regex: `^${base}(-\\d+)?$` }, deletedAt: null },
+        { subdomain: 1, _id: 0 },
+      )
+      .lean<{ subdomain?: string }[]>()
+      .exec();
+    return docs.map((d) => d.subdomain).filter((s): s is string => !!s);
+  }
 }

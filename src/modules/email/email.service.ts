@@ -1,53 +1,57 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
-import { Transporter } from 'nodemailer';
+import Mailjet from 'node-mailjet';
+import { IEmailBody } from './email.types';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private readonly transporter: Transporter;
-  private readonly from: string;
-  private readonly appUrl: string;
+  private readonly client: Mailjet;
+  private readonly fromEmail: string;
+  private readonly fromName: string;
+  private readonly mailVersion: string;
 
-  constructor(private readonly config: ConfigService) {
-    this.from = config.get<string>('SMTP_FROM') || 'noreply@servixos.com';
-    this.appUrl = config.get<string>('APP_URL') || 'http://localhost:3000';
+  constructor(config: ConfigService) {
+    this.fromEmail = config.get<string>('MAIL_FROM_ADDRESS')!;
+    this.fromName = config.get<string>('MAIL_FROM_NAME')!;
+    this.mailVersion = config.get<string>('MAILJET_VERSION')!;
 
-    this.transporter = nodemailer.createTransport({
-      host: config.get<string>('SMTP_HOST') || 'localhost',
-      port: config.get<number>('SMTP_PORT') || 587,
-      secure: config.get<boolean>('SMTP_SECURE') || false,
-      auth: {
-        user: config.get<string>('SMTP_USER'),
-        pass: config.get<string>('SMTP_PASS'),
-      },
+    this.client = new Mailjet({
+      apiKey: config.get<string>('MAILJET_API_KEY')!,
+      apiSecret: config.get<string>('MAILJET_SECRET_KEY')!,
     });
   }
 
-  async sendPasswordResetEmail(
-    to: string,
-    firstName: string,
-    token: string,
-  ): Promise<void> {
-    const resetUrl = `${this.appUrl}/auth/reset-password?token=${token}`;
+  async send(body: IEmailBody): Promise<void> {
+    const params = {
+      Messages: [
+        {
+          From: {
+            Email: this.fromEmail,
+            Name: this.fromName,
+          },
+          To: [
+            {
+              Email: body.to,
+              Name: body.name || 'Recipient',
+            },
+          ],
+          Subject: body.subject,
+          HTMLPart: body.html,
+        },
+      ],
+    };
 
     try {
-      await this.transporter.sendMail({
-        from: this.from,
-        to,
-        subject: 'Reset your ServixOS password',
-        html: `
-          <p>Hi ${firstName},</p>
-          <p>You requested a password reset. Click the link below to set a new password:</p>
-          <p><a href="${resetUrl}">${resetUrl}</a></p>
-          <p>This link expires in 15 minutes. If you didn't request this, ignore this email.</p>
-          <p>— The ServixOS team</p>
-        `,
-      });
+      await this.client
+        .post('send', {
+          version: this.mailVersion as `v${number}` | `v${number}.${number}`,
+        })
+        .request(params);
+      this.logger.log(`Email sent to: ${body.to}`);
     } catch (err) {
       this.logger.error(
-        `Failed to send password reset email to ${to}: ${(err as Error).message}`,
+        `Failed to send email to ${body.to}: ${(err as Error).message}`,
       );
     }
   }

@@ -2,7 +2,8 @@ export const CACHE_TTL = {
   // Auth
   REFRESH_TOKEN: 60 * 60 * 24 * 7, // 7 days
   PIN_ATTEMPT: 60 * 5, // 5 minutes (rate-limit window)
-  PASSWORD_RESET_TOKEN: 60 * 15, // 15 minutes
+  PASSWORD_RESET_TOKEN: 60 * 10, // 10 minutes
+  EMAIL_OTP: 60 * 10, // 10 minutes
 
   // Dashboard / Analytics (high-read, low-write)
   DASHBOARD_STATS: 60 * 5, // 5 minutes

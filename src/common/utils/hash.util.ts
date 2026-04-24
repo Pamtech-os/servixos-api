@@ -18,6 +18,12 @@ export function generateSecureToken(bytes = 32): string {
   return randomBytes(bytes).toString('hex');
 }
 
+export function generateOtp(digits = 6): string {
+  const max = Math.pow(10, digits);
+  const num = randomBytes(4).readUInt32BE(0) % max;
+  return num.toString().padStart(digits, '0');
+}
+
 export function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }

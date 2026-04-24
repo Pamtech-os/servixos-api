@@ -1,0 +1,59 @@
+import { Agenda, Job } from 'agenda';
+import { EmailService } from '../../email/email.service';
+import { emailVerificationTemplate } from '../../email/templates/email-verification.template';
+import { passwordResetTemplate } from '../../email/templates/password-reset.template';
+import { welcomeTemplate } from '../../email/templates/welcome.template';
+import { JOBS } from '../agenda.constants';
+
+export interface WelcomeJobData {
+  to: string;
+  firstName: string;
+}
+
+export interface PasswordResetJobData {
+  to: string;
+  firstName: string;
+  otp: string;
+}
+
+export interface EmailVerificationJobData {
+  to: string;
+  firstName: string;
+  otp: string;
+}
+
+export function defineEmailJobs(
+  agenda: Agenda,
+  emailService: EmailService,
+  appUrl: string,
+): void {
+  agenda.define(JOBS.EMAIL_VERIFICATION, async (job: Job) => {
+    const { to, firstName, otp } = job.attrs.data as EmailVerificationJobData;
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Verify your email — Servix OS',
+      html: emailVerificationTemplate(firstName, otp),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_WELCOME, async (job: Job) => {
+    const { to, firstName } = job.attrs.data as WelcomeJobData;
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Your Servix OS workspace is ready',
+      html: welcomeTemplate(firstName, appUrl),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_PASSWORD_RESET, async (job: Job) => {
+    const { to, firstName, otp } = job.attrs.data as PasswordResetJobData;
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Reset Your Password — Servix OS',
+      html: passwordResetTemplate(firstName, otp),
+    });
+  });
+}

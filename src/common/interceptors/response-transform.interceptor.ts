@@ -20,24 +20,13 @@ export class ResponseTransformInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       map((data: unknown) => {
-        if (this.isApiResponse(data)) return data as ApiResponse<unknown>;
+        const payload = typeof data === 'object' && data !== null ? data : {};
         return {
           success: true,
           statusCode,
-          message: 'OK',
-          data,
+          ...payload,
         } as ApiResponse<unknown>;
       }),
-    );
-  }
-
-  private isApiResponse(value: unknown): boolean {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      'success' in value &&
-      'statusCode' in value &&
-      'message' in value
     );
   }
 }
