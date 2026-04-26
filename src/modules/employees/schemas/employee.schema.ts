@@ -1,9 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 @index({ businessId: 1, email: 1 }, { unique: true })
@@ -38,5 +33,3 @@ export class Employee {
   @prop()
   deletedAt?: Date;
 }
-
-export const EmployeeModel = getModelForClass(Employee);

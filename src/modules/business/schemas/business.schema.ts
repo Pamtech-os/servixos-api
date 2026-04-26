@@ -1,9 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 export enum SubscriptionPlan {
@@ -32,16 +27,25 @@ class NotificationPreferences {
 }
 
 @index({ ownerId: 1 }, { unique: true })
+@index({ subdomain: 1 }, { unique: true, sparse: true })
 @modelOptions({ schemaOptions: { collection: 'businesses', timestamps: true } })
 export class Business {
+  _id: Types.ObjectId;
+
   @prop({ ref: 'User', type: Types.ObjectId, required: true })
   ownerId: Types.ObjectId;
 
   @prop({ required: true, trim: true })
   name: string;
 
+  @prop({ lowercase: true, trim: true })
+  subdomain?: string;
+
+  @prop({ ref: 'BusinessCategory', type: Types.ObjectId, required: true })
+  categoryId: Types.ObjectId;
+
   @prop({ required: true, trim: true })
-  category: string;
+  categoryName: string;
 
   @prop({ trim: true })
   description?: string;
@@ -61,7 +65,7 @@ export class Business {
   @prop({ default: 'Inter' })
   font: string;
 
-  @prop({ type: () => [String], default: [] })
+  @prop({ type: () => String, default: [] }, PropType.ARRAY)
   services: string[];
 
   @prop({ enum: SubscriptionPlan, default: SubscriptionPlan.STARTER })
@@ -86,8 +90,9 @@ export class Business {
   })
   notifications: NotificationPreferences;
 
+  @prop({ default: 'UTC' })
+  timezone: string;
+
   @prop()
   deletedAt?: Date;
 }
-
-export const BusinessModel = getModelForClass(Business);
