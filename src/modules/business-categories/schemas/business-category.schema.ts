@@ -1,9 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions } from '@typegoose/typegoose';
 
 @index({ slug: 1 }, { unique: true })
 @modelOptions({
@@ -22,5 +17,3 @@ export class BusinessCategory {
   @prop({ default: true })
   isActive: boolean;
 }
-
-export const BusinessCategoryModel = getModelForClass(BusinessCategory);

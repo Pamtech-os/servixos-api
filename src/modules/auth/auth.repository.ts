@@ -1,15 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { ReturnModelType } from '@typegoose/typegoose';
-import { ClientSession, Types } from 'mongoose';
-import {
-  RefreshToken,
-  RefreshTokenModel,
-} from './schemas/refresh-token.schema';
+import { InjectConnection } from '@nestjs/mongoose';
+import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
+import { ClientSession, Connection, Types } from 'mongoose';
+import { RefreshToken } from './schemas/refresh-token.schema';
 
 @Injectable()
 export class AuthRepository {
-  private readonly refreshTokenModel: ReturnModelType<typeof RefreshToken> =
-    RefreshTokenModel;
+  private readonly refreshTokenModel: ReturnModelType<typeof RefreshToken>;
+
+  constructor(@InjectConnection() connection: Connection) {
+    this.refreshTokenModel = getModelForClass(RefreshToken, {
+      existingConnection: connection,
+    });
+  }
 
   async createRefreshToken(
     data: {

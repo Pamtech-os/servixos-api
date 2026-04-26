@@ -1,16 +1,20 @@
 import { Injectable } from '@nestjs/common';
-import { ReturnModelType } from '@typegoose/typegoose';
-import { ClientSession, Types } from 'mongoose';
+import { InjectConnection } from '@nestjs/mongoose';
+import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import {
   DefaultRole,
   DEFAULT_ROLE_PERMISSIONS,
   Role,
-  RoleModel,
 } from './schemas/role.schema';
 
 @Injectable()
 export class RolesRepository {
-  private readonly roleModel: ReturnModelType<typeof Role> = RoleModel;
+  private readonly roleModel: ReturnModelType<typeof Role>;
+
+  constructor(@InjectConnection() connection: Connection) {
+    this.roleModel = getModelForClass(Role, { existingConnection: connection });
+  }
 
   async findById(id: string): Promise<Role | null> {
     return this.roleModel.findById(id).lean<Role>().exec();

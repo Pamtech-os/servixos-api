@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
 import { map, Observable } from 'rxjs';
 import { ENCRYPT_KEY } from '../decorators/encrypt.decorator';
 import { encrypt } from '../utils/crypto.util';
@@ -24,6 +25,11 @@ export class EncryptionInterceptor implements NestInterceptor {
     );
 
     if (!shouldEncrypt) return next.handle() as Observable<string>;
+
+    const request = context
+      .switchToHttp()
+      .getRequest<Request & { isEncrypted?: boolean }>();
+    request.isEncrypted = true;
 
     const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
 

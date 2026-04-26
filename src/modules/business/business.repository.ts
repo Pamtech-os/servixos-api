@@ -1,12 +1,18 @@
 import { Injectable } from '@nestjs/common';
-import { ReturnModelType } from '@typegoose/typegoose';
-import { ClientSession } from 'mongoose';
-import { Business, BusinessModel } from './schemas/business.schema';
+import { InjectConnection } from '@nestjs/mongoose';
+import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
+import { ClientSession, Connection } from 'mongoose';
+import { Business } from './schemas/business.schema';
 
 @Injectable()
 export class BusinessRepository {
-  private readonly businessModel: ReturnModelType<typeof Business> =
-    BusinessModel;
+  private readonly businessModel: ReturnModelType<typeof Business>;
+
+  constructor(@InjectConnection() connection: Connection) {
+    this.businessModel = getModelForClass(Business, {
+      existingConnection: connection,
+    });
+  }
 
   async findById(id: string): Promise<Business | null> {
     return this.businessModel.findById(id).lean<Business>().exec();

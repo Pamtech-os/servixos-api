@@ -1,10 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-  PropType,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 export enum DefaultRole {
@@ -112,5 +106,3 @@ export class Role {
   @prop({ default: false })
   isSystem: boolean;
 }
-
-export const RoleModel = getModelForClass(Role);

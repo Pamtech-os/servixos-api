@@ -19,6 +19,8 @@ export class DecryptionMiddleware implements NestMiddleware {
       return next();
     }
 
+    (req as Request & { isEncrypted: boolean }).isEncrypted = true;
+
     try {
       const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
       req.body = JSON.parse(decrypt(payload, secret)) as Record<

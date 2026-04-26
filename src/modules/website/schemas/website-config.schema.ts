@@ -1,10 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-  PropType,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 class AiHero {
@@ -76,5 +70,3 @@ export class WebsiteConfig {
   @prop({ type: () => AiContent, _id: false })
   aiContent?: AiContent;
 }
-
-export const WebsiteConfigModel = getModelForClass(WebsiteConfig);

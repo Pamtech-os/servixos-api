@@ -1,10 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-  PropType,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 export enum SubscriptionPlan {
@@ -102,5 +96,3 @@ export class Business {
   @prop()
   deletedAt?: Date;
 }
-
-export const BusinessModel = getModelForClass(Business);

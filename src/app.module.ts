@@ -36,6 +36,7 @@ import { BusinessCategoriesModule } from './modules/business-categories/business
 import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
+import { SecurityModule } from './modules/security/security.module';
 
 @Module({
   imports: [
@@ -55,6 +56,9 @@ import { AgendaModule } from './modules/agenda/agenda.module';
       useFactory: (config: ConfigService) => ({
         uri: config.get<string>('DATABASE_URL'),
         autoIndex: true,
+        serverSelectionTimeoutMS: 10000,
+        socketTimeoutMS: 45000,
+        connectTimeoutMS: 10000,
       }),
     }),
     RedisModule,
@@ -66,11 +70,12 @@ import { AgendaModule } from './modules/agenda/agenda.module';
     RolesModule,
     WebsiteModule,
     BusinessCategoriesModule,
+    SecurityModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_GUARD, useClass: ApiKeyGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },

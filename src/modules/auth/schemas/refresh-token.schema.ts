@@ -1,9 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 @index({ userId: 1 })
@@ -28,5 +23,3 @@ export class RefreshToken {
   @prop()
   revokedAt?: Date;
 }
-
-export const RefreshTokenModel = getModelForClass(RefreshToken);

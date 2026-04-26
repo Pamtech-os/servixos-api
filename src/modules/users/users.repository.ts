@@ -1,11 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { ReturnModelType } from '@typegoose/typegoose';
-import { ClientSession, Types } from 'mongoose';
-import { User, UserModel } from './schemas/user.schema';
+import { InjectConnection } from '@nestjs/mongoose';
+import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
+import { ClientSession, Connection, Types } from 'mongoose';
+import { User } from './schemas/user.schema';
 
 @Injectable()
 export class UsersRepository {
-  private readonly userModel: ReturnModelType<typeof User> = UserModel;
+  private readonly userModel: ReturnModelType<typeof User>;
+
+  constructor(@InjectConnection() connection: Connection) {
+    this.userModel = getModelForClass(User, { existingConnection: connection });
+  }
 
   async findByEmail(email: string): Promise<User | null> {
     return this.userModel

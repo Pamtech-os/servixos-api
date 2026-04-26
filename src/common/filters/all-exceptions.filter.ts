@@ -21,6 +21,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request & { isEncrypted?: boolean }>();
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string = COMMON_MESSAGES.ERROR.INTERNAL;
@@ -54,7 +55,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
       message,
     };
 
-    const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
-    response.status(statusCode).json(encrypt(JSON.stringify(body), secret));
+    if (request.isEncrypted) {
+      const secret = this.config.get<string>('ENCRYPTION_SECRET') || '';
+      response.status(statusCode).json(encrypt(JSON.stringify(body), secret));
+    } else {
+      response.status(statusCode).json(body);
+    }
   }
 }

@@ -1,9 +1,4 @@
-import {
-  prop,
-  getModelForClass,
-  index,
-  modelOptions,
-} from '@typegoose/typegoose';
+import { prop, index, modelOptions } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
 
 export enum UserRole {
@@ -73,5 +68,3 @@ export class User {
   @prop()
   deletedAt?: Date;
 }
-
-export const UserModel = getModelForClass(User);
