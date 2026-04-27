@@ -43,6 +43,9 @@ export class WebsiteGenerationService {
   ): Promise<ServiceResponse<GeneratedWebsiteData>> {
     const business = await this.businessRepository.findById(businessId);
     if (!business) {
+      this.logger.warn(
+        `generateForBusiness: business not found [businessId=${businessId}]`,
+      );
       throw new NotFoundException('Business not found');
     }
 
@@ -87,8 +90,8 @@ export class WebsiteGenerationService {
         aiContent,
       });
     } catch (err) {
-      this.logger.warn(
-        `AI generation failed for business ${businessId}: ${(err as Error).message}`,
+      this.logger.error(
+        `AI generation failed for business ${businessId}: ${err instanceof Error ? err.stack : String(err)}`,
       );
     }
   }

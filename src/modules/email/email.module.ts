@@ -1,9 +1,29 @@
 import { Global, Module } from '@nestjs/common';
-import { EmailService } from './email.service';
+import { ConfigService } from '@nestjs/config';
+import { EmailService, MAIL_PROVIDER } from './email.service';
+import { MAIL_PROVIDERS } from './email.constants';
+import { MailjetProvider } from './providers/mailjet.provider';
+import { MailtrapProvider } from './providers/mailtrap.provider';
 
 @Global()
 @Module({
-  providers: [EmailService],
+  providers: [
+    MailjetProvider,
+    MailtrapProvider,
+    {
+      provide: MAIL_PROVIDER,
+      useFactory: (
+        config: ConfigService,
+        mailjet: MailjetProvider,
+        mailtrap: MailtrapProvider,
+      ) => {
+        const provider = config.get<string>('MAIL_PROVIDER', 'mailjet');
+        return provider === MAIL_PROVIDERS.MAILTRAP ? mailtrap : mailjet;
+      },
+      inject: [ConfigService, MailjetProvider, MailtrapProvider],
+    },
+    EmailService,
+  ],
   exports: [EmailService],
 })
 export class EmailModule {}

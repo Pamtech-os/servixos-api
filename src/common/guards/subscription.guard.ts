@@ -39,7 +39,7 @@ export class SubscriptionGuard implements CanActivate {
     if (!business) throw new NotFoundException(TENANT_MESSAGES.ERROR.NOT_FOUND);
 
     const requiredPlan = FEATURE_PLAN_MAP[featureKey];
-    const currentPlan = business.subscriptionPlan;
+    const currentPlan = business.subscription.plan;
 
     const hasAccess = PLAN_ORDER[currentPlan] >= PLAN_ORDER[requiredPlan];
 

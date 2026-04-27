@@ -21,10 +21,14 @@ export class AllExceptionsFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request & { isEncrypted?: boolean }>();
+    const request = ctx.getRequest<
+      Request & { isEncrypted?: boolean; method: string; url: string }
+    >();
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string = COMMON_MESSAGES.ERROR.INTERNAL;
+
+    const context = `${request.method} ${request.url}`;
 
     if (exception instanceof HttpException) {
       statusCode = exception.getStatus();
@@ -36,15 +40,28 @@ export class AllExceptionsFilter implements ExceptionFilter {
         typeof exceptionResponse === 'object' &&
         exceptionResponse !== null
       ) {
-        const body = exceptionResponse as Record<string, unknown>;
-        if (typeof body['message'] === 'string') {
-          message = body['message'];
-        } else if (Array.isArray(body['message'])) {
-          message = (body['message'] as string[]).join('; ');
+        const raw = exceptionResponse as Record<string, unknown>;
+        if (typeof raw['message'] === 'string') {
+          message = raw['message'];
+        } else if (Array.isArray(raw['message'])) {
+          message = (raw['message'] as string[]).join('; ');
         }
+      }
+
+      // Body-parser JSON SyntaxErrors surface as 400 HttpExceptions whose
+      // message contains the raw input — sanitize before sending to the client.
+      if (this.isBodyParserError(message)) {
+        this.logger.warn(`[${context}] Malformed JSON body rejected`);
+        message = COMMON_MESSAGES.ERROR.BAD_REQUEST;
+      } else if (statusCode >= HttpStatus.INTERNAL_SERVER_ERROR) {
+        this.logger.error(
+          `[${context}] ${statusCode} — ${exception.message}`,
+          exception.stack,
+        );
       }
     } else {
       this.logger.error(
+        `[${context}] Unhandled exception`,
         exception instanceof Error ? exception.stack : String(exception),
       );
     }
@@ -61,5 +78,13 @@ export class AllExceptionsFilter implements ExceptionFilter {
     } else {
       response.status(statusCode).json(body);
     }
+  }
+
+  private isBodyParserError(message: string): boolean {
+    return (
+      message.startsWith('Unexpected token') ||
+      message.startsWith('Unexpected end of JSON') ||
+      message.startsWith('JSON Parse error')
+    );
   }
 }

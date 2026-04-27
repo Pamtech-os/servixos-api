@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
@@ -9,6 +10,11 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 import { BUSINESS_CATEGORIES_MESSAGES } from 'src/common/constants/messages/business-categories.messages';
+import { getFeaturesForPlan } from 'src/common/constants/subscription-features.constants';
+import {
+  SubscriptionPlan,
+  SubscriptionStatus,
+} from 'src/modules/business/schemas/business.schema';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { ServiceResponse } from 'src/common/dto/response.dto';
@@ -49,6 +55,8 @@ const REFRESH_TOKEN_TTL_DAYS = 7;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectConnection() private readonly connection: Connection,
     private readonly jwtService: JwtService,
@@ -66,11 +74,17 @@ export class AuthService {
   async login(dto: LoginDto): Promise<ServiceResponse<LoginData>> {
     const user = await this.usersRepository.findByEmail(dto.email);
     if (!user || !user.isActive) {
+      this.logger.warn(
+        `login: user not found or inactive [email=${dto.email}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
     const passwordValid = await compareValue(dto.password, user.passwordHash);
     if (!passwordValid) {
+      this.logger.warn(
+        `login: invalid password [userId=${user._id.toString()}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
@@ -106,13 +120,17 @@ export class AuthService {
   ): Promise<ServiceResponse<TokenData>> {
     const token = authorization?.replace('Bearer ', '');
     if (!token) {
+      this.logger.warn('verifyPin: missing authorization header');
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.UNAUTHORIZED);
     }
 
     let payload: JwtUser;
     try {
       payload = this.jwtService.verify<JwtUser>(token);
-    } catch {
+    } catch (err) {
+      this.logger.warn(
+        `JWT verification failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.EXPIRED_TOKEN);
     }
 
@@ -126,14 +144,23 @@ export class AuthService {
     const attempts = parseInt(attemptsRaw ?? '0', 10);
 
     if (attempts >= PIN_MAX_ATTEMPTS) {
+      this.logger.warn(
+        `verifyPin: account locked after max attempts [userId=${payload.sub}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.PIN_LOCKED);
     }
 
     if (!user || !user.isActive) {
+      this.logger.warn(
+        `verifyPin: user not found or inactive [userId=${payload.sub}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
     if (!user.pinHash) {
+      this.logger.warn(
+        `verifyPin: no PIN set for user [userId=${payload.sub}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
@@ -144,6 +171,9 @@ export class AuthService {
         attemptsKey,
         String(next),
         CACHE_TTL.PIN_ATTEMPT,
+      );
+      this.logger.warn(
+        `verifyPin: invalid PIN [userId=${payload.sub}] attempt=${next}/${PIN_MAX_ATTEMPTS}`,
       );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_PIN);
     }
@@ -171,11 +201,15 @@ export class AuthService {
     const stored = await this.authRepository.findValidRefreshToken(tokenHash);
 
     if (!stored) {
+      this.logger.warn('refreshToken: token not found or expired');
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.EXPIRED_TOKEN);
     }
 
     const user = await this.usersRepository.findById(stored.userId.toString());
     if (!user || !user.isActive) {
+      this.logger.warn(
+        `refreshToken: user not found or inactive [userId=${stored.userId.toString()}]`,
+      );
       throw new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS);
     }
 
@@ -195,6 +229,7 @@ export class AuthService {
   /** Revokes the given refresh token, ending the current session. */
   async logout(refreshToken: string): Promise<ServiceResponse<null>> {
     if (!refreshToken) {
+      this.logger.warn('logout: missing refresh token');
       throw new BadRequestException(AUTH_MESSAGES.ERROR.INVALID_TOKEN);
     }
 
@@ -226,7 +261,11 @@ export class AuthService {
           firstName: user.firstName,
           otp,
         })
-        .catch(() => {});
+        .catch((err: unknown) =>
+          this.logger.error(
+            `Email job "${JOBS.EMAIL_PASSWORD_RESET}" failed: ${err instanceof Error ? err.stack : String(err)}`,
+          ),
+        );
     }
 
     return { message: AUTH_MESSAGES.SUCCESS.PASSWORD_RESET_SENT };
@@ -238,6 +277,7 @@ export class AuthService {
     const user = await this.usersRepository.findByPasswordResetToken(tokenHash);
 
     if (!user) {
+      this.logger.warn('resetPassword: invalid or expired reset OTP');
       throw new BadRequestException(AUTH_MESSAGES.ERROR.INVALID_TOKEN);
     }
 
@@ -263,6 +303,9 @@ export class AuthService {
     ]);
 
     if (existing) {
+      this.logger.warn(
+        `createAccount: email already registered [email=${dto.email}]`,
+      );
       throw new ConflictException(AUTH_MESSAGES.ERROR.EMAIL_TAKEN);
     }
     const otp = generateOtp();
@@ -288,7 +331,11 @@ export class AuthService {
         firstName: dto.firstName,
         otp,
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Email job "${JOBS.EMAIL_VERIFICATION}" failed: ${err instanceof Error ? err.stack : String(err)}`,
+        ),
+      );
 
     return { message: AUTH_MESSAGES.SUCCESS.ACCOUNT_CREATED };
   }
@@ -296,14 +343,14 @@ export class AuthService {
   /** Onboarding step 2 — validates the email OTP and marks the address as verified. */
   async verifyEmail(dto: VerifyEmailDto): Promise<ServiceResponse<null>> {
     const user = await this.usersRepository.findByEmail(dto.email);
-    if (!user) {
-      throw new BadRequestException(
-        AUTH_MESSAGES.ERROR.NO_PENDING_VERIFICATION,
-      );
-    }
 
-    if (user.isEmailVerified) {
-      throw new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED);
+    // Treat missing/already-verified the same as a bad code — prevents
+    // callers from distinguishing registered vs unregistered emails
+    if (!user || user.isEmailVerified) {
+      this.logger.warn(
+        `verifyEmail: ${!user ? 'user not found' : 'already verified'} [email=${dto.email}]`,
+      );
+      throw new BadRequestException(AUTH_MESSAGES.ERROR.INVALID_OTP);
     }
 
     const otpHash = hashToken(dto.otp);
@@ -313,6 +360,9 @@ export class AuthService {
       user.emailVerificationOtpExpiry > new Date();
 
     if (!isValid) {
+      this.logger.warn(
+        `verifyEmail: invalid or expired OTP [userId=${user._id.toString()}]`,
+      );
       throw new BadRequestException(AUTH_MESSAGES.ERROR.INVALID_OTP);
     }
 
@@ -328,14 +378,11 @@ export class AuthService {
   /** Onboarding step 2b — generates a fresh OTP and resends the verification email. */
   async resendEmailOtp(dto: ResendOtpDto): Promise<ServiceResponse<null>> {
     const user = await this.usersRepository.findByEmail(dto.email);
-    if (!user) {
-      throw new BadRequestException(
-        AUTH_MESSAGES.ERROR.NO_PENDING_VERIFICATION,
-      );
-    }
 
-    if (user.isEmailVerified) {
-      throw new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_ALREADY_VERIFIED);
+    // Always return success — prevents callers from probing whether an email
+    // is registered or already verified (OWASP enumeration prevention)
+    if (!user || user.isEmailVerified) {
+      return { message: AUTH_MESSAGES.SUCCESS.OTP_RESENT };
     }
 
     const otp = generateOtp();
@@ -353,7 +400,11 @@ export class AuthService {
         firstName: user.firstName,
         otp,
       })
-      .catch(() => {});
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Email job "${JOBS.EMAIL_VERIFICATION}" failed: ${err instanceof Error ? err.stack : String(err)}`,
+        ),
+      );
 
     return { message: AUTH_MESSAGES.SUCCESS.OTP_RESENT };
   }
@@ -362,10 +413,14 @@ export class AuthService {
   async setPin(dto: SetPinDto): Promise<ServiceResponse<null>> {
     const user = await this.usersRepository.findByEmail(dto.email);
     if (!user) {
+      this.logger.warn(`setPin: user not found [email=${dto.email}]`);
       throw new BadRequestException(AUTH_MESSAGES.ERROR.ACCOUNT_NOT_FOUND);
     }
 
     if (!user.isEmailVerified) {
+      this.logger.warn(
+        `setPin: email not verified [userId=${user._id.toString()}]`,
+      );
       throw new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED);
     }
 
@@ -381,18 +436,28 @@ export class AuthService {
   ): Promise<ServiceResponse<LoginData>> {
     const user = await this.usersRepository.findByEmail(dto.email);
     if (!user) {
+      this.logger.warn(`createBusiness: user not found [email=${dto.email}]`);
       throw new BadRequestException(AUTH_MESSAGES.ERROR.ACCOUNT_NOT_FOUND);
     }
 
     if (!user.isEmailVerified) {
+      this.logger.warn(
+        `createBusiness: email not verified [userId=${user._id.toString()}]`,
+      );
       throw new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED);
     }
 
     if (!user.pinHash) {
+      this.logger.warn(
+        `createBusiness: PIN not set [userId=${user._id.toString()}]`,
+      );
       throw new BadRequestException(AUTH_MESSAGES.ERROR.PIN_NOT_SET);
     }
 
     if (user.businessId) {
+      this.logger.warn(
+        `createBusiness: business already exists [userId=${user._id.toString()}]`,
+      );
       throw new ConflictException(AUTH_MESSAGES.ERROR.BUSINESS_ALREADY_SETUP);
     }
 
@@ -404,6 +469,9 @@ export class AuthService {
     ]);
 
     if (!category) {
+      this.logger.warn(
+        `createBusiness: invalid category [categoryId=${dto.businessCategory}]`,
+      );
       throw new BadRequestException(
         BUSINESS_CATEGORIES_MESSAGES.ERROR.NOT_FOUND,
       );
@@ -427,7 +495,13 @@ export class AuthService {
     );
 
     const emailData = { to: user.email, firstName: user.firstName };
-    await this.agendaService.now(JOBS.EMAIL_WELCOME, emailData).catch(() => {});
+    await this.agendaService
+      .now(JOBS.EMAIL_WELCOME, emailData)
+      .catch((err: unknown) =>
+        this.logger.error(
+          `Email job "${JOBS.EMAIL_WELCOME}" failed: ${err instanceof Error ? err.stack : String(err)}`,
+        ),
+      );
 
     return {
       message: AUTH_MESSAGES.SUCCESS.BUSINESS_CREATED,
@@ -474,7 +548,12 @@ export class AuthService {
           font: dto.font ?? 'Inter',
           services: dto.services ?? [],
           timezone: dto.timezone ?? 'UTC',
-          trialEndsAt,
+          subscription: {
+            plan: SubscriptionPlan.STARTER,
+            status: SubscriptionStatus.TRIALING,
+            trialEndsAt,
+            features: getFeaturesForPlan(SubscriptionPlan.STARTER),
+          },
         },
         session,
       );
@@ -508,6 +587,9 @@ export class AuthService {
       return { businessId };
     } catch (err) {
       await session.abortTransaction();
+      this.logger.error(
+        `Business onboarding transaction failed: ${err instanceof Error ? err.stack : String(err)}`,
+      );
       throw err;
     } finally {
       await session.endSession();

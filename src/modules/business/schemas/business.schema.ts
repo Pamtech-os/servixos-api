@@ -26,6 +26,36 @@ class NotificationPreferences {
   @prop({ default: true }) payment: boolean;
 }
 
+class Subscription {
+  @prop({ enum: SubscriptionPlan, default: SubscriptionPlan.STARTER })
+  plan: SubscriptionPlan;
+
+  @prop({ enum: SubscriptionStatus, default: SubscriptionStatus.TRIALING })
+  status: SubscriptionStatus;
+
+  /** Set to now + 1 month on registration; null once a paid plan activates. */
+  @prop()
+  trialEndsAt?: Date;
+
+  /** End of the current paid billing period (set by Stripe webhook). */
+  @prop()
+  currentPeriodEnd?: Date;
+
+  /** Set to currentPeriodEnd + 5 days on payment failure; cleared on recovery. */
+  @prop()
+  gracePeriodEndsAt?: Date;
+
+  /**
+   * Feature keys from FEATURE_PLAN_MAP that this business can access.
+   * Recomputed via getFeaturesForPlan() whenever `plan` changes.
+   * Example: ['clients.export', 'employees.manage', 'ai.insights', ...]
+   */
+  @prop({ type: () => String, default: [] }, PropType.ARRAY)
+  features: string[];
+}
+
+export { Subscription };
+
 @index({ ownerId: 1 }, { unique: true })
 @index({ subdomain: 1 }, { unique: true, sparse: true })
 @modelOptions({ schemaOptions: { collection: 'businesses', timestamps: true } })
@@ -68,20 +98,8 @@ export class Business {
   @prop({ type: () => String, default: [] }, PropType.ARRAY)
   services: string[];
 
-  @prop({ enum: SubscriptionPlan, default: SubscriptionPlan.STARTER })
-  subscriptionPlan: SubscriptionPlan;
-
-  @prop({ enum: SubscriptionStatus, default: SubscriptionStatus.TRIALING })
-  subscriptionStatus: SubscriptionStatus;
-
-  @prop()
-  trialEndsAt?: Date; // set to now + 1 month on registration
-
-  @prop()
-  currentPeriodEnd?: Date; // end of current paid billing period (from Stripe)
-
-  @prop()
-  gracePeriodEndsAt?: Date; // set to currentPeriodEnd + 5 days on payment failure
+  @prop({ type: () => Subscription, _id: false, default: () => ({}) })
+  subscription: Subscription;
 
   @prop({
     type: () => NotificationPreferences,

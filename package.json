@@ -37,6 +37,7 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "libphonenumber-js": "^1.12.33",
+    "mailtrap": "^4.4.0",
     "mongoose": "^9.2.1",
     "node-mailjet": "^6.0.11",
     "nodemailer": "^8.0.5",
