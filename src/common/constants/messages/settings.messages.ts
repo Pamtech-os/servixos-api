@@ -11,6 +11,6 @@ export const SETTINGS_MESSAGES = {
   ERROR: {
     PROFILE_NOT_FOUND: 'Business profile not found',
     ACCOUNT_DELETE_FAILED: 'Failed to delete account',
-    INVALID_PASSWORD: 'Password confirmation failed',
+    INVALID_PASSWORD: 'Incorrect password',
   },
 } as const;

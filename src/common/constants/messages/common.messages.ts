@@ -5,5 +5,6 @@ export const COMMON_MESSAGES = {
     NOT_FOUND: 'Resource not found',
     UNAUTHORIZED: 'Authentication required',
     FORBIDDEN: 'Access denied',
+    PAYLOAD_ENCRYPTION_REQUIRED: 'Request payload must be encrypted',
   },
 } as const;

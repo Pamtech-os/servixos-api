@@ -54,6 +54,16 @@ export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
 export type FeatureKey = keyof typeof FEATURE_PLAN_MAP;
 
 /**
+ * Returns all feature keys accessible at the given plan level.
+ * Call this whenever a business's plan is set or changed.
+ */
+export function getFeaturesForPlan(plan: SubscriptionPlan): FeatureKey[] {
+  return Object.entries(FEATURE_PLAN_MAP)
+    .filter(([, minPlan]) => PLAN_ORDER[plan] >= PLAN_ORDER[minPlan])
+    .map(([feature]) => feature);
+}
+
+/**
  * Per-plan hard limits. Enforced in service layer before insert.
  */
 export const PLAN_LIMITS = {

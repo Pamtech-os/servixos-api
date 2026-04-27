@@ -18,17 +18,19 @@ export const AUTH_MESSAGES = {
     INVALID_CREDENTIALS: 'Invalid credentials',
     EMAIL_TAKEN: 'Unable to create account with the provided details',
     INVALID_PIN: 'Invalid PIN',
-    PIN_LOCKED: 'Account temporarily locked. Try again later',
+    PIN_LOCKED: 'Too many attempts. Please try again later',
     EXPIRED_TOKEN: 'Session has expired. Please log in again',
     INVALID_TOKEN: 'Invalid or expired token',
     INVALID_OTP: 'Invalid or expired verification code',
-    EMAIL_ALREADY_VERIFIED: 'Email is already verified',
+    // Intentionally neutral — do not confirm email state to unauthenticated callers
+    EMAIL_ALREADY_VERIFIED: 'No action required',
     EMAIL_NOT_VERIFIED: 'Please verify your email before continuing',
     PIN_NOT_SET: 'Please set your PIN before continuing',
     BUSINESS_ALREADY_SETUP: 'Business is already set up',
     SUBDOMAIN_TAKEN:
       'Business name is already taken. Please try a different name.',
-    NO_PENDING_VERIFICATION: 'No pending verification found for this email',
+    // Intentionally generic — do not reveal whether the email is registered
+    NO_PENDING_VERIFICATION: 'Unable to process verification request',
     // Intentionally generic — do not confirm whether the email exists
     ACCOUNT_NOT_FOUND: 'Invalid credentials',
     UNAUTHORIZED: 'Authentication required',

@@ -53,8 +53,8 @@ export class TenantGuard implements CanActivate {
     }
 
     if (
-      business.subscriptionStatus === SubscriptionStatus.CANCELED ||
-      business.subscriptionStatus === SubscriptionStatus.LOCKED
+      business.subscription.status === SubscriptionStatus.CANCELED ||
+      business.subscription.status === SubscriptionStatus.LOCKED
     ) {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.INACTIVE);
     }

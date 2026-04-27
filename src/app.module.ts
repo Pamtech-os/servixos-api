@@ -24,6 +24,7 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
 import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
 import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
 import { ApiKeyGuard } from './common/guards/api-key.guard';
+import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
@@ -77,6 +78,7 @@ import { SecurityModule } from './modules/security/security.module';
     { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_GUARD, useClass: ApiKeyGuard },
+    { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
   ],
