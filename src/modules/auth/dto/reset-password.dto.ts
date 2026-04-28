@@ -1,4 +1,5 @@
-import { IsString, IsNotEmpty, MinLength, Matches } from 'class-validator';
+import { IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 
 export class ResetPasswordDto {
   @IsString()
@@ -6,10 +7,8 @@ export class ResetPasswordDto {
   otp: string;
 
   @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters' })
-  @Matches(/[A-Z]/, {
-    message: 'Password must contain at least one uppercase letter',
-  })
-  @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
+  @MinLength(8, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_MIN_LENGTH })
+  @Matches(/[A-Z]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_UPPERCASE })
+  @Matches(/[0-9]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_NUMBER })
   newPassword: string;
 }

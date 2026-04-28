@@ -37,7 +37,7 @@ export class WebsiteConfigRepository {
       .findOneAndUpdate(
         { businessId: new Types.ObjectId(businessId) },
         { $set: update },
-        { new: true },
+        { returnDocument: 'after' },
       )
       .lean<WebsiteConfig>()
       .exec();

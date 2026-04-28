@@ -8,36 +8,33 @@ import {
 } from 'class-validator';
 import { Transform } from 'class-transformer';
 import { Match } from 'src/common/validators/match.validator';
+import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 
 export class CreateAccountDto {
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.FIRST_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   firstName: string;
 
   @IsString()
-  @IsNotEmpty()
+  @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.LAST_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   lastName: string;
 
-  @IsEmail()
+  @IsEmail({}, { message: AUTH_MESSAGES.VALIDATION.EMAIL_INVALID })
   @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   email: string;
 
-  @IsPhoneNumber(undefined, {
-    message: 'phone must be a valid international phone number',
-  })
+  @IsPhoneNumber(undefined, { message: AUTH_MESSAGES.VALIDATION.PHONE_INVALID })
   phone: string;
 
   @IsString()
-  @MinLength(8, { message: 'Password must be at least 8 characters' })
-  @Matches(/[A-Z]/, {
-    message: 'Password must contain at least one uppercase letter',
-  })
-  @Matches(/[0-9]/, { message: 'Password must contain at least one number' })
+  @MinLength(8, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_MIN_LENGTH })
+  @Matches(/[A-Z]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_UPPERCASE })
+  @Matches(/[0-9]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_NUMBER })
   password: string;
 
   @IsString()
-  @Match('password', { message: 'Passwords do not match' })
+  @Match('password', { message: AUTH_MESSAGES.VALIDATION.PASSWORDS_MISMATCH })
   confirmPassword: string;
 }
