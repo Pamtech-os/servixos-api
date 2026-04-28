@@ -1,4 +1,26 @@
 export const AUTH_MESSAGES = {
+  VALIDATION: {
+    FIRST_NAME_REQUIRED: 'First name is required',
+    LAST_NAME_REQUIRED: 'Last name is required',
+    EMAIL_INVALID: 'A valid email address is required',
+    PHONE_INVALID: 'Phone must be a valid international phone number',
+    PASSWORD_MIN_LENGTH: 'Password must be at least 8 characters',
+    PASSWORD_UPPERCASE: 'Password must contain at least one uppercase letter',
+    PASSWORD_NUMBER: 'Password must contain at least one number',
+    PASSWORDS_MISMATCH: 'Passwords do not match',
+    OTP_LENGTH: 'OTP must be exactly 6 digits',
+    PIN_FORMAT: 'PIN must be exactly 4 digits',
+    PINS_MISMATCH: 'PINs do not match',
+    REFRESH_TOKEN_REQUIRED: 'Refresh token is required',
+    BUSINESS_NAME_REQUIRED: 'Business name is required',
+    BUSINESS_CATEGORY_INVALID: 'businessCategory must be a valid category ID',
+    BUSINESS_DESCRIPTION_REQUIRED: 'Business description is required',
+    BUSINESS_DESCRIPTION_RESTRICTED:
+      'Business description does not meet our content policy. Please provide a professional description of your business.',
+    TIMEZONE_REQUIRED: 'Timezone is required',
+    TIMEZONE_INVALID:
+      'Timezone must be a valid IANA timezone (e.g. Africa/Lagos)',
+  },
   SUCCESS: {
     REGISTER: 'Account created successfully',
     ACCOUNT_CREATED:

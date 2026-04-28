@@ -12,7 +12,6 @@ import { Public } from 'src/common/decorators/public.decorator';
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { decrypt, encrypt } from 'src/common/utils/crypto.util';
 import { AppEnvironment } from 'src/common/constants/app.constants';
-import { EncryptDto } from './dto/encrypt.dto';
 import { DecryptDto } from './dto/decrypt.dto';
 
 @Public()
@@ -30,13 +29,14 @@ export class SecurityController {
 
   @Post('encrypt')
   @HttpCode(HttpStatus.OK)
-  encrypt(@Body() dto: EncryptDto): { encrypted: string } {
-    return { encrypted: encrypt(JSON.stringify(dto.data), this.secret) };
+  encrypt(@Body() body: Record<string, unknown>): { encrypted: string } {
+    const payload = { success: true, statusCode: HttpStatus.OK, data: body };
+    return { encrypted: encrypt(JSON.stringify(payload), this.secret) };
   }
 
   @Post('decrypt')
   @HttpCode(HttpStatus.OK)
-  decrypt(@Body() dto: DecryptDto): { data: unknown } {
-    return { data: JSON.parse(decrypt(dto.data, this.secret)) as unknown };
+  decrypt(@Body() dto: DecryptDto): unknown {
+    return JSON.parse(decrypt(dto.data, this.secret)) as unknown;
   }
 }

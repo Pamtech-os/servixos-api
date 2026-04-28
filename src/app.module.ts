@@ -4,7 +4,6 @@ import {
   Module,
   NestModule,
   OnModuleInit,
-  RequestMethod,
 } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { InjectConnection } from '@nestjs/mongoose';
@@ -21,10 +20,10 @@ import { aiConfig } from './config/ai.config';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
-import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
-import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
+// import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
+// import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
 import { ApiKeyGuard } from './common/guards/api-key.guard';
-import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
+// import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
@@ -75,10 +74,10 @@ import { SecurityModule } from './modules/security/security.module';
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
-    { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
+    // { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     { provide: APP_GUARD, useClass: ApiKeyGuard },
-    { provide: APP_GUARD, useClass: EncryptedRequestGuard },
+    // { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
   ],
@@ -107,9 +106,10 @@ export class AppModule implements NestModule, OnModuleInit {
     );
   }
 
-  configure(consumer: MiddlewareConsumer): void {
-    consumer
-      .apply(DecryptionMiddleware)
-      .forRoutes({ path: '{*path}', method: RequestMethod.ALL });
+  configure(_consumer: MiddlewareConsumer): void {
+    // DecryptionMiddleware disabled — all payloads are plain JSON
+    // _consumer
+    //   .apply(DecryptionMiddleware)
+    //   .forRoutes({ path: '{*path}', method: RequestMethod.ALL });
   }
 }

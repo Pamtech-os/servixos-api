@@ -11,9 +11,6 @@ export class BusinessCategory {
   @prop({ required: true, lowercase: true, trim: true })
   slug: string;
 
-  @prop({ trim: true })
-  icon?: string;
-
   @prop({ default: true })
   isActive: boolean;
 }

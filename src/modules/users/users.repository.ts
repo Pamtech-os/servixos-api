@@ -34,7 +34,11 @@ export class UsersRepository {
     session?: ClientSession,
   ): Promise<User | null> {
     return this.userModel
-      .findByIdAndUpdate(id, { $set: update }, { new: true, session })
+      .findByIdAndUpdate(
+        id,
+        { $set: update },
+        { returnDocument: 'after', session },
+      )
       .lean<User>()
       .exec();
   }

@@ -3,11 +3,13 @@ import {
   Controller,
   Headers,
   HttpCode,
+  HttpException,
   HttpStatus,
   Post,
   UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 import { LoginDto } from './dto/login.dto';
 import { VerifyPinDto } from './dto/verify-pin.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -20,9 +22,9 @@ import { SetPinDto } from './dto/set-pin.dto';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
-import { Encrypt } from 'src/common/decorators/encrypt.decorator';
+// import { Encrypt } from 'src/common/decorators/encrypt.decorator';
 
-@Encrypt()
+// @Encrypt()
 @Public()
 @UseGuards(ApiKeyGuard)
 @Controller('auth')
@@ -31,70 +33,90 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto) {
+    const result = await this.authService.login(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.LOGIN, data: result };
   }
 
   @Post('verify-pin')
   @HttpCode(HttpStatus.OK)
-  verifyPin(
+  async verifyPin(
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: VerifyPinDto,
   ) {
-    return this.authService.verifyPin(authorization, dto.pin);
+    const result = await this.authService.verifyPin(authorization, dto.pin);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.PIN_VERIFIED, data: result };
   }
 
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
-  refresh(@Body() dto: RefreshTokenDto) {
-    return this.authService.refreshToken(dto);
+  async refresh(@Body() dto: RefreshTokenDto) {
+    const result = await this.authService.refreshToken(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.TOKEN_REFRESHED, data: result };
   }
 
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  logout(@Body() dto: RefreshTokenDto) {
-    return this.authService.logout(dto.refreshToken);
+  async logout(@Body() dto: RefreshTokenDto) {
+    const result = await this.authService.logout(dto.refreshToken);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.LOGOUT, data: null };
   }
 
   @Post('forgot-password')
   @HttpCode(HttpStatus.OK)
-  forgotPassword(@Body() dto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(dto);
+  async forgotPassword(@Body() dto: ForgotPasswordDto) {
+    await this.authService.forgotPassword(dto);
+    return { message: AUTH_MESSAGES.SUCCESS.PASSWORD_RESET_SENT, data: null };
   }
 
   @Post('reset-password')
   @HttpCode(HttpStatus.OK)
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto);
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    const result = await this.authService.resetPassword(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.PASSWORD_RESET, data: null };
   }
 
   @Post('onboarding/account')
   @HttpCode(HttpStatus.CREATED)
-  createAccount(@Body() dto: CreateAccountDto) {
-    return this.authService.createAccount(dto);
+  async createAccount(@Body() dto: CreateAccountDto) {
+    const result = await this.authService.createAccount(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.ACCOUNT_CREATED, data: null };
   }
 
   @Post('onboarding/verify-email')
   @HttpCode(HttpStatus.OK)
-  verifyEmail(@Body() dto: VerifyEmailDto) {
-    return this.authService.verifyEmail(dto);
+  async verifyEmail(@Body() dto: VerifyEmailDto) {
+    const result = await this.authService.verifyEmail(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.EMAIL_VERIFIED, data: null };
   }
 
   @Post('onboarding/resend-otp')
   @HttpCode(HttpStatus.OK)
-  resendOtp(@Body() dto: ResendOtpDto) {
-    return this.authService.resendEmailOtp(dto);
+  async resendOtp(@Body() dto: ResendOtpDto) {
+    await this.authService.resendEmailOtp(dto);
+    return { message: AUTH_MESSAGES.SUCCESS.OTP_RESENT, data: null };
   }
 
   @Post('onboarding/set-pin')
   @HttpCode(HttpStatus.OK)
-  setPin(@Body() dto: SetPinDto) {
-    return this.authService.setPin(dto);
+  async setPin(@Body() dto: SetPinDto) {
+    const result = await this.authService.setPin(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.PIN_SET, data: null };
   }
 
   @Post('onboarding/business')
   @HttpCode(HttpStatus.CREATED)
-  createBusiness(@Body() dto: CreateBusinessDto) {
-    return this.authService.createBusiness(dto);
+  async createBusiness(@Body() dto: CreateBusinessDto) {
+    const result = await this.authService.createBusiness(dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.BUSINESS_CREATED, data: result };
   }
 }
