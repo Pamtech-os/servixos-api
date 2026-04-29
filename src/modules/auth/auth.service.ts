@@ -391,6 +391,16 @@ export class AuthService {
 
       return null;
     } catch (error) {
+      // Two concurrent requests can both pass the findByEmail check then race to
+      // insert — the second hits the unique index. Treat it as a conflict, not a 500.
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: number }).code === 11000
+      ) {
+        return new ConflictException(AUTH_MESSAGES.ERROR.EMAIL_TAKEN);
+      }
       this.logger.error(
         `createAccount: unexpected error [email=${dto.email}]: ${error instanceof Error ? error.stack : String(error)}`,
       );

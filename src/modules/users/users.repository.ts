@@ -33,12 +33,23 @@ export class UsersRepository {
     update: Partial<User>,
     session?: ClientSession,
   ): Promise<User | null> {
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, ''> = {};
+
+    for (const [key, value] of Object.entries(update)) {
+      if (value === undefined) {
+        $unset[key] = '';
+      } else {
+        $set[key] = value;
+      }
+    }
+
+    const query: Record<string, unknown> = {};
+    if (Object.keys($set).length) query['$set'] = $set;
+    if (Object.keys($unset).length) query['$unset'] = $unset;
+
     return this.userModel
-      .findByIdAndUpdate(
-        id,
-        { $set: update },
-        { returnDocument: 'after', session },
-      )
+      .findByIdAndUpdate(id, query, { returnDocument: 'after', session })
       .lean<User>()
       .exec();
   }
