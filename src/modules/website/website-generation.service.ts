@@ -1,8 +1,12 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
-import { ServiceResponse } from 'src/common/dto/response.dto';
-import { WEBSITE_MESSAGES } from 'src/common/constants/messages/website.messages';
+import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import type { AiContent } from './schemas/website-config.schema';
 import { WebsiteConfigRepository } from './website-config.repository';
 import { BusinessRepository } from '../business/business.repository';
@@ -37,41 +41,46 @@ export class WebsiteGenerationService {
     this.baseDomain = config.get<string>('BASE_DOMAIN') || 'servixos.com';
   }
 
-  /** Fetches business context, runs AI generation, publishes the site, and returns the live URL. */
   async generateForBusiness(
     businessId: string,
-  ): Promise<ServiceResponse<GeneratedWebsiteData>> {
-    const business = await this.businessRepository.findById(businessId);
-    if (!business) {
-      this.logger.warn(
-        `generateForBusiness: business not found [businessId=${businessId}]`,
+  ): Promise<
+    GeneratedWebsiteData | NotFoundException | InternalServerErrorException
+  > {
+    try {
+      const business = await this.businessRepository.findById(businessId);
+      if (!business) {
+        this.logger.warn(
+          `generateForBusiness: business not found [businessId=${businessId}]`,
+        );
+        return new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      const aiContent = await this.generateAiContent({
+        name: business.name,
+        categoryName: business.categoryName,
+        description: business.description,
+      });
+
+      await this.websiteConfigRepository.updateByBusinessId(businessId, {
+        ...(aiContent && { aiContent }),
+        isPublished: true,
+      });
+
+      const subdomain = business.subdomain ?? businessId;
+      const url = `https://${subdomain}.${this.baseDomain}`;
+
+      return { subdomain, url };
+    } catch (err) {
+      this.logger.error(
+        `generateForBusiness: unexpected error [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,
       );
-      throw new NotFoundException('Business not found');
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
-
-    await this.generate(businessId, {
-      name: business.name,
-      categoryName: business.categoryName,
-      description: business.description,
-    });
-
-    await this.websiteConfigRepository.updateByBusinessId(businessId, {
-      isPublished: true,
-    });
-
-    const subdomain = business.subdomain ?? businessId;
-    const url = `https://${subdomain}.${this.baseDomain}`;
-
-    return {
-      message: WEBSITE_MESSAGES.SUCCESS.PUBLISHED,
-      data: { subdomain, url },
-    };
   }
 
-  private async generate(
-    businessId: string,
+  private async generateAiContent(
     context: BusinessContext,
-  ): Promise<void> {
+  ): Promise<AiContent | null> {
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
@@ -80,19 +89,17 @@ export class WebsiteGenerationService {
       });
 
       const block = message.content[0];
-      if (block.type !== 'text') return;
+      if (block.type !== 'text') return null;
 
       const jsonMatch = block.text.match(/\{[\s\S]*\}/);
-      if (!jsonMatch) return;
+      if (!jsonMatch) return null;
 
-      const aiContent = JSON.parse(jsonMatch[0]) as AiContent;
-      await this.websiteConfigRepository.updateByBusinessId(businessId, {
-        aiContent,
-      });
+      return JSON.parse(jsonMatch[0]) as AiContent;
     } catch (err) {
       this.logger.error(
-        `AI generation failed for business ${businessId}: ${err instanceof Error ? err.stack : String(err)}`,
+        `generateAiContent: AI generation failed: ${err instanceof Error ? err.stack : String(err)}`,
       );
+      return null;
     }
   }
 

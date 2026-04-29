@@ -55,7 +55,7 @@ export class RolesRepository {
           isSystem: true,
         },
       ],
-      { session },
+      { session, ordered: true },
     );
 
     return {
