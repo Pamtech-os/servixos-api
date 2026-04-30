@@ -3,7 +3,6 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
