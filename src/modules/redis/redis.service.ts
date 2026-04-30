@@ -15,10 +15,16 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
-    this.client = new Redis(
-      this.config.get<string>('REDIS_URL') || 'redis://localhost:6379',
-      { maxRetriesPerRequest: 3 },
-    );
+    const isProd = this.config.get<string>('NODE_ENV') === 'production';
+    this.client = isProd
+      ? new Redis({
+          host: this.config.get<string>('REDIS_HOST'),
+          port: this.config.get<number>('REDIS_PORT'),
+          password: this.config.get<string>('REDIS_PASSWORD'),
+          tls: {},
+          maxRetriesPerRequest: 3,
+        })
+      : new Redis({ host: 'localhost', port: 6379, maxRetriesPerRequest: 3 });
 
     this.client.on('ready', () => {
       this.logger.log('Redis connected successfully');
