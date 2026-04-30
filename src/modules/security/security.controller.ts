@@ -3,7 +3,6 @@ import {
   Controller,
   HttpCode,
   HttpStatus,
-  NotFoundException,
   Post,
   UseGuards,
 } from '@nestjs/common';
@@ -22,7 +21,8 @@ export class SecurityController {
 
   constructor(config: ConfigService) {
     if (config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION) {
-      throw new NotFoundException();
+      // throw new NotFoundException();
+      return;
     }
     this.secret = config.get<string>('ENCRYPTION_SECRET') || '';
   }
