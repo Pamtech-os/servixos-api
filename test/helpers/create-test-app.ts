@@ -15,7 +15,9 @@ export async function createTestApp(overrideEnv: {
   const apiKey = 'test-api-key-integration';
 
   process.env.DATABASE_URL = overrideEnv.databaseUrl;
-  process.env.REDIS_URL = overrideEnv.redisUrl;
+  const redisUrl = new URL(overrideEnv.redisUrl);
+  process.env.REDIS_HOST = redisUrl.hostname;
+  process.env.REDIS_PORT = redisUrl.port || '6379';
   process.env.JWT_SECRET = 'test-jwt-secret-integration-32chars!!';
   process.env.JWT_EXPIRES_IN = '15m';
   process.env.API_KEY = apiKey;

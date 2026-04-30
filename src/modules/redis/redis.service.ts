@@ -18,15 +18,13 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     const isProd =
       this.config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
-    this.client = isProd
-      ? new Redis({
-          host: this.config.get<string>('REDIS_HOST'),
-          port: this.config.get<number>('REDIS_PORT'),
-          password: this.config.get<string>('REDIS_PASSWORD'),
-          tls: {},
-          maxRetriesPerRequest: 3,
-        })
-      : new Redis({ host: 'localhost', port: 6379, maxRetriesPerRequest: 3 });
+    this.client = new Redis({
+      host: this.config.get<string>('REDIS_HOST') || 'localhost',
+      port: this.config.get<number>('REDIS_PORT') || 6379,
+      password: isProd ? this.config.get<string>('REDIS_PASSWORD') : undefined,
+      tls: isProd ? {} : undefined,
+      maxRetriesPerRequest: 3,
+    });
 
     this.client.on('ready', () => {
       this.logger.log('Redis connected successfully');
