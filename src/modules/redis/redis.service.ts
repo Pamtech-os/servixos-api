@@ -16,7 +16,8 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
-    const isProd = this.config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
+    const isProd =
+      this.config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
     this.client = isProd
       ? new Redis({
           host: this.config.get<string>('REDIS_HOST'),
