@@ -147,7 +147,7 @@ describe('Auth (integration)', () => {
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
 
-  function req(): request.SuperTest<request.Test> {
+  function req() {
     return request(app.getHttpServer() as Server);
   }
 
