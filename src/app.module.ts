@@ -37,6 +37,7 @@ import { RedisModule } from './modules/redis/redis.module';
 import { EmailModule } from './modules/email/email.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { SecurityModule } from './modules/security/security.module';
+import { RequestsModule } from './modules/requests/requests.module';
 
 @Module({
   imports: [
@@ -71,6 +72,7 @@ import { SecurityModule } from './modules/security/security.module';
     WebsiteModule,
     BusinessCategoriesModule,
     SecurityModule,
+    RequestsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
