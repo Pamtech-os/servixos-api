@@ -22,6 +22,7 @@ import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
 import { RequestsService } from './requests.service';
 
+@UseGuards(ApiKeyGuard)
 @Controller('requests')
 export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
@@ -51,7 +52,6 @@ export class RequestsController {
   }
 
   @Public()
-  @UseGuards(ApiKeyGuard)
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createRequest(

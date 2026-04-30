@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
+import { AppEnvironment } from 'src/common/constants/app.constants';
 
 @Injectable()
 export class RedisService implements OnModuleInit, OnModuleDestroy {
@@ -15,7 +16,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly config: ConfigService) {}
 
   onModuleInit(): void {
-    const isProd = this.config.get<string>('NODE_ENV') === 'production';
+    const isProd = this.config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
     this.client = isProd
       ? new Redis({
           host: this.config.get<string>('REDIS_HOST'),
