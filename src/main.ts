@@ -93,8 +93,10 @@ async function bootstrap(): Promise<void> {
     allowedHeaders: [
       'Content-Type',
       'Authorization',
-      'x-api-key',
       'x-business-id',
+      'x-client-token',
+      'x-timestamp',
+      'x-signature',
     ],
     credentials: true,
   });

@@ -8,8 +8,10 @@ import {
 import { GenericContainer, StartedTestContainer } from 'testcontainers';
 import { Connection } from 'mongoose';
 import { Server } from 'http';
+import { createHmac } from 'crypto';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
+import { signRequest } from '../helpers/sign-request';
 import { RedisService } from 'src/modules/redis/redis.service';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { BusinessCategoriesRepository } from 'src/modules/business-categories/business-categories.repository';
@@ -34,7 +36,7 @@ interface CategoryItem {
 
 describe('GET /api/business-categories (integration)', () => {
   let app: INestApplication;
-  let apiKey: string;
+  let clientToken: string;
   let dbConnection: Connection;
   let catModel: ReturnModelType<typeof BusinessCategory>;
   let redisService: RedisService;
@@ -58,7 +60,12 @@ describe('GET /api/business-categories (integration)', () => {
       '/servixos_test?directConnection=true';
     const redisUrl = `redis://localhost:${redisContainer.getMappedPort(6379)}`;
 
-    ({ app, apiKey } = await createTestApp({ databaseUrl, redisUrl }));
+    ({ app } = await createTestApp({ databaseUrl, redisUrl }));
+
+    const tokenRes = await request(app.getHttpServer() as Server).get(
+      '/api/auth/client-token',
+    );
+    clientToken = (tokenRes.body as { data: { token: string } }).data.token;
 
     dbConnection = app.get<Connection>(getConnectionToken());
     catModel = getModelForClass(BusinessCategory, {
@@ -88,7 +95,7 @@ describe('GET /api/business-categories (integration)', () => {
   }
 
   function authed(r: request.Test): request.Test {
-    return r.set('x-api-key', apiKey);
+    return signRequest(r, clientToken);
   }
 
   function seedCategories(
@@ -98,22 +105,57 @@ describe('GET /api/business-categories (integration)', () => {
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
-  // API key guard
+  // HMAC signature guard
   // ─────────────────────────────────────────────────────────────────────────────
 
-  describe('API key guard', () => {
-    it('returns 401 when x-api-key header is missing', async () => {
+  describe('HMAC signature guard', () => {
+    it('returns 401 when HMAC headers are missing', async () => {
       // Arrange & Act
       const res = await req().get('/api/business-categories');
       // Assert
       expect(res.status).toBe(401);
     });
 
-    it('returns 401 when x-api-key is invalid', async () => {
+    it('returns 401 when the signature is invalid', async () => {
       // Arrange & Act
       const res = await req()
         .get('/api/business-categories')
-        .set('x-api-key', 'wrong-key');
+        .set('x-client-token', clientToken)
+        .set('x-timestamp', Date.now().toString())
+        .set('x-signature', 'a'.repeat(64));
+      // Assert
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when the timestamp is stale', async () => {
+      // Arrange — timestamp 10 minutes in the past
+      const staleTs = (Date.now() - 10 * 60 * 1_000).toString();
+      // Act
+      const res = await req()
+        .get('/api/business-categories')
+        .set('x-client-token', clientToken)
+        .set('x-timestamp', staleTs)
+        .set('x-signature', 'anything');
+      // Assert
+      expect(res.status).toBe(401);
+    });
+
+    it('returns 401 when the client token is not found in Redis', async () => {
+      // Arrange — fabricate a token that was never issued
+      const fakeToken = 'b'.repeat(64);
+      const timestamp = Date.now().toString();
+      const canonical = ['GET', '/api/business-categories', timestamp, ''].join(
+        '\n',
+      );
+      const sig = createHmac('sha256', fakeToken)
+        .update(canonical)
+        .digest('hex');
+      // Act
+      const res = await req()
+        .get('/api/business-categories')
+        .set('x-client-token', fakeToken)
+        .set('x-timestamp', timestamp)
+        .set('x-signature', sig);
       // Assert
       expect(res.status).toBe(401);
     });
@@ -192,9 +234,7 @@ describe('GET /api/business-categories (integration)', () => {
       // Arrange
       await seedCategories([{ name: 'Electrical', slug: 'electrical' }]);
       // Act — no Authorization, no x-business-id
-      const res = await req()
-        .get('/api/business-categories')
-        .set('x-api-key', apiKey);
+      const res = await authed(req().get('/api/business-categories'));
       // Assert
       expect(res.status).toBe(200);
     });

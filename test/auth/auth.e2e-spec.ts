@@ -10,6 +10,7 @@ import { Connection } from 'mongoose';
 import { Server } from 'http';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
+import { signRequest } from '../helpers/sign-request';
 import { AgendaService } from 'src/modules/agenda/agenda.service';
 import { RedisService } from 'src/modules/redis/redis.service';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
@@ -84,7 +85,7 @@ const nextEmail = (): string => `u${++_emailSeq}@test.local`;
 
 describe('Auth (integration)', () => {
   let app: INestApplication;
-  let apiKey: string;
+  let clientToken: string;
   let dbConnection: Connection;
   let nowSpy: jest.Mock;
   let categoryId: string;
@@ -110,7 +111,12 @@ describe('Auth (integration)', () => {
       '/servixos_test?directConnection=true';
     const redisUrl = `redis://localhost:${redisContainer.getMappedPort(6379)}`;
 
-    ({ app, apiKey } = await createTestApp({ databaseUrl, redisUrl }));
+    ({ app } = await createTestApp({ databaseUrl, redisUrl }));
+
+    const tokenRes = await request(app.getHttpServer() as Server).get(
+      '/api/auth/client-token',
+    );
+    clientToken = (tokenRes.body as { data: { token: string } }).data.token;
 
     dbConnection = app.get<Connection>(getConnectionToken());
     userModel = getModelForClass(User, { existingConnection: dbConnection });
@@ -152,7 +158,7 @@ describe('Auth (integration)', () => {
   }
 
   function authed(r: request.Test): request.Test {
-    return r.set('x-api-key', apiKey);
+    return signRequest(r, clientToken);
   }
 
   function makeAccountPayload(email: string) {
@@ -373,8 +379,8 @@ describe('Auth (integration)', () => {
       });
     });
 
-    describe('API key guard', () => {
-      it('returns 401 when x-api-key header is missing', async () => {
+    describe('HMAC signature guard', () => {
+      it('returns 401 when HMAC headers are missing', async () => {
         // Arrange & Act
         const res = await req()
           .post('/api/auth/onboarding/account')
@@ -383,11 +389,13 @@ describe('Auth (integration)', () => {
         expect(res.status).toBe(401);
       });
 
-      it('returns 401 when x-api-key is invalid', async () => {
+      it('returns 401 when the signature is invalid', async () => {
         // Arrange & Act
         const res = await req()
           .post('/api/auth/onboarding/account')
-          .set('x-api-key', 'wrong-key')
+          .set('x-client-token', clientToken)
+          .set('x-timestamp', Date.now().toString())
+          .set('x-signature', 'a'.repeat(64))
           .send(makeAccountPayload(nextEmail()));
         // Assert
         expect(res.status).toBe(401);

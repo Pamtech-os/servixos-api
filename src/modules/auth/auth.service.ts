@@ -53,6 +53,7 @@ import { UserRole } from '../users/schemas/user.schema';
 
 const PIN_MAX_ATTEMPTS = 3;
 const REFRESH_TOKEN_TTL_DAYS = 7;
+const CLIENT_TOKEN_KEY = (token: string) => `client_token:${token}`;
 
 @Injectable()
 export class AuthService {
@@ -744,6 +745,13 @@ export class AuthService {
     ]);
 
     return { accessToken, refreshToken: rawRefreshToken };
+  }
+
+  async issueClientToken(): Promise<{ token: string; expiresAt: number }> {
+    const token = generateSecureToken();
+    const ttl = CACHE_TTL.CLIENT_TOKEN;
+    await this.redisService.set(CLIENT_TOKEN_KEY(token), '1', ttl);
+    return { token, expiresAt: Date.now() + ttl * 1_000 };
   }
 
   private signAccessToken(payload: JwtUser): string {

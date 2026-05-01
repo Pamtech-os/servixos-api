@@ -1,20 +1,11 @@
-import {
-  Body,
-  Controller,
-  HttpCode,
-  HttpStatus,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Public } from 'src/common/decorators/public.decorator';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
 import { decrypt, encrypt } from 'src/common/utils/crypto.util';
 import { AppEnvironment } from 'src/common/constants/app.constants';
 import { DecryptDto } from './dto/decrypt.dto';
 
 @Public()
-@UseGuards(ApiKeyGuard)
 @Controller('security')
 export class SecurityController {
   private readonly secret: string;

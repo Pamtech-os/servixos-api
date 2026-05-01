@@ -22,7 +22,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
 // import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
 // import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
-import { ApiKeyGuard } from './common/guards/api-key.guard';
+import { HmacGuard } from './common/guards/hmac.guard';
 // import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
@@ -78,7 +78,7 @@ import { RequestsModule } from './modules/requests/requests.module';
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
-    { provide: APP_GUARD, useClass: ApiKeyGuard },
+    { provide: APP_GUARD, useClass: HmacGuard },
     // { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: TenantGuard },

@@ -1,15 +1,16 @@
 import {
   Body,
   Controller,
+  Get,
   Headers,
   HttpCode,
   HttpException,
   HttpStatus,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
+import { API_KEY_MESSAGES } from 'src/common/constants/messages/api-key.messages';
 import { LoginDto } from './dto/login.dto';
 import { VerifyPinDto } from './dto/verify-pin.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
@@ -21,15 +22,25 @@ import { ResendOtpDto } from './dto/resend-otp.dto';
 import { SetPinDto } from './dto/set-pin.dto';
 import { CreateBusinessDto } from './dto/create-business.dto';
 import { Public } from 'src/common/decorators/public.decorator';
-import { ApiKeyGuard } from 'src/common/guards/api-key.guard';
+import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 // import { Encrypt } from 'src/common/decorators/encrypt.decorator';
 
 // @Encrypt()
 @Public()
-@UseGuards(ApiKeyGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('client-token')
+  @SkipSignature()
+  @HttpCode(HttpStatus.OK)
+  async clientToken() {
+    const result = await this.authService.issueClientToken();
+    return {
+      message: API_KEY_MESSAGES.SUCCESS.CLIENT_TOKEN_ISSUED,
+      data: result,
+    };
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)

@@ -29,6 +29,9 @@ export const CACHE_TTL = {
   CLOCK_STATUS: 30, // 30 seconds (near real-time)
   TASKS_LIST: 60, // 1 minute (kanban refreshes often)
 
+  // Client signing tokens
+  CLIENT_TOKEN: 60 * 15, // 15 minutes
+
   // Reference / quasi-static
   BUSINESS_CATEGORIES: 60 * 60 * 24, // 24 hours (seeded data, changes rarely)
   ROLES_LIST: 60 * 30, // 30 minutes
