@@ -10,6 +10,7 @@ import { Connection, Types } from 'mongoose';
 import { Server } from 'http';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
+import { signRequest } from '../helpers/sign-request';
 import { AgendaService } from 'src/modules/agenda/agenda.service';
 import { JOBS } from 'src/modules/agenda/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
@@ -93,7 +94,7 @@ const BASE_REQUEST_BODY = {
 
 describe('Requests (integration)', () => {
   let app: INestApplication;
-  let apiKey: string;
+  let clientToken: string;
   let dbConnection: Connection;
   let nowSpy: jest.Mock;
 
@@ -120,7 +121,12 @@ describe('Requests (integration)', () => {
       '/servixos_requests_test?directConnection=true';
     const redisUrl = `redis://localhost:${redisContainer.getMappedPort(6379)}`;
 
-    ({ app, apiKey } = await createTestApp({ databaseUrl, redisUrl }));
+    ({ app } = await createTestApp({ databaseUrl, redisUrl }));
+
+    const tokenRes = await request(app.getHttpServer() as Server).get(
+      '/api/auth/client-token',
+    );
+    clientToken = (tokenRes.body as { data: { token: string } }).data.token;
 
     dbConnection = app.get<Connection>(getConnectionToken());
 
@@ -170,7 +176,7 @@ describe('Requests (integration)', () => {
   }
 
   function authed(r: request.Test): request.Test {
-    return r.set('x-api-key', apiKey);
+    return signRequest(r, clientToken);
   }
 
   function asUser(
@@ -178,10 +184,11 @@ describe('Requests (integration)', () => {
     token: string,
     businessId: string,
   ): request.Test {
-    return r
-      .set('x-api-key', apiKey)
-      .set('Authorization', `Bearer ${token}`)
-      .set('x-business-id', businessId);
+    return authed(
+      r
+        .set('Authorization', `Bearer ${token}`)
+        .set('x-business-id', businessId),
+    );
   }
 
   function asSeeded(r: request.Test): request.Test {
@@ -273,8 +280,8 @@ describe('Requests (integration)', () => {
   // ─────────────────────────────────────────────────────────────────────────────
 
   describe('POST /api/requests', () => {
-    describe('API key guard', () => {
-      it('returns 401 when x-api-key header is missing', async () => {
+    describe('HMAC signature guard', () => {
+      it('returns 401 when HMAC headers are missing', async () => {
         // Arrange & Act
         const res = await req()
           .post(BASE)
@@ -284,13 +291,14 @@ describe('Requests (integration)', () => {
         expect(res.status).toBe(401);
       });
 
-      it('returns 401 when x-api-key is invalid', async () => {
+      it('returns 401 when the signature is invalid', async () => {
         // Arrange & Act
-        const res = await req()
-          .post(BASE)
-          .set('x-api-key', 'wrong-key')
-          .query({ businessId: seededUser.businessId })
-          .send(BASE_REQUEST_BODY);
+        const res = await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send(BASE_REQUEST_BODY),
+        ).set('x-signature', 'a'.repeat(64));
         // Assert
         expect(res.status).toBe(401);
       });
@@ -518,7 +526,7 @@ describe('Requests (integration)', () => {
 
   describe('GET /api/requests', () => {
     describe('auth guard', () => {
-      it('returns 401 when x-api-key header is missing', async () => {
+      it('returns 401 when HMAC headers are missing', async () => {
         // Arrange & Act
         const res = await req()
           .get(BASE)
@@ -530,21 +538,21 @@ describe('Requests (integration)', () => {
 
       it('returns 401 when Authorization header is missing', async () => {
         // Arrange & Act
-        const res = await req()
-          .get(BASE)
-          .set('x-api-key', apiKey)
-          .set('x-business-id', seededUser.businessId);
+        const res = await authed(
+          req().get(BASE).set('x-business-id', seededUser.businessId),
+        );
         // Assert
         expect(res.status).toBe(401);
       });
 
       it('returns 401 when the JWT is invalid', async () => {
         // Arrange & Act
-        const res = await req()
-          .get(BASE)
-          .set('x-api-key', apiKey)
-          .set('Authorization', 'Bearer invalid.jwt.token')
-          .set('x-business-id', seededUser.businessId);
+        const res = await authed(
+          req()
+            .get(BASE)
+            .set('Authorization', 'Bearer invalid.jwt.token')
+            .set('x-business-id', seededUser.businessId),
+        );
         // Assert
         expect(res.status).toBe(401);
       });
@@ -721,10 +729,11 @@ describe('Requests (integration)', () => {
         // Arrange
         const doc = await seedRequest(seededUser.businessId);
         // Act
-        const res = await req()
-          .get(`${BASE}/${doc._id.toString()}`)
-          .set('x-api-key', apiKey)
-          .set('x-business-id', seededUser.businessId);
+        const res = await authed(
+          req()
+            .get(`${BASE}/${doc._id.toString()}`)
+            .set('x-business-id', seededUser.businessId),
+        );
         // Assert
         expect(res.status).toBe(401);
       });
@@ -792,11 +801,12 @@ describe('Requests (integration)', () => {
         // Arrange
         const doc = await seedRequest(seededUser.businessId);
         // Act
-        const res = await req()
-          .patch(`${BASE}/${doc._id.toString()}`)
-          .set('x-api-key', apiKey)
-          .set('x-business-id', seededUser.businessId)
-          .send({ status: RequestStatus.REJECTED });
+        const res = await authed(
+          req()
+            .patch(`${BASE}/${doc._id.toString()}`)
+            .set('x-business-id', seededUser.businessId)
+            .send({ status: RequestStatus.REJECTED }),
+        );
         // Assert
         expect(res.status).toBe(401);
       });
@@ -1094,10 +1104,11 @@ describe('Requests (integration)', () => {
         // Arrange
         const doc = await seedRequest(seededUser.businessId);
         // Act
-        const res = await req()
-          .delete(`${BASE}/${doc._id.toString()}`)
-          .set('x-api-key', apiKey)
-          .set('x-business-id', seededUser.businessId);
+        const res = await authed(
+          req()
+            .delete(`${BASE}/${doc._id.toString()}`)
+            .set('x-business-id', seededUser.businessId),
+        );
         // Assert
         expect(res.status).toBe(401);
       });
