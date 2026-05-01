@@ -111,7 +111,7 @@ describe('Auth (integration)', () => {
       '/servixos_test?directConnection=true';
     const redisUrl = `redis://localhost:${redisContainer.getMappedPort(6379)}`;
 
-    ({ app, apiKey } = await createTestApp({ databaseUrl, redisUrl }));
+    ({ app } = await createTestApp({ databaseUrl, redisUrl }));
 
     const tokenRes = await request(app.getHttpServer() as Server).get(
       '/api/auth/client-token',
