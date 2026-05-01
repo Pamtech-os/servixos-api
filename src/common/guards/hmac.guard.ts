@@ -12,6 +12,7 @@ import { Request } from 'express';
 import { RedisService } from 'src/modules/redis/redis.service';
 import { SKIP_SIGNATURE_KEY } from '../decorators/skip-signature.decorator';
 import { API_KEY_MESSAGES } from '../constants/messages/api-key.messages';
+import { COMMON_MESSAGES } from '../constants/messages/common.messages';
 
 const TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1_000;
 
@@ -76,7 +77,7 @@ export class HmacGuard implements CanActivate {
 
     // Internal sanity-check: API_KEY must be configured on the server
     if (!this.config.get<string>('API_KEY')) {
-      throw new InternalServerErrorException('Server misconfiguration');
+      throw new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
 
     return true;
