@@ -20,7 +20,7 @@ export class BusinessCategoriesRepository {
 
   async findAll(): Promise<BusinessCategory[]> {
     return this.model
-      .find({ isActive: true })
+      .find({ isActive: true }, { _id: 1, name: 1, slug: 1 })
       .lean<BusinessCategory[]>()
       .exec();
   }
