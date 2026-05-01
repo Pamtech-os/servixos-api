@@ -120,10 +120,7 @@ async function bootstrap(): Promise<void> {
 
   await app.listen(port);
 
-  // app.getUrl() returns the actual bound address (e.g. http://[::1]:3000).
-  // Normalise IPv6 loopback to the friendlier "localhost" for readability.
-  const serverUrl = (await app.getUrl()).replace('[::1]', 'localhost');
-  logger.log(`Server running on ${serverUrl}/api  [${nodeEnv}]`, 'Bootstrap');
+  logger.log(`Server running on port ${port} [${nodeEnv}]`, 'Bootstrap');
 }
 
 void bootstrap();

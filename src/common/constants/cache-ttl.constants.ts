@@ -30,6 +30,7 @@ export const CACHE_TTL = {
   TASKS_LIST: 60, // 1 minute (kanban refreshes often)
 
   // Reference / quasi-static
+  BUSINESS_CATEGORIES: 60 * 60 * 24, // 24 hours (seeded data, changes rarely)
   ROLES_LIST: 60 * 30, // 30 minutes
   PERMISSIONS_LIST: 60 * 60, // 1 hour
   WEBSITE_CONFIG: 60 * 10, // 10 minutes
