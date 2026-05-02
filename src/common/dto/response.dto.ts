@@ -9,6 +9,7 @@ export interface ServiceResponse<T = unknown> {
   message: string;
   data?: T;
   meta?: PaginationMeta;
+  statistics?: Record<string, number>;
 }
 
 export class ApiResponse<T = unknown> {
@@ -17,4 +18,5 @@ export class ApiResponse<T = unknown> {
   message: string;
   data?: T;
   meta?: PaginationMeta;
+  statistics?: Record<string, number>;
 }

@@ -7,15 +7,20 @@ import {
 } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
+import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { BusinessRepository } from '../business/business.repository';
 import { ClientsRepository } from '../clients/clients.repository';
+import { RedisService } from '../redis/redis.service';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
-import { RequestsRepository } from './requests.repository';
+import {
+  RequestListStatistics,
+  RequestsRepository,
+} from './requests.repository';
 import {
   RequestStatus,
   ServiceRequest,
@@ -24,7 +29,11 @@ import {
 export interface PaginatedRequests {
   data: ServiceRequest[];
   meta: ReturnType<typeof buildMeta>;
+  statistics: RequestListStatistics;
 }
+
+const requestsListVersionKey = (businessId: string): string =>
+  `requests:list:version:${businessId}`;
 
 @Injectable()
 export class RequestsService {
@@ -35,6 +44,7 @@ export class RequestsService {
     private readonly requestsRepository: RequestsRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly redisService: RedisService,
   ) {}
 
   async listRequests(
@@ -43,15 +53,27 @@ export class RequestsService {
   ): Promise<PaginatedRequests | InternalServerErrorException> {
     try {
       const pagination = resolvePagination(dto.page, dto.limit);
-      const { data, total } = await this.requestsRepository.findAll(
+      const cacheKey = await this.buildRequestsListCacheKey(
+        businessId,
+        dto,
+        pagination.page,
+        pagination.limit,
+      );
+      const cached = await this.getCachedRequestsList(cacheKey);
+      if (cached) return cached;
+
+      const { data, total, statistics } = await this.requestsRepository.findAll(
         new Types.ObjectId(businessId),
         { status: dto.status, search: dto.search },
         pagination,
       );
-      return {
+      const result: PaginatedRequests = {
         data,
         meta: buildMeta(pagination.page, pagination.limit, total),
+        statistics,
       };
+      await this.setCachedRequestsList(cacheKey, result);
+      return result;
     } catch (error) {
       this.logger.error(
         `listRequests: unexpected error [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
@@ -124,6 +146,7 @@ export class RequestsService {
         message: dto.message,
       });
 
+      await this.invalidateRequestsListCache(resolvedBusinessId.toString());
       return request;
     } catch (error) {
       this.logger.error(
@@ -159,7 +182,17 @@ export class RequestsService {
       }
 
       if (dto.status === RequestStatus.ACCEPTED) {
-        return this.acceptRequest(id, bId, existing, dto, actionedBy);
+        const accepted = await this.acceptRequest(
+          id,
+          bId,
+          existing,
+          dto,
+          actionedBy,
+        );
+        if (!(accepted instanceof InternalServerErrorException)) {
+          await this.invalidateRequestsListCache(businessId);
+        }
+        return accepted;
       }
 
       const updated = await this.requestsRepository.updateById(id, bId, {
@@ -171,6 +204,9 @@ export class RequestsService {
         ...(dto.quotedPrice !== undefined && { quotedPrice: dto.quotedPrice }),
       });
 
+      if (updated) {
+        await this.invalidateRequestsListCache(businessId);
+      }
       return updated!;
     } catch (error) {
       this.logger.error(
@@ -191,6 +227,7 @@ export class RequestsService {
       );
       if (!deleted)
         return new NotFoundException(REQUESTS_MESSAGES.ERROR.NOT_FOUND);
+      await this.invalidateRequestsListCache(businessId);
       return null;
     } catch (error) {
       this.logger.error(
@@ -255,6 +292,82 @@ export class RequestsService {
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
       await session.endSession();
+    }
+  }
+
+  private async buildRequestsListCacheKey(
+    businessId: string,
+    dto: ListRequestsDto,
+    page: number,
+    limit: number,
+  ): Promise<string | null> {
+    try {
+      const versionRaw = await this.redisService.get(
+        requestsListVersionKey(businessId),
+      );
+      const version = Number.parseInt(versionRaw ?? '0', 10);
+      const safeVersion = Number.isNaN(version) ? 0 : version;
+      const status = dto.status ?? 'all';
+      const search = encodeURIComponent((dto.search ?? '').toLowerCase());
+
+      return `requests:list:${businessId}:v:${safeVersion}:p:${page}:l:${limit}:s:${status}:q:${search}`;
+    } catch (error) {
+      this.logger.warn(
+        `buildRequestsListCacheKey: cache unavailable [businessId=${businessId}]: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private async getCachedRequestsList(
+    cacheKey: string | null,
+  ): Promise<PaginatedRequests | null> {
+    if (!cacheKey) return null;
+
+    try {
+      const cached = await this.redisService.get(cacheKey);
+      if (!cached) return null;
+
+      return JSON.parse(cached) as PaginatedRequests;
+    } catch (error) {
+      this.logger.warn(
+        `getCachedRequestsList: cache read failed [key=${cacheKey}]: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private async setCachedRequestsList(
+    cacheKey: string | null,
+    payload: PaginatedRequests,
+  ): Promise<void> {
+    if (!cacheKey) return;
+
+    try {
+      await this.redisService.set(
+        cacheKey,
+        JSON.stringify(payload),
+        CACHE_TTL.REQUESTS_LIST,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `setCachedRequestsList: cache write failed [key=${cacheKey}]: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  private async invalidateRequestsListCache(businessId: string): Promise<void> {
+    try {
+      const versionKey = requestsListVersionKey(businessId);
+      await this.redisService.incr(versionKey);
+      await this.redisService.expire(
+        versionKey,
+        CACHE_TTL.REQUESTS_LIST_VERSION,
+      );
+    } catch (error) {
+      this.logger.warn(
+        `invalidateRequestsListCache: cache invalidate failed [businessId=${businessId}]: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 }

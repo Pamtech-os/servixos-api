@@ -3,11 +3,27 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { ClientSession, Connection, Types } from 'mongoose';
 import { PaginationParams } from 'src/common/utils/pagination.util';
-import { ServiceRequest } from './schemas/service-request.schema';
+import {
+  RequestStatus,
+  ServiceRequest,
+} from './schemas/service-request.schema';
 
 interface ListFilters {
   status?: string;
   search?: string;
+}
+
+export interface RequestListStatistics {
+  total: number;
+  pending: number;
+  accepted: number;
+  rejected: number;
+  cancelled: number;
+}
+
+interface StatusAggregationResult {
+  _id: RequestStatus;
+  count: number;
 }
 
 @Injectable()
@@ -24,23 +40,28 @@ export class RequestsRepository {
     businessId: Types.ObjectId,
     filters: ListFilters,
     pagination: PaginationParams,
-  ): Promise<{ data: ServiceRequest[]; total: number }> {
+  ): Promise<{
+    data: ServiceRequest[];
+    total: number;
+    statistics: RequestListStatistics;
+  }> {
     const query: Record<string, unknown> = { businessId, deletedAt: null };
+    const statisticsQuery: Record<string, unknown> = {
+      businessId,
+      deletedAt: null,
+    };
+    const searchFilter = this.buildSearchFilter(filters.search);
 
     if (filters.status) {
       query['status'] = filters.status;
     }
 
-    if (filters.search) {
-      const regex = new RegExp(filters.search, 'i');
-      query['$or'] = [
-        { clientName: regex },
-        { clientEmail: regex },
-        { service: regex },
-      ];
+    if (searchFilter.length > 0) {
+      query['$or'] = searchFilter;
+      statisticsQuery['$or'] = searchFilter;
     }
 
-    const [data, total] = await Promise.all([
+    const [data, total, statisticsRows] = await Promise.all([
       this.requestModel
         .find(query)
         .sort({ createdAt: -1 })
@@ -49,9 +70,39 @@ export class RequestsRepository {
         .lean<ServiceRequest[]>()
         .exec(),
       this.requestModel.countDocuments(query).exec(),
+      this.requestModel
+        .aggregate<StatusAggregationResult>([
+          { $match: statisticsQuery },
+          { $group: { _id: '$status', count: { $sum: 1 } } },
+        ])
+        .exec(),
     ]);
 
-    return { data, total };
+    const statistics: RequestListStatistics = {
+      total: 0,
+      pending: 0,
+      accepted: 0,
+      rejected: 0,
+      cancelled: 0,
+    };
+
+    for (const row of statisticsRows) {
+      statistics.total += row.count;
+
+      if (row._id === RequestStatus.PENDING) statistics.pending = row.count;
+      if (row._id === RequestStatus.ACCEPTED) statistics.accepted = row.count;
+      if (row._id === RequestStatus.REJECTED) statistics.rejected = row.count;
+      if (row._id === RequestStatus.CANCELLED) statistics.cancelled = row.count;
+    }
+
+    return { data, total, statistics };
+  }
+
+  private buildSearchFilter(search?: string): Array<Record<string, RegExp>> {
+    if (!search) return [];
+
+    const regex = new RegExp(search, 'i');
+    return [{ clientName: regex }, { clientEmail: regex }, { service: regex }];
   }
 
   async findById(

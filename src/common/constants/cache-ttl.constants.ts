@@ -21,6 +21,8 @@ export const CACHE_TTL = {
   INVOICE_DETAIL: 60 * 5, // 5 minutes
   PAYMENTS_LIST: 60 * 2, // 2 minutes
   CONTRACTS_LIST: 60 * 5, // 5 minutes
+  REQUESTS_LIST: 60 * 2, // 2 minutes
+  REQUESTS_LIST_VERSION: 60 * 60 * 24 * 30, // 30 days (cache-busting marker)
 
   // Team
   EMPLOYEES_LIST: 60 * 5, // 5 minutes

@@ -30,6 +30,7 @@ interface ApiBody<T = unknown> {
   message: string;
   data?: T;
   meta?: PaginationMeta;
+  statistics?: RequestListingStatistics;
 }
 
 interface PaginationMeta {
@@ -37,6 +38,14 @@ interface PaginationMeta {
   limit: number;
   total: number;
   totalPages: number;
+}
+
+interface RequestListingStatistics {
+  total: number;
+  pending: number;
+  accepted: number;
+  rejected: number;
+  cancelled: number;
 }
 
 interface LoginPayload {
@@ -559,7 +568,7 @@ describe('Requests (integration)', () => {
     });
 
     describe('happy path', () => {
-      it('returns 200 with an array of requests and pagination meta', async () => {
+      it('returns 200 with an array of requests, pagination meta, and statistics', async () => {
         // Arrange
         await seedRequest(seededUser.businessId);
         // Act
@@ -575,6 +584,13 @@ describe('Requests (integration)', () => {
           limit: expect.any(Number) as unknown,
           total: expect.any(Number) as unknown,
           totalPages: expect.any(Number) as unknown,
+        });
+        expect(body.statistics).toMatchObject({
+          total: expect.any(Number) as unknown,
+          pending: expect.any(Number) as unknown,
+          accepted: expect.any(Number) as unknown,
+          rejected: expect.any(Number) as unknown,
+          cancelled: expect.any(Number) as unknown,
         });
       });
 
@@ -626,6 +642,41 @@ describe('Requests (integration)', () => {
         expect(
           data.every((r) => r.status === (RequestStatus.ACCEPTED as string)),
         ).toBe(true);
+      });
+
+      it('returns statistics across statuses while applying the status filter to data', async () => {
+        // Arrange
+        const token = `statistics-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+        await seedRequest(seededUser.businessId, {
+          clientEmail: `${token}-accepted@test.local`,
+          status: RequestStatus.ACCEPTED,
+        });
+        await seedRequest(seededUser.businessId, {
+          clientEmail: `${token}-pending@test.local`,
+          status: RequestStatus.PENDING,
+        });
+        // Act
+        const res = await asSeeded(
+          req()
+            .get(BASE)
+            .query({ status: RequestStatus.ACCEPTED, search: token }),
+        );
+        const body = res.body as ApiBody<Array<{ status: string }>>;
+        // Assert
+        expect(body.meta?.total).toBe(1);
+        expect(
+          body.data?.every(
+            (requestItem) =>
+              requestItem.status === (RequestStatus.ACCEPTED as string),
+          ),
+        ).toBe(true);
+        expect(body.statistics).toEqual({
+          total: 2,
+          pending: 1,
+          accepted: 1,
+          rejected: 0,
+          cancelled: 0,
+        });
       });
 
       it('matches search against clientName (case-insensitive)', async () => {

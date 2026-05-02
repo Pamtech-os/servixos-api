@@ -25,6 +25,7 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Get()
+  @HttpCode(HttpStatus.OK)
   async listRequests(
     @CurrentUser() user: JwtUser,
     @Query() query: ListRequestsDto,
@@ -36,6 +37,7 @@ export class RequestsController {
     if (result instanceof HttpException) throw result;
     return {
       message: REQUESTS_MESSAGES.SUCCESS.RETRIEVED,
+      statistics: result.statistics,
       data: result.data,
       meta: result.meta,
     };
