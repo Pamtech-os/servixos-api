@@ -8,6 +8,8 @@ import { EncryptionInterceptor } from './common/interceptors/encryption.intercep
 import { AppLogger } from './common/utils/app-logger';
 import { AppEnvironment } from './common/constants/app.constants';
 
+const SERVIXOS_ROOT_DOMAIN = 'servixos.com';
+
 // ---------------------------------------------------------------------------
 // Environment validation — exits the process before any server port is bound
 // ---------------------------------------------------------------------------
@@ -34,6 +36,17 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
   }
 
   logger.log('All required environment variables are present', 'EnvValidator');
+}
+
+function isServixosSubdomainOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    const { protocol, hostname } = parsed;
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    return hostname.endsWith(`.${SERVIXOS_ROOT_DOMAIN}`);
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -68,7 +81,7 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: uploadLimit }));
   app.use(urlencoded({ extended: true, limit: uploadLimit }));
 
-  // CORS — only origins listed in FRONTEND_URLS are accepted
+  // CORS — accepts origins listed in FRONTEND_URLS plus *.servixos.com
   const allowedOrigins = config
     .get<string>('FRONTEND_URLS', '')
     .split(',')
@@ -80,13 +93,17 @@ async function bootstrap(): Promise<void> {
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        isServixosSubdomainOrigin(origin)
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',
