@@ -23,6 +23,9 @@ export const CACHE_TTL = {
   CONTRACTS_LIST: 60 * 5, // 5 minutes
   REQUESTS_LIST: 60 * 2, // 2 minutes
   REQUESTS_LIST_VERSION: 60 * 60 * 24 * 30, // 30 days (cache-busting marker)
+  REQUEST_BUSINESS_SLUG: 60, // 1 minute
+  REQUEST_CREATE_IDEMPOTENCY_PENDING: 30, // 30 seconds (in-flight create lock)
+  REQUEST_CREATE_IDEMPOTENCY_RESULT: 60 * 60 * 24, // 24 hours (dedupe replay window)
 
   // Team
   EMPLOYEES_LIST: 60 * 5, // 5 minutes

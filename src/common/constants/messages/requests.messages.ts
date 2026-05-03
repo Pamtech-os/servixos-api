@@ -31,6 +31,12 @@ export const REQUESTS_MESSAGES = {
     NOT_FOUND: 'Service request not found',
     MISSING_BUSINESS_IDENTIFIER:
       'A business identifier is required to submit a service request',
+    MULTIPLE_BUSINESS_IDENTIFIERS:
+      'Provide either businessId or businessSlug, but not both',
+    INVALID_IDEMPOTENCY_KEY:
+      'Idempotency key must be between 1 and 128 characters',
+    IDEMPOTENCY_IN_PROGRESS:
+      'A matching request is already being processed. Please retry shortly.',
     CLIENT_NOT_PROVISIONED:
       'Client profile is not yet available for this request. Please retry shortly.',
     ALREADY_ACTIONED: 'This request has already been actioned',

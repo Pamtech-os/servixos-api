@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpException,
   HttpStatus,
@@ -57,11 +58,13 @@ export class RequestsController {
     @Body() dto: CreateRequestDto,
     @Query('businessSlug') businessSlug?: string,
     @Query('businessId') businessId?: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const result = await this.requestsService.createRequest(
       dto,
       businessSlug,
       businessId,
+      idempotencyKey,
     );
     if (result instanceof HttpException) throw result;
     return { message: REQUESTS_MESSAGES.SUCCESS.CREATED, data: result };

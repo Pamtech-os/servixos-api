@@ -17,6 +17,10 @@ import { BusinessCategory } from 'src/modules/business-categories/schemas/busine
 import { Business } from 'src/modules/business/schemas/business.schema';
 import { RedisService } from 'src/modules/redis/redis.service';
 import {
+  ClientProvisioningJobData,
+  RequestsService,
+} from 'src/modules/requests/requests.service';
+import {
   ServiceRequest,
   RequestStatus,
 } from 'src/modules/requests/schemas/service-request.schema';
@@ -117,6 +121,7 @@ describe('Requests (integration)', () => {
   let clientToken: string;
   let dbConnection: Connection;
   let redisService: RedisService;
+  let requestsService: RequestsService;
   let nowSpy: jest.Mock;
 
   let serviceRequestModel: ReturnModelType<typeof ServiceRequest>;
@@ -145,6 +150,7 @@ describe('Requests (integration)', () => {
 
     ({ app } = await createTestApp({ databaseUrl, redisUrl }));
     redisService = app.get(RedisService);
+    requestsService = app.get(RequestsService);
 
     const tokenRes = await request(app.getHttpServer() as Server).get(
       '/api/auth/client-token',
@@ -436,6 +442,24 @@ describe('Requests (integration)', () => {
         expect(res.status).toBe(400);
       });
 
+      it('returns 400 when both businessSlug and businessId are provided', async () => {
+        // Arrange & Act
+        const res = await authed(
+          req()
+            .post(BASE)
+            .query({
+              businessSlug: seededUser.subdomain,
+              businessId: seededUser.businessId,
+            })
+            .send(BASE_REQUEST_BODY),
+        );
+        // Assert
+        expect(res.status).toBe(400);
+        expect((res.body as ApiBody).message).toBe(
+          REQUESTS_MESSAGES.ERROR.MULTIPLE_BUSINESS_IDENTIFIERS,
+        );
+      });
+
       it('returns 404 when businessId does not match any business', async () => {
         // Arrange & Act
         const res = await authed(
@@ -610,7 +634,61 @@ describe('Requests (integration)', () => {
         expect(data.clientEmail).toBe('upper@test.local');
       });
 
-      it('provisions the business client record in the background', async () => {
+      it('returns 400 when idempotency key is empty/invalid', async () => {
+        // Arrange & Act
+        const res = await authed(
+          req()
+            .post(BASE)
+            .set('idempotency-key', ' '.repeat(129))
+            .query({ businessId: seededUser.businessId })
+            .send(BASE_REQUEST_BODY),
+        );
+        // Assert
+        expect(res.status).toBe(400);
+        expect((res.body as ApiBody).message).toBe(
+          REQUESTS_MESSAGES.ERROR.INVALID_IDEMPOTENCY_KEY,
+        );
+      });
+
+      it('returns the same created request for repeated submissions with the same idempotency key', async () => {
+        // Arrange
+        const email = `idem-${Date.now()}@test.local`;
+        const body = { ...BASE_REQUEST_BODY, clientEmail: email };
+        const key = `req-create-${Date.now()}`;
+
+        // Act
+        const first = await authed(
+          req()
+            .post(BASE)
+            .set('idempotency-key', key)
+            .query({ businessId: seededUser.businessId })
+            .send(body),
+        );
+        const second = await authed(
+          req()
+            .post(BASE)
+            .set('idempotency-key', key)
+            .query({ businessId: seededUser.businessId })
+            .send(body),
+        );
+
+        // Assert
+        expect(first.status).toBe(201);
+        expect(second.status).toBe(201);
+
+        const firstData = (first.body as ApiBody<{ _id: string }>).data!;
+        const secondData = (second.body as ApiBody<{ _id: string }>).data!;
+        expect(secondData._id).toBe(firstData._id);
+
+        const count = await serviceRequestModel.countDocuments({
+          businessId: new Types.ObjectId(seededUser.businessId),
+          clientEmail: email,
+          deletedAt: null,
+        });
+        expect(count).toBe(1);
+      });
+
+      it('ensures the business client record exists immediately on create', async () => {
         // Arrange
         const email = `bg-client-${Date.now()}@test.local`;
         // Act
@@ -629,10 +707,11 @@ describe('Requests (integration)', () => {
         );
       });
 
-      it('creates a client login account and queues credentials email only once for new client emails', async () => {
+      it('queues a client provisioning job after request creation', async () => {
         // Arrange
-        const email = `bg-user-${Date.now()}@test.local`;
+        const email = `bg-job-${Date.now()}@test.local`;
         nowSpy.mockClear();
+
         // Act
         await authed(
           req()
@@ -641,16 +720,40 @@ describe('Requests (integration)', () => {
             .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
         );
 
-        await authed(
-          req()
-            .post(BASE)
-            .query({ businessId: seededUser.businessId })
-            .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
-        );
+        // Assert
+        const provisioningCalls = (
+          nowSpy.mock.calls as [string, ClientProvisioningJobData][]
+        ).filter((call) => call[0] === JOBS.REQUEST_CLIENT_PROVISION);
+
+        expect(provisioningCalls).toHaveLength(1);
+        expect(provisioningCalls[0][1]).toMatchObject({
+          businessId: seededUser.businessId,
+          clientEmail: email,
+          attempt: 0,
+        });
+      });
+
+      it('creates a client login and queues credentials email only once when the provisioning job runs more than once', async () => {
+        // Arrange
+        const email = `bg-user-${Date.now()}@test.local`;
+        const payload: ClientProvisioningJobData = {
+          businessId: seededUser.businessId,
+          businessName: 'Seeded Business',
+          clientName: 'Background User',
+          clientEmail: email,
+          clientPhone: BASE_REQUEST_BODY.clientPhone,
+          attempt: 0,
+        };
+        nowSpy.mockClear();
+
+        // Act
+        await requestsService.handleClientProvisioningJob(payload);
+        await requestsService.handleClientProvisioningJob(payload);
 
         const user = await waitForTruthy(() =>
           userModel.findOne({ email }).lean<User>(),
         );
+
         // Assert
         expect(user.userRole).toBe(UserRole.CLIENT);
         expect(user.mustChangePassword).toBe(true);
@@ -1137,6 +1240,34 @@ describe('Requests (integration)', () => {
     });
 
     describe('status transition — accept', () => {
+      it('can be accepted immediately after API creation without waiting for background provisioning', async () => {
+        // Arrange
+        const email = `instant-${Date.now()}@accept.test.local`;
+        const createRes = await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
+        );
+        const createdId = (createRes.body as ApiBody<{ _id: string }>).data!
+          ._id;
+
+        // Act
+        const acceptRes = await asSeeded(
+          req()
+            .patch(`${BASE}/${createdId}`)
+            .send({ status: RequestStatus.ACCEPTED }),
+        );
+        const stored = await serviceRequestModel
+          .findById(createdId)
+          .lean<ServiceRequest>();
+
+        // Assert
+        expect(acceptRes.status).toBe(200);
+        expect(stored!.status).toBe(RequestStatus.ACCEPTED);
+        expect(stored!.clientId).toBeDefined();
+      });
+
       it('returns 400 when no client profile exists for the request email', async () => {
         // Arrange
         const email = `missing-client-${Date.now()}@accept.test.local`;

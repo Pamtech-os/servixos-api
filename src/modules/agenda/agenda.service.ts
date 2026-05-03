@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Agenda } from 'agenda';
+import { Agenda, Job } from 'agenda';
 import { EmailService } from '../email/email.service';
 import { AgendaJobName } from './agenda.constants';
 import { defineEmailJobs } from './jobs/email.jobs';
@@ -60,5 +60,9 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
     data?: T,
   ): Promise<void> {
     await this.agenda.every(interval, jobName, data);
+  }
+
+  define(jobName: AgendaJobName, processor: (job: Job) => Promise<void>): void {
+    this.agenda.define(jobName, processor);
   }
 }

@@ -31,6 +31,7 @@ export async function createTestApp(overrideEnv: {
   })
     .overrideProvider(AgendaService)
     .useValue({
+      define: jest.fn(),
       now: jest.fn().mockResolvedValue(undefined),
       schedule: jest.fn().mockResolvedValue(undefined),
       every: jest.fn().mockResolvedValue(undefined),
