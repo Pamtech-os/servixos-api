@@ -6,12 +6,16 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Anthropic from '@anthropic-ai/sdk';
 import { Job } from 'agenda';
 import { Types } from 'mongoose';
+import { AI_MESSAGES } from 'src/common/constants/messages/ai.messages';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
 import { generateStrongPassword, hashValue } from 'src/common/utils/hash.util';
+import { toTwoDecimal } from 'src/common/utils/number.util';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { JOBS } from '../agenda/agenda.constants';
 import { AgendaService } from '../agenda/agenda.service';
@@ -73,18 +77,46 @@ interface ResolvedBusinessContext {
   businessName: string;
 }
 
+interface PriceEstimateContext {
+  businessName: string;
+  businessCategory: string;
+  service: string;
+  clientMessage?: string;
+  requestedDate: Date;
+  currency: string;
+}
+
+export interface PriceEstimateResult {
+  suggestedPrice: number;
+  lowPrice: number;
+  highPrice: number;
+  confidence: 'low' | 'medium' | 'high';
+  currency: string;
+  reasoning: string;
+}
+
 @Injectable()
 export class RequestsService implements OnModuleInit {
   private readonly logger = new Logger(RequestsService.name);
+  private readonly anthropic: Anthropic;
+  private readonly pricingModel: string;
+  private readonly currency: string;
 
   constructor(
+    config: ConfigService,
     private readonly requestsRepository: RequestsRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly businessRepository: BusinessRepository,
     private readonly usersRepository: UsersRepository,
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
-  ) {}
+  ) {
+    this.anthropic = new Anthropic({
+      apiKey: config.get<string>('ANTHROPIC_API_KEY'),
+    });
+    this.pricingModel = config.get<string>('AI_PRICING_MODEL') ?? '';
+    this.currency = config.get<string>('DEFAULT_CURRENCY') ?? 'USD';
+  }
 
   onModuleInit(): void {
     this.agendaService.define(
@@ -155,6 +187,53 @@ export class RequestsService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `getRequest: unexpected error [id=${id}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  async estimateRequestPrice(
+    id: string,
+    businessId: string,
+  ): Promise<
+    | PriceEstimateResult
+    | NotFoundException
+    | BadRequestException
+    | InternalServerErrorException
+  > {
+    try {
+      const request = await this.requestsRepository.findById(
+        id,
+        new Types.ObjectId(businessId),
+      );
+      if (!request) {
+        return new NotFoundException(REQUESTS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      const business = await this.businessRepository.findById(businessId);
+      if (!business || business.deletedAt) {
+        return new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      const estimate = await this.generateAiPriceEstimate({
+        businessName: business.name,
+        businessCategory: business.categoryName,
+        service: request.service,
+        clientMessage: request.message,
+        requestedDate: request.requestedDate,
+        currency: this.currency,
+      });
+
+      if (!estimate) {
+        return new InternalServerErrorException(
+          AI_MESSAGES.ERROR.AI_UNAVAILABLE,
+        );
+      }
+
+      return estimate;
+    } catch (error) {
+      this.logger.error(
+        `estimateRequestPrice: unexpected error [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -239,6 +318,11 @@ export class RequestsService implements OnModuleInit {
       }
 
       if (dto.status === RequestStatus.ACCEPTED) {
+        const acceptanceError = this.validateAcceptanceDetails(dto);
+        if (acceptanceError) {
+          return acceptanceError;
+        }
+
         const accepted = await this.acceptRequest(
           id,
           bId,
@@ -326,9 +410,9 @@ export class RequestsService implements OnModuleInit {
         clientId: client._id,
         actionedAt: new Date(),
         actionedBy: new Types.ObjectId(actionedBy),
-        ...(dto.quotedPrice !== undefined && {
-          quotedPrice: dto.quotedPrice,
-        }),
+        quotedPrice: dto.quotedPrice,
+        startDate: new Date(dto.startDate!),
+        endDate: new Date(dto.endDate!),
       });
 
       return updated!;
@@ -338,6 +422,27 @@ export class RequestsService implements OnModuleInit {
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
+  }
+
+  private validateAcceptanceDetails(
+    dto: UpdateRequestDto,
+  ): BadRequestException | null {
+    if (dto.quotedPrice === undefined || !dto.startDate || !dto.endDate) {
+      return new BadRequestException(
+        REQUESTS_MESSAGES.ERROR.ACCEPTANCE_DETAILS_REQUIRED,
+      );
+    }
+
+    const start = new Date(dto.startDate);
+    const end = new Date(dto.endDate);
+
+    if (end.getTime() < start.getTime()) {
+      return new BadRequestException(
+        REQUESTS_MESSAGES.ERROR.ACCEPTANCE_DATE_RANGE_INVALID,
+      );
+    }
+
+    return null;
   }
 
   private async createRequestWithIdempotency(
@@ -612,6 +717,100 @@ export class RequestsService implements OnModuleInit {
       businessId: business._id,
       businessName: business.name,
     };
+  }
+
+  private async generateAiPriceEstimate(
+    context: PriceEstimateContext,
+  ): Promise<PriceEstimateResult | null> {
+    try {
+      const message = await this.anthropic.messages.create({
+        model: this.pricingModel,
+        max_tokens: 700,
+        messages: [
+          {
+            role: 'user',
+            content: this.buildPricePrompt(context),
+          },
+        ],
+      });
+
+      const textBlock = message.content.find((block) => block.type === 'text');
+      if (!textBlock || textBlock.type !== 'text') return null;
+
+      const jsonMatch = textBlock.text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) return null;
+
+      const parsed = JSON.parse(jsonMatch[0]) as Partial<PriceEstimateResult>;
+      if (
+        typeof parsed.suggestedPrice !== 'number' ||
+        typeof parsed.lowPrice !== 'number' ||
+        typeof parsed.highPrice !== 'number' ||
+        typeof parsed.reasoning !== 'string' ||
+        parsed.suggestedPrice <= 0 ||
+        parsed.lowPrice <= 0 ||
+        parsed.highPrice <= 0
+      ) {
+        return null;
+      }
+
+      const confidence =
+        parsed.confidence === 'low' ||
+        parsed.confidence === 'medium' ||
+        parsed.confidence === 'high'
+          ? parsed.confidence
+          : 'medium';
+
+      const lowPrice = Math.min(parsed.lowPrice, parsed.highPrice);
+      const highPrice = Math.max(parsed.lowPrice, parsed.highPrice);
+      const suggestedPrice = Math.min(
+        Math.max(parsed.suggestedPrice, lowPrice),
+        highPrice,
+      );
+
+      return {
+        suggestedPrice: toTwoDecimal(suggestedPrice),
+        lowPrice: toTwoDecimal(lowPrice),
+        highPrice: toTwoDecimal(highPrice),
+        confidence,
+        currency: context.currency,
+        reasoning: parsed.reasoning.trim(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `generateAiPriceEstimate: AI estimation failed: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return null;
+    }
+  }
+
+  private buildPricePrompt(context: PriceEstimateContext): string {
+    const details = context.clientMessage
+      ? `Client message: ${context.clientMessage}`
+      : 'Client message: none provided.';
+
+    return `You are a pricing analyst for small service businesses.
+Estimate a fair market price for the service request below so the business avoids undercharging or overcharging.
+
+Business name: ${context.businessName}
+Business category: ${context.businessCategory}
+Requested service: ${context.service}
+Requested date: ${context.requestedDate.toISOString()}
+${details}
+Currency: ${context.currency}
+
+Return ONLY a valid JSON object with exactly this shape:
+{
+  "suggestedPrice": 0,
+  "lowPrice": 0,
+  "highPrice": 0,
+  "confidence": "low|medium|high",
+  "reasoning": ""
+}
+
+Rules:
+- suggestedPrice must be between lowPrice and highPrice.
+- All price values must be positive numbers.
+- Keep reasoning concise (1-3 sentences) and practical.`;
   }
 
   private normalizeIdempotencyKey(idempotencyKey?: string): string | undefined {

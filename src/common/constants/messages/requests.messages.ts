@@ -16,6 +16,8 @@ export const REQUESTS_MESSAGES = {
     SEARCH_INVALID: 'Search term must be a valid string',
     QUOTED_PRICE_INVALID: 'Quoted price must be a valid number',
     QUOTED_PRICE_MIN: 'Quoted price cannot be less than zero',
+    START_DATE_INVALID: 'Start date must be a valid ISO 8601 date string',
+    END_DATE_INVALID: 'End date must be a valid ISO 8601 date string',
   },
   SUCCESS: {
     CREATED: 'Service request submitted successfully',
@@ -26,6 +28,7 @@ export const REQUESTS_MESSAGES = {
     REJECTED: 'Service request rejected',
     CANCELLED: 'Service request cancelled',
     DELETED: 'Service request deleted successfully',
+    PRICE_ESTIMATED: 'AI price estimate generated successfully',
   },
   ERROR: {
     NOT_FOUND: 'Service request not found',
@@ -37,6 +40,10 @@ export const REQUESTS_MESSAGES = {
       'Idempotency key must be between 1 and 128 characters',
     IDEMPOTENCY_IN_PROGRESS:
       'A matching request is already being processed. Please retry shortly.',
+    ACCEPTANCE_DETAILS_REQUIRED:
+      'Start date, end date, and quoted price are required to accept a request',
+    ACCEPTANCE_DATE_RANGE_INVALID:
+      'End date must be the same as or after start date',
     CLIENT_NOT_PROVISIONED:
       'Client profile is not yet available for this request. Please retry shortly.',
     ALREADY_ACTIONED: 'This request has already been actioned',

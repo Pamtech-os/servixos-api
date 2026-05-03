@@ -51,6 +51,12 @@ export class ServiceRequest {
   quotedPrice?: number;
 
   @prop()
+  startDate?: Date;
+
+  @prop()
+  endDate?: Date;
+
+  @prop()
   actionedAt?: Date;
 
   @prop()

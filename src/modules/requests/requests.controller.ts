@@ -51,6 +51,17 @@ export class RequestsController {
     return { message: REQUESTS_MESSAGES.SUCCESS.FOUND, data: result };
   }
 
+  @Get(':id/price-estimate')
+  @HttpCode(HttpStatus.OK)
+  async estimatePrice(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    const result = await this.requestsService.estimateRequestPrice(
+      id,
+      user.businessId,
+    );
+    if (result instanceof HttpException) throw result;
+    return { message: REQUESTS_MESSAGES.SUCCESS.PRICE_ESTIMATED, data: result };
+  }
+
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)

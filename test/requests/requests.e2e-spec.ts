@@ -1240,6 +1240,13 @@ describe('Requests (integration)', () => {
     });
 
     describe('status transition — accept', () => {
+      const acceptancePayload = (quotedPrice = 450) => ({
+        status: RequestStatus.ACCEPTED,
+        quotedPrice,
+        startDate: isoDateOffset(2),
+        endDate: isoDateOffset(4),
+      });
+
       it('can be accepted immediately after API creation without waiting for background provisioning', async () => {
         // Arrange
         const email = `instant-${Date.now()}@accept.test.local`;
@@ -1254,9 +1261,7 @@ describe('Requests (integration)', () => {
 
         // Act
         const acceptRes = await asSeeded(
-          req()
-            .patch(`${BASE}/${createdId}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+          req().patch(`${BASE}/${createdId}`).send(acceptancePayload()),
         );
         const stored = await serviceRequestModel
           .findById(createdId)
@@ -1266,6 +1271,28 @@ describe('Requests (integration)', () => {
         expect(acceptRes.status).toBe(200);
         expect(stored!.status).toBe(RequestStatus.ACCEPTED);
         expect(stored!.clientId).toBeDefined();
+      });
+
+      it('returns 400 when acceptance details are missing', async () => {
+        // Arrange
+        const email = `missing-details-${Date.now()}@accept.test.local`;
+        await seedClient(seededUser.businessId, email);
+        const doc = await seedRequest(seededUser.businessId, {
+          clientEmail: email,
+        });
+
+        // Act
+        const res = await asSeeded(
+          req()
+            .patch(`${BASE}/${doc._id.toString()}`)
+            .send({ status: RequestStatus.ACCEPTED }),
+        );
+
+        // Assert
+        expect(res.status).toBe(400);
+        expect((res.body as ApiBody).message).toBe(
+          REQUESTS_MESSAGES.ERROR.ACCEPTANCE_DETAILS_REQUIRED,
+        );
       });
 
       it('returns 400 when no client profile exists for the request email', async () => {
@@ -1278,7 +1305,7 @@ describe('Requests (integration)', () => {
         const res = await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+            .send(acceptancePayload()),
         );
         const stored = await serviceRequestModel
           .findById(doc._id)
@@ -1313,7 +1340,7 @@ describe('Requests (integration)', () => {
         await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+            .send(acceptancePayload()),
         );
         const stored = await serviceRequestModel
           .findById(doc._id)
@@ -1339,7 +1366,7 @@ describe('Requests (integration)', () => {
         await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+            .send(acceptancePayload()),
         );
         const clientCount = await clientModel.countDocuments({
           email,
@@ -1366,7 +1393,7 @@ describe('Requests (integration)', () => {
         await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED, quotedPrice: 450.0 }),
+            .send(acceptancePayload(450.0)),
         );
         const stored = await serviceRequestModel
           .findById(doc._id)
@@ -1387,7 +1414,7 @@ describe('Requests (integration)', () => {
         await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+            .send(acceptancePayload()),
         );
         const stored = await serviceRequestModel
           .findById(doc._id)
@@ -1408,7 +1435,7 @@ describe('Requests (integration)', () => {
         await asSeeded(
           req()
             .patch(`${BASE}/${doc._id.toString()}`)
-            .send({ status: RequestStatus.ACCEPTED }),
+            .send(acceptancePayload()),
         );
         const stored = await serviceRequestModel
           .findById(doc._id)
