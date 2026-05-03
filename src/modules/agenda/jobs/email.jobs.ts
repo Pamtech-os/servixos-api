@@ -1,5 +1,6 @@
 import { Agenda, Job } from 'agenda';
 import { EmailService } from '../../email/email.service';
+import { clientCredentialsTemplate } from '../../email/templates/client-credentials.template';
 import { emailVerificationTemplate } from '../../email/templates/email-verification.template';
 import { passwordResetTemplate } from '../../email/templates/password-reset.template';
 import { welcomeTemplate } from '../../email/templates/welcome.template';
@@ -20,6 +21,13 @@ export interface EmailVerificationJobData {
   to: string;
   firstName: string;
   otp: string;
+}
+
+export interface ClientCredentialsJobData {
+  to: string;
+  firstName: string;
+  businessName: string;
+  temporaryPassword: string;
 }
 
 export function defineEmailJobs(
@@ -54,6 +62,23 @@ export function defineEmailJobs(
       name: firstName,
       subject: 'Reset Your Password — Servix OS',
       html: passwordResetTemplate(firstName, otp),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_CLIENT_CREDENTIALS, async (job: Job) => {
+    const { to, firstName, businessName, temporaryPassword } = job.attrs
+      .data as ClientCredentialsJobData;
+
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Your client credentials — Servix OS',
+      html: clientCredentialsTemplate(
+        firstName,
+        businessName,
+        temporaryPassword,
+        `${appUrl}/login`,
+      ),
     });
   });
 }

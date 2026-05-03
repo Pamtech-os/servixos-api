@@ -31,4 +31,15 @@ export class ClientsRepository {
     const [client] = await this.clientModel.create([data], { session });
     return client.toObject() as Client;
   }
+
+  async attachUserIdIfMissing(
+    email: string,
+    businessId: Types.ObjectId,
+    userId: Types.ObjectId,
+  ): Promise<void> {
+    await this.clientModel.updateOne(
+      { email, businessId, deletedAt: null, userId: { $exists: false } },
+      { $set: { userId } },
+    );
+  }
 }

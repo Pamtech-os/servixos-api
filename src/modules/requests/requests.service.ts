@@ -5,15 +5,20 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { InjectConnection } from '@nestjs/mongoose';
-import { Connection, Types } from 'mongoose';
+import { Types } from 'mongoose';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
+import { generateStrongPassword, hashValue } from 'src/common/utils/hash.util';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { JOBS } from '../agenda/agenda.constants';
+import { AgendaService } from '../agenda/agenda.service';
+import { ClientCredentialsJobData } from '../agenda/jobs/email.jobs';
 import { BusinessRepository } from '../business/business.repository';
 import { ClientsRepository } from '../clients/clients.repository';
 import { RedisService } from '../redis/redis.service';
+import { UserRole } from '../users/schemas/user.schema';
+import { UsersRepository } from '../users/users.repository';
 import { CreateRequestDto } from './dto/create-request.dto';
 import { ListRequestsDto } from './dto/list-requests.dto';
 import { UpdateRequestDto } from './dto/update-request.dto';
@@ -35,15 +40,24 @@ export interface PaginatedRequests {
 const requestsListVersionKey = (businessId: string): string =>
   `requests:list:version:${businessId}`;
 
+interface ClientProvisioningPayload {
+  businessId: string;
+  businessName: string;
+  clientName: string;
+  clientEmail: string;
+  clientPhone?: string;
+}
+
 @Injectable()
 export class RequestsService {
   private readonly logger = new Logger(RequestsService.name);
 
   constructor(
-    @InjectConnection() private readonly connection: Connection,
     private readonly requestsRepository: RequestsRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly usersRepository: UsersRepository,
+    private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
   ) {}
 
@@ -116,6 +130,7 @@ export class RequestsService {
   > {
     try {
       let resolvedBusinessId: Types.ObjectId;
+      let resolvedBusinessName: string;
 
       if (businessId) {
         const business = await this.businessRepository.findById(businessId);
@@ -123,6 +138,7 @@ export class RequestsService {
           return new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
         }
         resolvedBusinessId = business._id;
+        resolvedBusinessName = business.name;
       } else if (businessSlug) {
         const business =
           await this.businessRepository.findBySubdomain(businessSlug);
@@ -130,9 +146,10 @@ export class RequestsService {
           return new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
         }
         resolvedBusinessId = business._id;
+        resolvedBusinessName = business.name;
       } else {
         return new BadRequestException(
-          'businessSlug or businessId query param is required',
+          REQUESTS_MESSAGES.ERROR.MISSING_BUSINESS_IDENTIFIER,
         );
       }
 
@@ -147,6 +164,15 @@ export class RequestsService {
       });
 
       await this.invalidateRequestsListCache(resolvedBusinessId.toString());
+
+      void this.provisionClientInBackground({
+        businessId: resolvedBusinessId.toString(),
+        businessName: resolvedBusinessName,
+        clientName: dto.clientName,
+        clientEmail: dto.clientEmail,
+        clientPhone: dto.clientPhone,
+      });
+
       return request;
     } catch (error) {
       this.logger.error(
@@ -189,7 +215,12 @@ export class RequestsService {
           dto,
           actionedBy,
         );
-        if (!(accepted instanceof InternalServerErrorException)) {
+        if (
+          !(
+            accepted instanceof InternalServerErrorException ||
+            accepted instanceof BadRequestException
+          )
+        ) {
           await this.invalidateRequestsListCache(businessId);
         }
         return accepted;
@@ -245,53 +276,36 @@ export class RequestsService {
     existing: ServiceRequest,
     dto: UpdateRequestDto,
     actionedBy: string,
-  ): Promise<ServiceRequest | InternalServerErrorException> {
-    const session = await this.connection.startSession();
-    session.startTransaction();
-
+  ): Promise<
+    ServiceRequest | BadRequestException | InternalServerErrorException
+  > {
     try {
-      let client = await this.clientsRepository.findByEmail(
-        existing.clientEmail,
+      const client = await this.clientsRepository.findByEmail(
+        existing.clientEmail.toLowerCase().trim(),
         bId,
       );
-
       if (!client) {
-        client = await this.clientsRepository.create(
-          {
-            businessId: bId,
-            name: existing.clientName,
-            email: existing.clientEmail,
-            phone: existing.clientPhone,
-          },
-          session,
+        return new BadRequestException(
+          REQUESTS_MESSAGES.ERROR.CLIENT_NOT_PROVISIONED,
         );
       }
 
-      const updated = await this.requestsRepository.updateById(
-        id,
-        bId,
-        {
-          status: RequestStatus.ACCEPTED,
-          clientId: client._id,
-          actionedAt: new Date(),
-          actionedBy: new Types.ObjectId(actionedBy),
-          ...(dto.quotedPrice !== undefined && {
-            quotedPrice: dto.quotedPrice,
-          }),
-        },
-        session,
-      );
+      const updated = await this.requestsRepository.updateById(id, bId, {
+        status: RequestStatus.ACCEPTED,
+        clientId: client._id,
+        actionedAt: new Date(),
+        actionedBy: new Types.ObjectId(actionedBy),
+        ...(dto.quotedPrice !== undefined && {
+          quotedPrice: dto.quotedPrice,
+        }),
+      });
 
-      await session.commitTransaction();
       return updated!;
     } catch (err) {
-      await session.abortTransaction();
       this.logger.error(
-        `acceptRequest: transaction failed [id=${id}]: ${err instanceof Error ? err.stack : String(err)}`,
+        `acceptRequest: unexpected error [id=${id}]: ${err instanceof Error ? err.stack : String(err)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
-    } finally {
-      await session.endSession();
     }
   }
 
@@ -369,5 +383,121 @@ export class RequestsService {
         `invalidateRequestsListCache: cache invalidate failed [businessId=${businessId}]: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  private async provisionClientInBackground(
+    payload: ClientProvisioningPayload,
+  ): Promise<void> {
+    await this.provisionClient(payload).catch((error: unknown) =>
+      this.logger.error(
+        `provisionClientInBackground: failed [businessId=${payload.businessId}, email=${payload.clientEmail}]: ${error instanceof Error ? error.stack : String(error)}`,
+      ),
+    );
+  }
+
+  private async provisionClient(
+    payload: ClientProvisioningPayload,
+  ): Promise<void> {
+    const businessId = new Types.ObjectId(payload.businessId);
+    const normalizedEmail = payload.clientEmail.toLowerCase().trim();
+    const { firstName, lastName } = this.splitClientName(payload.clientName);
+    const existingClient = await this.clientsRepository.findByEmail(
+      normalizedEmail,
+      businessId,
+    );
+
+    if (existingClient?.userId) {
+      return;
+    }
+
+    let user = await this.usersRepository.findByEmail(normalizedEmail);
+    let temporaryPassword: string | null = null;
+
+    if (!user) {
+      temporaryPassword = generateStrongPassword();
+      const passwordHash = await hashValue(temporaryPassword);
+
+      try {
+        user = await this.usersRepository.create({
+          firstName,
+          lastName,
+          email: normalizedEmail,
+          phone: payload.clientPhone,
+          passwordHash,
+          userRole: UserRole.CLIENT,
+          businessId,
+          isActive: true,
+          isEmailVerified: true,
+          mustChangePassword: true,
+        });
+      } catch (error) {
+        if (!this.isDuplicateKeyError(error)) {
+          throw error;
+        }
+        user = await this.usersRepository.findByEmail(normalizedEmail);
+        temporaryPassword = null;
+      }
+    }
+
+    if (!user) {
+      this.logger.warn(
+        `provisionClient: unable to resolve user after create [businessId=${payload.businessId}, email=${normalizedEmail}]`,
+      );
+      return;
+    }
+
+    if (!existingClient) {
+      try {
+        await this.clientsRepository.create({
+          businessId,
+          userId: user._id,
+          name: payload.clientName,
+          email: normalizedEmail,
+          phone: payload.clientPhone,
+        });
+      } catch (error) {
+        if (!this.isDuplicateKeyError(error)) throw error;
+      }
+    } else if (!existingClient.userId) {
+      await this.clientsRepository.attachUserIdIfMissing(
+        normalizedEmail,
+        businessId,
+        user._id,
+      );
+    }
+
+    if (!temporaryPassword) return;
+
+    await this.agendaService
+      .now<ClientCredentialsJobData>(JOBS.EMAIL_CLIENT_CREDENTIALS, {
+        to: normalizedEmail,
+        firstName,
+        businessName: payload.businessName,
+        temporaryPassword,
+      })
+      .catch((error: unknown) =>
+        this.logger.error(
+          `provisionClient: credentials email job failed [businessId=${payload.businessId}, email=${normalizedEmail}]: ${error instanceof Error ? error.stack : String(error)}`,
+        ),
+      );
+  }
+
+  private splitClientName(name: string): {
+    firstName: string;
+    lastName: string;
+  } {
+    const parts = name.trim().split(/\s+/).filter(Boolean);
+    const firstName = parts[0] ?? 'Client';
+    const lastName = parts.slice(1).join(' ') || 'User';
+    return { firstName, lastName };
+  }
+
+  private isDuplicateKeyError(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: number }).code === 11000
+    );
   }
 }

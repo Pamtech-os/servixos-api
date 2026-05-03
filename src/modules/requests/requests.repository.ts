@@ -26,6 +26,12 @@ interface StatusAggregationResult {
   count: number;
 }
 
+type ServiceRequestWithMetadata = ServiceRequest & {
+  createdAt?: Date;
+  updatedAt?: Date;
+  __v?: number;
+};
+
 @Injectable()
 export class RequestsRepository {
   private readonly requestModel: ReturnModelType<typeof ServiceRequest>;
@@ -67,7 +73,7 @@ export class RequestsRepository {
         .sort({ createdAt: -1 })
         .skip(pagination.skip)
         .limit(pagination.limit)
-        .lean<ServiceRequest[]>()
+        .lean<ServiceRequestWithMetadata[]>()
         .exec(),
       this.requestModel.countDocuments(query).exec(),
       this.requestModel
@@ -95,7 +101,7 @@ export class RequestsRepository {
       if (row._id === RequestStatus.CANCELLED) statistics.cancelled = row.count;
     }
 
-    return { data, total, statistics };
+    return { data: this.sanitizeRequests(data), total, statistics };
   }
 
   private buildSearchFilter(search?: string): Array<Record<string, RegExp>> {
@@ -109,10 +115,11 @@ export class RequestsRepository {
     id: string,
     businessId: Types.ObjectId,
   ): Promise<ServiceRequest | null> {
-    return this.requestModel
+    const request = await this.requestModel
       .findOne({ _id: id, businessId, deletedAt: null })
-      .lean<ServiceRequest>()
+      .lean<ServiceRequestWithMetadata>()
       .exec();
+    return this.sanitizeRequest(request);
   }
 
   async create(
@@ -120,7 +127,9 @@ export class RequestsRepository {
     session?: ClientSession,
   ): Promise<ServiceRequest> {
     const [request] = await this.requestModel.create([data], { session });
-    return request.toObject() as ServiceRequest;
+    return this.sanitizeRequest(
+      request.toObject() as ServiceRequestWithMetadata,
+    ) as ServiceRequest;
   }
 
   async updateById(
@@ -144,26 +153,48 @@ export class RequestsRepository {
     if (Object.keys($set).length) op['$set'] = $set;
     if (Object.keys($unset).length) op['$unset'] = $unset;
 
-    return this.requestModel
+    const request = await this.requestModel
       .findOneAndUpdate({ _id: id, businessId, deletedAt: null }, op, {
         returnDocument: 'after',
         session,
       })
-      .lean<ServiceRequest>()
+      .lean<ServiceRequestWithMetadata>()
       .exec();
+    return this.sanitizeRequest(request);
   }
 
   async softDelete(
     id: string,
     businessId: Types.ObjectId,
   ): Promise<ServiceRequest | null> {
-    return this.requestModel
+    const request = await this.requestModel
       .findOneAndUpdate(
         { _id: id, businessId, deletedAt: null },
         { $set: { deletedAt: new Date() } },
         { returnDocument: 'after' },
       )
-      .lean<ServiceRequest>()
+      .lean<ServiceRequestWithMetadata>()
       .exec();
+    return this.sanitizeRequest(request);
+  }
+
+  private sanitizeRequests(
+    requests: ServiceRequestWithMetadata[],
+  ): ServiceRequest[] {
+    return requests.map((request) => this.sanitizeRequest(request)!);
+  }
+
+  private sanitizeRequest(
+    request: ServiceRequestWithMetadata | null,
+  ): ServiceRequest | null {
+    if (!request) return null;
+
+    const {
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      __v: _version,
+      ...safeRequest
+    } = request;
+    return safeRequest as ServiceRequest;
   }
 }

@@ -7,7 +7,7 @@ export class LoginDto {
   @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   email: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.PASSWORD_INVALID })
+  @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.PASSWORD_REQUIRED })
   password: string;
 }

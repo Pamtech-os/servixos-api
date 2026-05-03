@@ -4,6 +4,7 @@ export interface AuthUserData {
   lastName: string;
   email: string;
   businessId: string;
+  mustChangePassword: boolean;
   subdomain?: string;
 }
 

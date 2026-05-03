@@ -4,6 +4,7 @@ import { Types } from 'mongoose';
 export enum UserRole {
   OWNER = 'owner',
   EMPLOYEE = 'employee',
+  CLIENT = 'client',
 }
 
 @index({ email: 1 }, { unique: true })
@@ -49,6 +50,9 @@ export class User {
 
   @prop({ default: false })
   isEmailVerified: boolean;
+
+  @prop({ default: false })
+  mustChangePassword: boolean;
 
   @prop()
   lastLoginAt?: Date;

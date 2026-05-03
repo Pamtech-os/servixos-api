@@ -7,7 +7,7 @@ export class VerifyEmailDto {
   @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   email: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.OTP_INVALID })
   @Length(6, 6, { message: AUTH_MESSAGES.VALIDATION.OTP_LENGTH })
   otp: string;
 }

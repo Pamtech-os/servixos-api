@@ -9,6 +9,9 @@ import { Types } from 'mongoose';
 export class Client {
   _id: Types.ObjectId;
 
+  @prop({ ref: 'User', type: Types.ObjectId })
+  userId?: Types.ObjectId;
+
   @prop({ ref: 'Business', type: Types.ObjectId, required: true })
   businessId: Types.ObjectId;
 

@@ -3,6 +3,7 @@ import {
   ValidationArguments,
   ValidationOptions,
 } from 'class-validator';
+import { COMMON_MESSAGES } from '../constants/messages/common.messages';
 
 export function Match(property: string, options?: ValidationOptions) {
   return (object: object, propertyName: string) => {
@@ -19,7 +20,10 @@ export function Match(property: string, options?: ValidationOptions) {
         },
         defaultMessage(args: ValidationArguments) {
           const [related] = args.constraints as [string];
-          return `${args.property} must match ${related}`;
+          return COMMON_MESSAGES.VALIDATION.FIELD_MUST_MATCH(
+            args.property,
+            related,
+          );
         },
       },
     });

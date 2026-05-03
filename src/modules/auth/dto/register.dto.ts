@@ -16,12 +16,12 @@ import { IsCleanBusinessDescription } from 'src/common/validators/clean-business
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 
 export class RegisterDto {
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.FIRST_NAME_INVALID })
   @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.FIRST_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   firstName: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.LAST_NAME_INVALID })
   @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.LAST_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   lastName: string;
@@ -33,25 +33,25 @@ export class RegisterDto {
   @IsPhoneNumber(undefined, { message: AUTH_MESSAGES.VALIDATION.PHONE_INVALID })
   phone: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.PASSWORD_INVALID })
   @MinLength(8, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_MIN_LENGTH })
   @Matches(/[A-Z]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_UPPERCASE })
   @Matches(/[0-9]/, { message: AUTH_MESSAGES.VALIDATION.PASSWORD_NUMBER })
   password: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.CONFIRM_PASSWORD_INVALID })
   @Match('password', { message: AUTH_MESSAGES.VALIDATION.PASSWORDS_MISMATCH })
   confirmPassword: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.PIN_INVALID })
   @Matches(/^\d{4}$/, { message: AUTH_MESSAGES.VALIDATION.PIN_FORMAT })
   pin: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.CONFIRM_PIN_INVALID })
   @Match('pin', { message: AUTH_MESSAGES.VALIDATION.PINS_MISMATCH })
   confirmPin: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_INVALID })
   @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   businessName: string;
@@ -59,7 +59,9 @@ export class RegisterDto {
   @IsMongoId({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_CATEGORY_INVALID })
   businessCategory: string;
 
-  @IsString()
+  @IsString({
+    message: AUTH_MESSAGES.VALIDATION.BUSINESS_DESCRIPTION_INVALID,
+  })
   @IsNotEmpty({
     message: AUTH_MESSAGES.VALIDATION.BUSINESS_DESCRIPTION_REQUIRED,
   })
@@ -74,20 +76,23 @@ export class RegisterDto {
   )
   timezone: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.COLOR_PRIMARY_INVALID })
   @IsOptional()
   colorPrimary?: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.COLOR_SECONDARY_INVALID })
   @IsOptional()
   colorSecondary?: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.FONT_INVALID })
   @IsOptional()
   font?: string;
 
-  @IsArray()
-  @IsString({ each: true })
+  @IsArray({ message: AUTH_MESSAGES.VALIDATION.SERVICES_INVALID })
+  @IsString({
+    each: true,
+    message: AUTH_MESSAGES.VALIDATION.SERVICE_ITEM_INVALID,
+  })
   @IsOptional()
   services?: string[];
 }

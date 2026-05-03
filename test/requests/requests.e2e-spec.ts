@@ -15,11 +15,13 @@ import { AgendaService } from 'src/modules/agenda/agenda.service';
 import { JOBS } from 'src/modules/agenda/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { Business } from 'src/modules/business/schemas/business.schema';
+import { RedisService } from 'src/modules/redis/redis.service';
 import {
   ServiceRequest,
   RequestStatus,
 } from 'src/modules/requests/schemas/service-request.schema';
 import { Client } from 'src/modules/clients/schemas/client.schema';
+import { User, UserRole } from 'src/modules/users/schemas/user.schema';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
 
 // ─── Response shapes ──────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ interface LoginPayload {
 interface EmailJobArgs {
   to: string;
   otp?: string;
+  temporaryPassword?: string;
 }
 
 // ─── Test constants ───────────────────────────────────────────────────────────
@@ -71,6 +74,14 @@ interface EmailJobArgs {
 const BASE = '/api/requests';
 const PHONE = '+12025550101';
 const BUSINESS_DESC = 'Professional plumbing and pipe repair services.';
+const REQUESTS_LIST_VERSION_KEY = (businessId: string) =>
+  `requests:list:version:${businessId}`;
+
+function isoDateOffset(days: number): string {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
 
 const SEEDED_USER = {
   firstName: 'Alice',
@@ -95,7 +106,7 @@ const BASE_REQUEST_BODY = {
   clientEmail: 'mike@test.local',
   clientPhone: '+12025550103',
   service: 'Pipe Repair',
-  requestedDate: '2026-05-05',
+  requestedDate: isoDateOffset(3),
   message: 'Burst pipe in kitchen',
 };
 
@@ -105,11 +116,13 @@ describe('Requests (integration)', () => {
   let app: INestApplication;
   let clientToken: string;
   let dbConnection: Connection;
+  let redisService: RedisService;
   let nowSpy: jest.Mock;
 
   let serviceRequestModel: ReturnModelType<typeof ServiceRequest>;
   let clientModel: ReturnModelType<typeof Client>;
   let businessModel: ReturnModelType<typeof Business>;
+  let userModel: ReturnModelType<typeof User>;
 
   let mongoContainer: StartedMongoDBContainer;
   let redisContainer: StartedTestContainer;
@@ -131,6 +144,7 @@ describe('Requests (integration)', () => {
     const redisUrl = `redis://localhost:${redisContainer.getMappedPort(6379)}`;
 
     ({ app } = await createTestApp({ databaseUrl, redisUrl }));
+    redisService = app.get(RedisService);
 
     const tokenRes = await request(app.getHttpServer() as Server).get(
       '/api/auth/client-token',
@@ -146,6 +160,9 @@ describe('Requests (integration)', () => {
       existingConnection: dbConnection,
     });
     businessModel = getModelForClass(Business, {
+      existingConnection: dbConnection,
+    });
+    userModel = getModelForClass(User, {
       existingConnection: dbConnection,
     });
 
@@ -173,9 +190,9 @@ describe('Requests (integration)', () => {
   }, 300_000);
 
   afterAll(async () => {
-    await app.close();
-    await mongoContainer.stop();
-    await redisContainer.stop();
+    if (app) await app.close();
+    if (mongoContainer) await mongoContainer.stop();
+    if (redisContainer) await redisContainer.stop();
   });
 
   // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -204,6 +221,15 @@ describe('Requests (integration)', () => {
     return asUser(r, seededUser.accessToken, seededUser.businessId);
   }
 
+  function expectRequestResponseToHideSystemFields(
+    payload: Record<string, unknown> | undefined,
+  ): void {
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty('createdAt');
+    expect(payload).not.toHaveProperty('updatedAt');
+    expect(payload).not.toHaveProperty('__v');
+  }
+
   function captureOtpFor(email: string): string {
     const calls = nowSpy.mock.calls as [string, EmailJobArgs][];
     const match = [...calls]
@@ -211,6 +237,22 @@ describe('Requests (integration)', () => {
       .find((c) => c[0] === JOBS.EMAIL_VERIFICATION && c[1].to === email);
     if (!match?.[1].otp) throw new Error(`No OTP captured for ${email}`);
     return match[1].otp;
+  }
+
+  async function waitForTruthy<T>(
+    getValue: () => Promise<T | null | undefined>,
+    timeoutMs = 3000,
+    intervalMs = 40,
+  ): Promise<T> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt <= timeoutMs) {
+      const value = await getValue();
+      if (value) return value;
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    }
+
+    throw new Error('Timed out while waiting for asynchronous background task');
   }
 
   async function seedRequest(
@@ -230,7 +272,23 @@ describe('Requests (integration)', () => {
         ...override,
       },
     ]);
+    await redisService.incr(REQUESTS_LIST_VERSION_KEY(businessId));
     return doc.toObject() as ServiceRequest;
+  }
+
+  async function seedClient(
+    businessId: string,
+    email: string,
+    name = 'Pre-provisioned Client',
+  ): Promise<Client> {
+    const [doc] = await clientModel.create([
+      {
+        businessId: new Types.ObjectId(businessId),
+        name,
+        email: email.toLowerCase(),
+      },
+    ]);
+    return doc.toObject() as Client;
   }
 
   async function fullOnboarding(
@@ -356,6 +414,18 @@ describe('Requests (integration)', () => {
         // Assert
         expect(res.status).toBe(400);
       });
+
+      it('returns 400 when requestedDate is in the past', async () => {
+        // Arrange & Act
+        const res = await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send({ ...BASE_REQUEST_BODY, requestedDate: isoDateOffset(-1) }),
+        );
+        // Assert
+        expect(res.status).toBe(400);
+      });
     });
 
     describe('business resolution', () => {
@@ -456,6 +526,19 @@ describe('Requests (integration)', () => {
         expect(data.status).toBe(RequestStatus.PENDING);
       });
 
+      it('hides createdAt, updatedAt, and __v in create response', async () => {
+        // Arrange & Act
+        const res = await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send(BASE_REQUEST_BODY),
+        );
+        const data = (res.body as ApiBody<Record<string, unknown>>).data;
+        // Assert
+        expectRequestResponseToHideSystemFields(data);
+      });
+
       it('persists the request in the database with the correct businessId', async () => {
         // Arrange & Act
         const res = await authed(
@@ -525,6 +608,64 @@ describe('Requests (integration)', () => {
         // Assert
         const data = (res.body as ApiBody<{ clientEmail: string }>).data!;
         expect(data.clientEmail).toBe('upper@test.local');
+      });
+
+      it('provisions the business client record in the background', async () => {
+        // Arrange
+        const email = `bg-client-${Date.now()}@test.local`;
+        // Act
+        await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
+        );
+        const provisionedClient = await waitForTruthy(() =>
+          clientModel.findOne({ email }).lean<Client>(),
+        );
+        // Assert
+        expect(provisionedClient.businessId.toString()).toBe(
+          seededUser.businessId,
+        );
+      });
+
+      it('creates a client login account and queues credentials email only once for new client emails', async () => {
+        // Arrange
+        const email = `bg-user-${Date.now()}@test.local`;
+        nowSpy.mockClear();
+        // Act
+        await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
+        );
+
+        await authed(
+          req()
+            .post(BASE)
+            .query({ businessId: seededUser.businessId })
+            .send({ ...BASE_REQUEST_BODY, clientEmail: email }),
+        );
+
+        const user = await waitForTruthy(() =>
+          userModel.findOne({ email }).lean<User>(),
+        );
+        // Assert
+        expect(user.userRole).toBe(UserRole.CLIENT);
+        expect(user.mustChangePassword).toBe(true);
+        expect(user.isActive).toBe(true);
+        expect(user.isEmailVerified).toBe(true);
+
+        const credentialsCalls = (
+          nowSpy.mock.calls as [string, EmailJobArgs][]
+        ).filter(
+          (call) =>
+            call[0] === JOBS.EMAIL_CLIENT_CREDENTIALS && call[1].to === email,
+        );
+
+        expect(credentialsCalls).toHaveLength(1);
+        expect(credentialsCalls[0][1].temporaryPassword).toBeDefined();
       });
     });
   });
@@ -618,6 +759,18 @@ describe('Requests (integration)', () => {
         // Assert
         const found = data.some((r) => r._id === deleted._id.toString());
         expect(found).toBe(false);
+      });
+
+      it('hides createdAt, updatedAt, and __v in list response items', async () => {
+        // Arrange
+        const doc = await seedRequest(seededUser.businessId);
+        // Act
+        const res = await asSeeded(req().get(BASE));
+        const data = (res.body as ApiBody<Array<Record<string, unknown>>>)
+          .data!;
+        const found = data.find((item) => item._id === doc._id.toString());
+        // Assert
+        expectRequestResponseToHideSystemFields(found);
       });
     });
 
@@ -805,6 +958,16 @@ describe('Requests (integration)', () => {
           doc._id.toString(),
         );
       });
+
+      it('hides createdAt, updatedAt, and __v in detail response', async () => {
+        // Arrange
+        const doc = await seedRequest(seededUser.businessId);
+        // Act
+        const res = await asSeeded(req().get(`${BASE}/${doc._id.toString()}`));
+        const data = (res.body as ApiBody<Record<string, unknown>>).data;
+        // Assert
+        expectRequestResponseToHideSystemFields(data);
+      });
     });
 
     describe('error cases', () => {
@@ -974,12 +1137,11 @@ describe('Requests (integration)', () => {
     });
 
     describe('status transition — accept', () => {
-      it('creates a new Client document when none exists for that email in the business', async () => {
+      it('returns 400 when no client profile exists for the request email', async () => {
         // Arrange
-        const email = `new-client-${Date.now()}@accept.test.local`;
+        const email = `missing-client-${Date.now()}@accept.test.local`;
         const doc = await seedRequest(seededUser.businessId, {
           clientEmail: email,
-          clientName: 'Accept Client',
         });
         // Act
         const res = await asSeeded(
@@ -987,21 +1149,32 @@ describe('Requests (integration)', () => {
             .patch(`${BASE}/${doc._id.toString()}`)
             .send({ status: RequestStatus.ACCEPTED }),
         );
+        const stored = await serviceRequestModel
+          .findById(doc._id)
+          .lean<ServiceRequest>();
         const client = await clientModel
           .findOne({
             email,
             businessId: new Types.ObjectId(seededUser.businessId),
           })
           .lean<Client>();
-        // Assert
-        expect(res.status).toBe(200);
-        expect(client).not.toBeNull();
-        expect(client!.name).toBe('Accept Client');
+        // Assert - acceptance is blocked until background client provisioning exists
+        expect(res.status).toBe(400);
+        expect((res.body as ApiBody).message).toBe(
+          REQUESTS_MESSAGES.ERROR.CLIENT_NOT_PROVISIONED,
+        );
+        expect(stored!.status).toBe(RequestStatus.PENDING);
+        expect(stored!.clientId).toBeUndefined();
+        expect(client).toBeNull();
       });
 
       it('links the resolved clientId back to the ServiceRequest', async () => {
         // Arrange
         const email = `linked-${Date.now()}@accept.test.local`;
+        const preProvisionedClient = await seedClient(
+          seededUser.businessId,
+          email,
+        );
         const doc = await seedRequest(seededUser.businessId, {
           clientEmail: email,
         });
@@ -1014,21 +1187,20 @@ describe('Requests (integration)', () => {
         const stored = await serviceRequestModel
           .findById(doc._id)
           .lean<ServiceRequest>();
-        const client = await clientModel.findOne({ email }).lean<Client>();
         // Assert
-        expect(stored!.clientId?.toString()).toBe(client!._id.toString());
+        expect(stored!.clientId?.toString()).toBe(
+          preProvisionedClient._id.toString(),
+        );
       });
 
       it('reuses an existing Client — no duplicate is created', async () => {
         // Arrange — pre-create the client record
         const email = `existing-${Date.now()}@accept.test.local`;
-        const [existingClient] = await clientModel.create([
-          {
-            businessId: new Types.ObjectId(seededUser.businessId),
-            name: 'Pre-existing Client',
-            email,
-          },
-        ]);
+        const existingClient = await seedClient(
+          seededUser.businessId,
+          email,
+          'Pre-existing Client',
+        );
         const doc = await seedRequest(seededUser.businessId, {
           clientEmail: email,
         });
@@ -1054,8 +1226,10 @@ describe('Requests (integration)', () => {
 
       it('stores quotedPrice on the request when provided alongside accepted status', async () => {
         // Arrange
+        const email = `quoted-${Date.now()}@accept.test.local`;
+        await seedClient(seededUser.businessId, email);
         const doc = await seedRequest(seededUser.businessId, {
-          clientEmail: `quoted-${Date.now()}@accept.test.local`,
+          clientEmail: email,
         });
         // Act
         await asSeeded(
@@ -1073,8 +1247,10 @@ describe('Requests (integration)', () => {
       it('sets actionedAt and actionedBy on the accepted request', async () => {
         // Arrange
         const before = Date.now();
+        const email = `actioned-${Date.now()}@accept.test.local`;
+        await seedClient(seededUser.businessId, email);
         const doc = await seedRequest(seededUser.businessId, {
-          clientEmail: `actioned-${Date.now()}@accept.test.local`,
+          clientEmail: email,
         });
         // Act
         await asSeeded(
@@ -1092,8 +1268,10 @@ describe('Requests (integration)', () => {
 
       it('sets status to accepted in the database', async () => {
         // Arrange
+        const email = `status-check-${Date.now()}@accept.test.local`;
+        await seedClient(seededUser.businessId, email);
         const doc = await seedRequest(seededUser.businessId, {
-          clientEmail: `status-check-${Date.now()}@accept.test.local`,
+          clientEmail: email,
         });
         // Act
         await asSeeded(
@@ -1141,6 +1319,20 @@ describe('Requests (integration)', () => {
         expect((res.body as ApiBody).message).toBe(
           REQUESTS_MESSAGES.SUCCESS.UPDATED,
         );
+      });
+
+      it('hides createdAt, updatedAt, and __v in update response', async () => {
+        // Arrange
+        const doc = await seedRequest(seededUser.businessId);
+        // Act
+        const res = await asSeeded(
+          req()
+            .patch(`${BASE}/${doc._id.toString()}`)
+            .send({ quotedPrice: 100 }),
+        );
+        const data = (res.body as ApiBody<Record<string, unknown>>).data;
+        // Assert
+        expectRequestResponseToHideSystemFields(data);
       });
     });
   });
