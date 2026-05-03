@@ -24,6 +24,16 @@ export class ClientsRepository {
       .exec();
   }
 
+  async findById(
+    id: string,
+    businessId: Types.ObjectId,
+  ): Promise<Client | null> {
+    return this.clientModel
+      .findOne({ _id: id, businessId, deletedAt: null })
+      .lean<Client>()
+      .exec();
+  }
+
   async create(
     data: Partial<Client>,
     session?: ClientSession,

@@ -34,6 +34,7 @@ export function defineEmailJobs(
   agenda: Agenda,
   emailService: EmailService,
   appUrl: string,
+  clientUrl: string,
 ): void {
   agenda.define(JOBS.EMAIL_VERIFICATION, async (job: Job) => {
     const { to, firstName, otp } = job.attrs.data as EmailVerificationJobData;
@@ -50,7 +51,7 @@ export function defineEmailJobs(
     await emailService.send({
       to,
       name: firstName,
-      subject: 'Your Servix OS workspace is ready',
+      subject: 'Your Servix OS office is ready',
       html: welcomeTemplate(firstName, appUrl),
     });
   });
@@ -68,6 +69,7 @@ export function defineEmailJobs(
   agenda.define(JOBS.EMAIL_CLIENT_CREDENTIALS, async (job: Job) => {
     const { to, firstName, businessName, temporaryPassword } = job.attrs
       .data as ClientCredentialsJobData;
+    const loginUrl = `${clientUrl.replace(/\/$/, '')}/login`;
 
     await emailService.send({
       to,
@@ -77,7 +79,7 @@ export function defineEmailJobs(
         firstName,
         businessName,
         temporaryPassword,
-        `${appUrl}/login`,
+        loginUrl,
       ),
     });
   });

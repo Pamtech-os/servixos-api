@@ -22,6 +22,7 @@ import { AgendaService } from '../agenda/agenda.service';
 import { ClientCredentialsJobData } from '../agenda/jobs/email.jobs';
 import { BusinessRepository } from '../business/business.repository';
 import { ClientsRepository } from '../clients/clients.repository';
+import { AcceptedRequestJobCreationData } from '../jobs/jobs.types';
 import { RedisService } from '../redis/redis.service';
 import { UserRole } from '../users/schemas/user.schema';
 import { UsersRepository } from '../users/users.repository';
@@ -148,7 +149,14 @@ export class RequestsService implements OnModuleInit {
         pagination.limit,
       );
       const cached = await this.getCachedRequestsList(cacheKey);
-      if (cached) return cached;
+      if (cached) {
+        return {
+          ...cached,
+          data: cached.data.map((request) =>
+            this.ensureAiEstimateFlag(request),
+          ),
+        };
+      }
 
       const { data, total, statistics } = await this.requestsRepository.findAll(
         new Types.ObjectId(businessId),
@@ -156,7 +164,7 @@ export class RequestsService implements OnModuleInit {
         pagination,
       );
       const result: PaginatedRequests = {
-        data,
+        data: data.map((request) => this.ensureAiEstimateFlag(request)),
         meta: buildMeta(pagination.page, pagination.limit, total),
         statistics,
       };
@@ -183,7 +191,7 @@ export class RequestsService implements OnModuleInit {
       );
       if (!request)
         return new NotFoundException(REQUESTS_MESSAGES.ERROR.NOT_FOUND);
-      return request;
+      return this.ensureAiEstimateFlag(request);
     } catch (error) {
       this.logger.error(
         `getRequest: unexpected error [id=${id}]: ${error instanceof Error ? error.stack : String(error)}`,
@@ -202,12 +210,20 @@ export class RequestsService implements OnModuleInit {
     | InternalServerErrorException
   > {
     try {
-      const request = await this.requestsRepository.findById(
-        id,
-        new Types.ObjectId(businessId),
-      );
+      const bId = new Types.ObjectId(businessId);
+      const request = await this.requestsRepository.findById(id, bId);
       if (!request) {
         return new NotFoundException(REQUESTS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      if (request.aiPriceEstimate) {
+        if (!request.hasAiPriceEstimate) {
+          await this.requestsRepository.updateById(id, bId, {
+            hasAiPriceEstimate: true,
+            aiPriceEstimatedAt: request.aiPriceEstimatedAt ?? new Date(),
+          });
+        }
+        return request.aiPriceEstimate;
       }
 
       const business = await this.businessRepository.findById(businessId);
@@ -229,6 +245,12 @@ export class RequestsService implements OnModuleInit {
           AI_MESSAGES.ERROR.AI_UNAVAILABLE,
         );
       }
+
+      await this.requestsRepository.updateById(id, bId, {
+        aiPriceEstimate: estimate,
+        hasAiPriceEstimate: true,
+        aiPriceEstimatedAt: new Date(),
+      });
 
       return estimate;
     } catch (error) {
@@ -267,19 +289,28 @@ export class RequestsService implements OnModuleInit {
       if (resolved instanceof NotFoundException) return resolved;
 
       if (!normalizedIdempotencyKey) {
-        return await this.createRequestRecordAndQueueProvisioning(
+        const created = await this.createRequestRecordAndQueueProvisioning(
           dto,
           resolved.businessId,
           resolved.businessName,
         );
+        return this.ensureAiEstimateFlag(created);
       }
 
-      return await this.createRequestWithIdempotency(
+      const createdOrExisting = await this.createRequestWithIdempotency(
         dto,
         resolved.businessId,
         resolved.businessName,
         normalizedIdempotencyKey,
       );
+      if (
+        createdOrExisting instanceof BadRequestException ||
+        createdOrExisting instanceof NotFoundException ||
+        createdOrExisting instanceof InternalServerErrorException
+      ) {
+        return createdOrExisting;
+      }
+      return this.ensureAiEstimateFlag(createdOrExisting);
     } catch (error) {
       this.logger.error(
         `createRequest: unexpected error: ${error instanceof Error ? error.stack : String(error)}`,
@@ -337,6 +368,8 @@ export class RequestsService implements OnModuleInit {
           )
         ) {
           void this.invalidateRequestsListCache(businessId);
+          void this.queueAcceptedRequestJobCreation(accepted, businessId);
+          return this.ensureAiEstimateFlag(accepted);
         }
         return accepted;
       }
@@ -352,6 +385,7 @@ export class RequestsService implements OnModuleInit {
 
       if (updated) {
         void this.invalidateRequestsListCache(businessId);
+        return this.ensureAiEstimateFlag(updated);
       }
       return updated!;
     } catch (error) {
@@ -443,6 +477,55 @@ export class RequestsService implements OnModuleInit {
     }
 
     return null;
+  }
+
+  private ensureAiEstimateFlag(request: ServiceRequest): ServiceRequest {
+    return {
+      ...request,
+      hasAiPriceEstimate:
+        request.hasAiPriceEstimate ?? Boolean(request.aiPriceEstimate),
+    };
+  }
+
+  private async queueAcceptedRequestJobCreation(
+    acceptedRequest: ServiceRequest,
+    businessId: string,
+  ): Promise<void> {
+    try {
+      if (!acceptedRequest.clientId) {
+        return;
+      }
+
+      const business = await this.businessRepository.findById(businessId);
+      if (!business || business.deletedAt) {
+        return;
+      }
+
+      const payload: AcceptedRequestJobCreationData = {
+        businessId,
+        sourceRequestId: acceptedRequest._id.toString(),
+        clientId: acceptedRequest.clientId.toString(),
+        title: acceptedRequest.service,
+        description: acceptedRequest.message,
+        scheduledDate: (
+          acceptedRequest.startDate ?? acceptedRequest.requestedDate
+        ).toISOString(),
+        price: acceptedRequest.quotedPrice,
+        notes: acceptedRequest.endDate
+          ? `Accepted schedule window ends on ${acceptedRequest.endDate.toISOString()}.`
+          : undefined,
+        timezone: business.timezone,
+      };
+
+      await this.agendaService.now<AcceptedRequestJobCreationData>(
+        JOBS.REQUEST_ACCEPTED_CREATE_JOB,
+        payload,
+      );
+    } catch (error) {
+      this.logger.error(
+        `queueAcceptedRequestJobCreation: failed [requestId=${acceptedRequest._id.toString()}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+      );
+    }
   }
 
   private async createRequestWithIdempotency(

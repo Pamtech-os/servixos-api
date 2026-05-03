@@ -21,10 +21,31 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     ENCRYPTION_SECRET: 'xxxxxxxxxxxxxxxxxx',
     API_KEY: 'xxxxxxxxxxxxxxxxxx',
     FRONTEND_URLS: 'xxxxxxxxxxxxxxxxxx',
+    APP_URL: 'xxxxxxxxxxxxxxxxxx',
+    CLIENT_URL: 'xxxxxxxxxxxxxxxxxx',
+    AI_PRICING_MODEL: 'xxxxxxxxxxxxxxxxxx',
+    DEFAULT_CURRENCY: 'xxxxxxxxxxxxxxxxxx',
+    UPLOAD_SIZE_LIMIT: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_CLOUD_NAME: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_API_SECRET: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_URL: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_SECRET_KEY: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_VERSION: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_FROM_ADDRESS: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_FROM_NAME: 'xxxxxxxxxxxxxxxxxx',
+    ANTHROPIC_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    AI_WEBSITE_MODEL: 'xxxxxxxxxxxxxxxxxx',
+    MAILTRAP_TOKEN: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
   };
 
   const missing = Object.entries(required)
-    .filter(([key]) => !config.get<string>(key))
+    .filter(([key]) => {
+      const value = config.get<string>(key);
+      return typeof value !== 'string' || value.trim().length === 0;
+    })
     .map(([key, desc]) => `  · ${key} — ${desc}`);
 
   if (missing.length > 0) {

@@ -273,6 +273,36 @@ describe('RequestsService', () => {
   });
 
   describe('estimateRequestPrice', () => {
+    it('returns cached estimate and skips AI call when estimate already exists', async () => {
+      const cachedEstimate = {
+        suggestedPrice: 500,
+        lowPrice: 420,
+        highPrice: 580,
+        confidence: 'medium' as const,
+        currency: 'USD',
+        reasoning: 'Cached estimate for this request.',
+      };
+      requestsRepository.findById.mockResolvedValue({
+        ...baseRequest,
+        aiPriceEstimate: cachedEstimate,
+        hasAiPriceEstimate: true,
+      });
+      const generateSpy = jest.spyOn(
+        service as unknown as {
+          generateAiPriceEstimate: () => Promise<unknown>;
+        },
+        'generateAiPriceEstimate',
+      );
+
+      const result = await service.estimateRequestPrice(
+        baseRequest._id.toString(),
+        payload.businessId,
+      );
+
+      expect(result).toEqual(cachedEstimate);
+      expect(generateSpy).not.toHaveBeenCalled();
+    });
+
     it('returns 404 when the request does not exist', async () => {
       requestsRepository.findById.mockResolvedValue(null);
 
