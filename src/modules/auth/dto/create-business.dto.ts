@@ -16,7 +16,7 @@ export class CreateBusinessDto {
   @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   email: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_INVALID })
   @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())
   businessName: string;
@@ -24,7 +24,9 @@ export class CreateBusinessDto {
   @IsMongoId({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_CATEGORY_INVALID })
   businessCategory: string;
 
-  @IsString()
+  @IsString({
+    message: AUTH_MESSAGES.VALIDATION.BUSINESS_DESCRIPTION_INVALID,
+  })
   @IsNotEmpty({
     message: AUTH_MESSAGES.VALIDATION.BUSINESS_DESCRIPTION_REQUIRED,
   })
@@ -32,20 +34,23 @@ export class CreateBusinessDto {
   @Transform(({ value }: { value: string }) => value?.trim())
   businessDescription: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.COLOR_PRIMARY_INVALID })
   @IsOptional()
   colorPrimary?: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.COLOR_SECONDARY_INVALID })
   @IsOptional()
   colorSecondary?: string;
 
-  @IsString()
+  @IsString({ message: AUTH_MESSAGES.VALIDATION.FONT_INVALID })
   @IsOptional()
   font?: string;
 
-  @IsArray()
-  @IsString({ each: true })
+  @IsArray({ message: AUTH_MESSAGES.VALIDATION.SERVICES_INVALID })
+  @IsString({
+    each: true,
+    message: AUTH_MESSAGES.VALIDATION.SERVICE_ITEM_INVALID,
+  })
   @IsOptional()
   services?: string[];
 

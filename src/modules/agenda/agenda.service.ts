@@ -5,7 +5,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Agenda } from 'agenda';
+import { Agenda, Job } from 'agenda';
 import { EmailService } from '../email/email.service';
 import { AgendaJobName } from './agenda.constants';
 import { defineEmailJobs } from './jobs/email.jobs';
@@ -15,12 +15,15 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(AgendaService.name);
   private readonly agenda: Agenda;
   private readonly appUrl: string;
+  private readonly clientUrl: string;
 
   constructor(
     config: ConfigService,
     private readonly emailService: EmailService,
   ) {
     this.appUrl = config.get<string>('APP_URL') || 'http://localhost:3000';
+    this.clientUrl =
+      config.get<string>('CLIENT_URL') || 'http://localhost:3000';
     this.agenda = new Agenda({
       db: {
         address: config.get<string>('DATABASE_URL')!,
@@ -32,7 +35,12 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
   }
 
   async onModuleInit(): Promise<void> {
-    defineEmailJobs(this.agenda, this.emailService, this.appUrl);
+    defineEmailJobs(
+      this.agenda,
+      this.emailService,
+      this.appUrl,
+      this.clientUrl,
+    );
     await this.agenda.start();
     this.logger.log('Agenda started');
   }
@@ -60,5 +68,9 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
     data?: T,
   ): Promise<void> {
     await this.agenda.every(interval, jobName, data);
+  }
+
+  define(jobName: AgendaJobName, processor: (job: Job) => Promise<void>): void {
+    this.agenda.define(jobName, processor);
   }
 }

@@ -8,6 +8,26 @@ export enum RequestStatus {
   CANCELLED = 'cancelled',
 }
 
+class RequestAiPriceEstimate {
+  @prop({ required: true, min: 0 })
+  suggestedPrice: number;
+
+  @prop({ required: true, min: 0 })
+  lowPrice: number;
+
+  @prop({ required: true, min: 0 })
+  highPrice: number;
+
+  @prop({ required: true, enum: ['low', 'medium', 'high'] })
+  confidence: 'low' | 'medium' | 'high';
+
+  @prop({ required: true, trim: true })
+  currency: string;
+
+  @prop({ required: true, trim: true })
+  reasoning: string;
+}
+
 @index({ businessId: 1, status: 1 })
 @index({ businessId: 1, createdAt: -1 })
 @modelOptions({
@@ -49,6 +69,21 @@ export class ServiceRequest {
 
   @prop({ min: 0 })
   quotedPrice?: number;
+
+  @prop({ type: () => RequestAiPriceEstimate, _id: false })
+  aiPriceEstimate?: RequestAiPriceEstimate;
+
+  @prop({ default: false })
+  hasAiPriceEstimate?: boolean;
+
+  @prop()
+  aiPriceEstimatedAt?: Date;
+
+  @prop()
+  startDate?: Date;
+
+  @prop()
+  endDate?: Date;
 
   @prop()
   actionedAt?: Date;

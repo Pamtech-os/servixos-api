@@ -8,6 +8,8 @@ import { EncryptionInterceptor } from './common/interceptors/encryption.intercep
 import { AppLogger } from './common/utils/app-logger';
 import { AppEnvironment } from './common/constants/app.constants';
 
+const SERVIXOS_ROOT_DOMAIN = 'servixos.com';
+
 // ---------------------------------------------------------------------------
 // Environment validation — exits the process before any server port is bound
 // ---------------------------------------------------------------------------
@@ -16,16 +18,34 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     DATABASE_URL: 'xxxxxxxxxxxxxxxxxx',
     JWT_SECRET: 'xxxxxxxxxxxxxxxxxx',
     JWT_EXPIRES_IN: 'xxxxxxxxxxxxxxxxxx',
-    // REDIS_HOST: 'xxxxxxxxxxxxxxxxxx',
-    // REDIS_PORT: 'xxxxxxxxxxxxxxxxxx',
-    // REDIS_PASSWORD: 'xxxxxxxxxxxxxxxxxx',
     ENCRYPTION_SECRET: 'xxxxxxxxxxxxxxxxxx',
     API_KEY: 'xxxxxxxxxxxxxxxxxx',
     FRONTEND_URLS: 'xxxxxxxxxxxxxxxxxx',
+    APP_URL: 'xxxxxxxxxxxxxxxxxx',
+    CLIENT_URL: 'xxxxxxxxxxxxxxxxxx',
+    AI_PRICING_MODEL: 'xxxxxxxxxxxxxxxxxx',
+    DEFAULT_CURRENCY: 'xxxxxxxxxxxxxxxxxx',
+    UPLOAD_SIZE_LIMIT: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_CLOUD_NAME: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_API_SECRET: 'xxxxxxxxxxxxxxxxxx',
+    CLOUDINARY_URL: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_SECRET_KEY: 'xxxxxxxxxxxxxxxxxx',
+    MAILJET_VERSION: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_FROM_ADDRESS: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_FROM_NAME: 'xxxxxxxxxxxxxxxxxx',
+    ANTHROPIC_API_KEY: 'xxxxxxxxxxxxxxxxxx',
+    AI_WEBSITE_MODEL: 'xxxxxxxxxxxxxxxxxx',
+    MAILTRAP_TOKEN: 'xxxxxxxxxxxxxxxxxx',
+    MAIL_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
   };
 
   const missing = Object.entries(required)
-    .filter(([key]) => !config.get<string>(key))
+    .filter(([key]) => {
+      const value = config.get<string>(key);
+      return typeof value !== 'string' || value.trim().length === 0;
+    })
     .map(([key, desc]) => `  · ${key} — ${desc}`);
 
   if (missing.length > 0) {
@@ -37,6 +57,17 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
   }
 
   logger.log('All required environment variables are present', 'EnvValidator');
+}
+
+function isServixosSubdomainOrigin(origin: string): boolean {
+  try {
+    const parsed = new URL(origin);
+    const { protocol, hostname } = parsed;
+    if (protocol !== 'http:' && protocol !== 'https:') return false;
+    return hostname.endsWith(`.${SERVIXOS_ROOT_DOMAIN}`);
+  } catch {
+    return false;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -71,7 +102,7 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: uploadLimit }));
   app.use(urlencoded({ extended: true, limit: uploadLimit }));
 
-  // CORS — only origins listed in FRONTEND_URLS are accepted
+  // CORS — accepts origins listed in FRONTEND_URLS plus *.servixos.com
   const allowedOrigins = config
     .get<string>('FRONTEND_URLS', '')
     .split(',')
@@ -83,13 +114,17 @@ async function bootstrap(): Promise<void> {
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || allowedOrigins.includes(origin)) {
+      if (
+        !origin ||
+        allowedOrigins.includes(origin) ||
+        isServixosSubdomainOrigin(origin)
+      ) {
         callback(null, true);
       } else {
         callback(new Error('Not allowed by CORS'));
       }
     },
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowedHeaders: [
       'Content-Type',
       'Authorization',

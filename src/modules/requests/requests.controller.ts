@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   HttpCode,
   HttpException,
   HttpStatus,
@@ -25,6 +26,7 @@ export class RequestsController {
   constructor(private readonly requestsService: RequestsService) {}
 
   @Get()
+  @HttpCode(HttpStatus.OK)
   async listRequests(
     @CurrentUser() user: JwtUser,
     @Query() query: ListRequestsDto,
@@ -36,6 +38,7 @@ export class RequestsController {
     if (result instanceof HttpException) throw result;
     return {
       message: REQUESTS_MESSAGES.SUCCESS.RETRIEVED,
+      statistics: result.statistics,
       data: result.data,
       meta: result.meta,
     };
@@ -48,6 +51,17 @@ export class RequestsController {
     return { message: REQUESTS_MESSAGES.SUCCESS.FOUND, data: result };
   }
 
+  @Get(':id/price-estimate')
+  @HttpCode(HttpStatus.OK)
+  async estimatePrice(@CurrentUser() user: JwtUser, @Param('id') id: string) {
+    const result = await this.requestsService.estimateRequestPrice(
+      id,
+      user.businessId,
+    );
+    if (result instanceof HttpException) throw result;
+    return { message: REQUESTS_MESSAGES.SUCCESS.PRICE_ESTIMATED, data: result };
+  }
+
   @Public()
   @Post()
   @HttpCode(HttpStatus.CREATED)
@@ -55,11 +69,13 @@ export class RequestsController {
     @Body() dto: CreateRequestDto,
     @Query('businessSlug') businessSlug?: string,
     @Query('businessId') businessId?: string,
+    @Headers('idempotency-key') idempotencyKey?: string,
   ) {
     const result = await this.requestsService.createRequest(
       dto,
       businessSlug,
       businessId,
+      idempotencyKey,
     );
     if (result instanceof HttpException) throw result;
     return { message: REQUESTS_MESSAGES.SUCCESS.CREATED, data: result };

@@ -38,6 +38,7 @@ import { EmailModule } from './modules/email/email.module';
 import { AgendaModule } from './modules/agenda/agenda.module';
 import { SecurityModule } from './modules/security/security.module';
 import { RequestsModule } from './modules/requests/requests.module';
+import { JobsModule } from './modules/jobs/jobs.module';
 
 @Module({
   imports: [
@@ -73,6 +74,7 @@ import { RequestsModule } from './modules/requests/requests.module';
     BusinessCategoriesModule,
     SecurityModule,
     RequestsModule,
+    JobsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

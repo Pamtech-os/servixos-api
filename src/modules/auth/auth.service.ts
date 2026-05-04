@@ -114,6 +114,7 @@ export class AuthService {
           lastName: user.lastName,
           email: user.email,
           businessId: businessId.toString(),
+          mustChangePassword: user.mustChangePassword ?? false,
         },
       };
     } catch (error) {
@@ -330,6 +331,7 @@ export class AuthService {
       await Promise.all([
         this.usersRepository.updateById(user._id, {
           passwordHash,
+          mustChangePassword: false,
           passwordResetToken: undefined,
           passwordResetTokenExpiry: undefined,
         }),
@@ -609,6 +611,7 @@ export class AuthService {
           lastName: user.lastName,
           email: user.email,
           businessId: businessId.toString(),
+          mustChangePassword: user.mustChangePassword ?? false,
           subdomain,
         },
       };
