@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { Connection, Types } from 'mongoose';
-import { Message, MessageSender, MessageStatus } from './schemas/message.schema';
+import {
+  Message,
+  MessageSender,
+  MessageStatus,
+} from './schemas/message.schema';
 import { Conversation } from './schemas/conversation.schema';
 import { PaginationParams } from 'src/common/utils/pagination.util';
 
@@ -12,8 +16,12 @@ export class MessagingRepository {
   private readonly conversationModel: ReturnModelType<typeof Conversation>;
 
   constructor(@InjectConnection() connection: Connection) {
-    this.messageModel = getModelForClass(Message, { existingConnection: connection });
-    this.conversationModel = getModelForClass(Conversation, { existingConnection: connection });
+    this.messageModel = getModelForClass(Message, {
+      existingConnection: connection,
+    });
+    this.conversationModel = getModelForClass(Conversation, {
+      existingConnection: connection,
+    });
   }
 
   async upsertConversation(
@@ -28,7 +36,7 @@ export class MessagingRepository {
       )
       .lean<Conversation>()
       .exec();
-    return conversation!;
+    return conversation;
   }
 
   async createMessage(data: {
@@ -54,7 +62,9 @@ export class MessagingRepository {
     sender: MessageSender,
   ): Promise<void> {
     const unreadField =
-      sender === MessageSender.BUSINESS ? 'clientUnreadCount' : 'businessUnreadCount';
+      sender === MessageSender.BUSINESS
+        ? 'clientUnreadCount'
+        : 'businessUnreadCount';
 
     await this.conversationModel.updateOne(
       { _id: conversationId },
@@ -127,7 +137,9 @@ export class MessagingRepository {
   ): Promise<void> {
     // Mark messages sent by the OTHER side as read
     const otherSide =
-      readerSender === MessageSender.BUSINESS ? MessageSender.CLIENT : MessageSender.BUSINESS;
+      readerSender === MessageSender.BUSINESS
+        ? MessageSender.CLIENT
+        : MessageSender.BUSINESS;
 
     await this.messageModel.updateMany(
       {
@@ -148,7 +160,9 @@ export class MessagingRepository {
     readerSender: MessageSender,
   ): Promise<void> {
     const unreadField =
-      readerSender === MessageSender.BUSINESS ? 'businessUnreadCount' : 'clientUnreadCount';
+      readerSender === MessageSender.BUSINESS
+        ? 'businessUnreadCount'
+        : 'clientUnreadCount';
 
     await this.conversationModel.updateOne(
       { businessId, clientId },

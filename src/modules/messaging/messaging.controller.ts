@@ -56,12 +56,17 @@ export class MessagingController {
   }
 
   @Post('upload-attachment')
-  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }))
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
   async uploadAttachment(
     @CurrentUser() user: JwtUser,
     @UploadedFile() file: Express.Multer.File,
   ) {
-    const result = await this.messagingService.uploadAttachment(file, user.businessId);
+    const result = await this.messagingService.uploadAttachment(
+      file,
+      user.businessId,
+    );
     return {
       message: MESSAGING_MESSAGES.SUCCESS.MESSAGE_SENT,
       data: result,

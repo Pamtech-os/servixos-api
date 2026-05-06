@@ -157,7 +157,7 @@ async function bootstrap(): Promise<void> {
   const isProd = config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
   const useTls = config.get<string>('REDIS_TLS') === 'true';
   const redisIoAdapter = new RedisIoAdapter(app);
-  await redisIoAdapter.connectToRedis({
+  redisIoAdapter.connectToRedis({
     host: config.get<string>('REDIS_HOST') ?? 'localhost',
     port: config.get<number>('REDIS_PORT') ?? 6379,
     password: isProd ? config.get<string>('REDIS_PASSWORD') : undefined,

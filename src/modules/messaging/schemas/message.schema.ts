@@ -4,7 +4,6 @@ import { MessageSender, MessageStatus } from '../messaging.types';
 
 export { MessageSender, MessageStatus } from '../messaging.types';
 
-
 @index({ businessId: 1, clientId: 1, createdAt: -1 })
 @index({ conversationId: 1, createdAt: -1 })
 @modelOptions({ schemaOptions: { collection: 'messages', timestamps: true } })

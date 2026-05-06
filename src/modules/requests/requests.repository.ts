@@ -169,7 +169,12 @@ export class RequestsRepository {
     conversationId: Types.ObjectId,
   ): Promise<void> {
     await this.requestModel.updateOne(
-      { _id: id, businessId, deletedAt: null, conversationId: { $exists: false } },
+      {
+        _id: id,
+        businessId,
+        deletedAt: null,
+        conversationId: { $exists: false },
+      },
       { $set: { conversationId } },
     );
   }

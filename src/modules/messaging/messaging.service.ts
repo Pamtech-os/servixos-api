@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Types } from 'mongoose';
 import { v2 as cloudinary } from 'cloudinary';
 import { Readable } from 'stream';
@@ -193,7 +197,8 @@ export class MessagingService {
       params.content,
     );
 
-    if (!message) throw new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED);
+    if (!message)
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED);
     return message;
   }
 
@@ -208,7 +213,8 @@ export class MessagingService {
       params.sender,
     );
 
-    if (!message) throw new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED);
+    if (!message)
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED);
     return message;
   }
 
@@ -243,7 +249,8 @@ export class MessagingService {
           unique_filename: true,
         },
         (error, result) => {
-          if (error || !result) return reject(error);
+          if (error || !result)
+            return reject(new Error(error?.message ?? 'Upload failed'));
           resolve({
             attachmentUrl: result.secure_url,
             publicId: result.public_id,

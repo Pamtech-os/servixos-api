@@ -119,11 +119,15 @@ describe('Messaging (integration)', () => {
     clientToken = (tokenRes.body as { data: { token: string } }).data.token;
 
     dbConnection = app.get<Connection>(getConnectionToken());
-    messageModel = getModelForClass(Message, { existingConnection: dbConnection });
+    messageModel = getModelForClass(Message, {
+      existingConnection: dbConnection,
+    });
     conversationModel = getModelForClass(Conversation, {
       existingConnection: dbConnection,
     });
-    clientModel = getModelForClass(Client, { existingConnection: dbConnection });
+    clientModel = getModelForClass(Client, {
+      existingConnection: dbConnection,
+    });
 
     const mockAgenda = app.get<Record<string, jest.Mock>>(AgendaService);
     nowSpy = mockAgenda['now'];
@@ -163,7 +167,11 @@ describe('Messaging (integration)', () => {
     return signRequest(r, clientToken);
   }
 
-  function asUser(r: request.Test, token: string, businessId: string): request.Test {
+  function asUser(
+    r: request.Test,
+    token: string,
+    businessId: string,
+  ): request.Test {
     return authed(
       r
         .set('Authorization', `Bearer ${token}`)
@@ -177,9 +185,7 @@ describe('Messaging (integration)', () => {
 
   function captureOtpFor(email: string): string {
     const calls = nowSpy.mock.calls as [string, EmailJobArgs][];
-    const match = [...calls]
-      .reverse()
-      .find((c) => c[1].to === email);
+    const match = [...calls].reverse().find((c) => c[1].to === email);
     if (!match?.[1].otp) throw new Error(`No OTP captured for ${email}`);
     return match[1].otp;
   }
@@ -235,7 +241,10 @@ describe('Messaging (integration)', () => {
     return (res.body as ApiBody<LoginPayload>).data!;
   }
 
-  async function seedClient(businessId: string, email: string): Promise<Client> {
+  async function seedClient(
+    businessId: string,
+    email: string,
+  ): Promise<Client> {
     const [doc] = await clientModel.create([
       {
         businessId: new Types.ObjectId(businessId),
@@ -325,7 +334,10 @@ describe('Messaging (integration)', () => {
     it('should not return conversations from another business', async () => {
       // Arrange — create a client + conversation under otherUser's business
       const otherClientEmail = `other-conv-${Date.now()}@test.local`;
-      const otherClient = await seedClient(otherUser.businessId, otherClientEmail);
+      const otherClient = await seedClient(
+        otherUser.businessId,
+        otherClientEmail,
+      );
       await seedConversation(otherUser.businessId, otherClient._id);
 
       // Act — query as seededUser
@@ -341,7 +353,9 @@ describe('Messaging (integration)', () => {
 
     it('should respect pagination params', async () => {
       // Arrange & Act
-      const res = await asSeeded(req().get(`${BASE}/conversations?page=1&limit=5`));
+      const res = await asSeeded(
+        req().get(`${BASE}/conversations?page=1&limit=5`),
+      );
 
       // Assert
       expect(res.status).toBe(200);
@@ -407,7 +421,10 @@ describe('Messaging (integration)', () => {
       // Arrange
       const email = `with-msgs-${Date.now()}@test.local`;
       const client = await seedClient(seededUser.businessId, email);
-      const conversation = await seedConversation(seededUser.businessId, client._id);
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
       await seedMessage(
         seededUser.businessId,
         client._id,
@@ -436,8 +453,16 @@ describe('Messaging (integration)', () => {
       // Arrange
       const email = `with-deleted-${Date.now()}@test.local`;
       const client = await seedClient(seededUser.businessId, email);
-      const conversation = await seedConversation(seededUser.businessId, client._id);
-      await seedMessage(seededUser.businessId, client._id, conversation._id, 'Visible');
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
+      await seedMessage(
+        seededUser.businessId,
+        client._id,
+        conversation._id,
+        'Visible',
+      );
       await messageModel.create([
         {
           businessId: new Types.ObjectId(seededUser.businessId),
@@ -464,7 +489,10 @@ describe('Messaging (integration)', () => {
       // Arrange
       const email = `paginated-${Date.now()}@test.local`;
       const client = await seedClient(seededUser.businessId, email);
-      const conversation = await seedConversation(seededUser.businessId, client._id);
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
       for (let i = 0; i < 5; i++) {
         await seedMessage(
           seededUser.businessId,
@@ -482,7 +510,12 @@ describe('Messaging (integration)', () => {
       // Assert
       expect(res.status).toBe(200);
       const body = res.body as ApiBody<unknown[]>;
-      expect(body.meta).toMatchObject({ page: 1, limit: 3, total: 5, totalPages: 2 });
+      expect(body.meta).toMatchObject({
+        page: 1,
+        limit: 3,
+        total: 5,
+        totalPages: 2,
+      });
       expect(body.data!.length).toBe(3);
     });
   });
@@ -542,7 +575,10 @@ describe('Messaging (integration)', () => {
         seededUser.businessId,
         `conv-with-msgs-${Date.now()}@test.local`,
       );
-      const conversation = await seedConversation(seededUser.businessId, client._id);
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
       await seedMessage(
         seededUser.businessId,
         client._id,

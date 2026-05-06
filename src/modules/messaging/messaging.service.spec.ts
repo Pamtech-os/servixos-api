@@ -99,7 +99,9 @@ describe('MessagingService', () => {
       const message = makeMessage();
       messagingRepository.upsertConversation.mockResolvedValue(conversation);
       messagingRepository.createMessage.mockResolvedValue(message);
-      messagingRepository.updateConversationAfterMessage.mockResolvedValue(undefined);
+      messagingRepository.updateConversationAfterMessage.mockResolvedValue(
+        undefined,
+      );
 
       // Act
       const result = await service.createMessage({
@@ -123,11 +125,9 @@ describe('MessagingService', () => {
           content: 'Hello',
         }),
       );
-      expect(messagingRepository.updateConversationAfterMessage).toHaveBeenCalledWith(
-        conversation._id,
-        'Hello',
-        MessageSender.BUSINESS,
-      );
+      expect(
+        messagingRepository.updateConversationAfterMessage,
+      ).toHaveBeenCalledWith(conversation._id, 'Hello', MessageSender.BUSINESS);
       expect(result).toBe(message);
     });
 
@@ -135,8 +135,12 @@ describe('MessagingService', () => {
       // Arrange
       const conversation = makeConversation();
       messagingRepository.upsertConversation.mockResolvedValue(conversation);
-      messagingRepository.createMessage.mockResolvedValue(makeMessage({ content: undefined }));
-      messagingRepository.updateConversationAfterMessage.mockResolvedValue(undefined);
+      messagingRepository.createMessage.mockResolvedValue(
+        makeMessage({ content: undefined }),
+      );
+      messagingRepository.updateConversationAfterMessage.mockResolvedValue(
+        undefined,
+      );
 
       // Act
       await service.createMessage({
@@ -172,7 +176,10 @@ describe('MessagingService', () => {
       messagingRepository.findRecentMessages.mockResolvedValue([msg]);
 
       // Act
-      const result = await service.getOrCreateConversation(businessId, clientId);
+      const result = await service.getOrCreateConversation(
+        businessId,
+        clientId,
+      );
 
       // Assert
       expect(result.conversation).toBe(conversation);
@@ -185,11 +192,16 @@ describe('MessagingService', () => {
 
     it('should return empty messages array when no messages exist', async () => {
       // Arrange
-      messagingRepository.upsertConversation.mockResolvedValue(makeConversation());
+      messagingRepository.upsertConversation.mockResolvedValue(
+        makeConversation(),
+      );
       messagingRepository.findRecentMessages.mockResolvedValue([]);
 
       // Act
-      const result = await service.getOrCreateConversation(businessId, clientId);
+      const result = await service.getOrCreateConversation(
+        businessId,
+        clientId,
+      );
 
       // Assert
       expect(result.messages).toEqual([]);
@@ -207,7 +219,9 @@ describe('MessagingService', () => {
       await service.markDelivered(messageId);
 
       // Assert
-      expect(messagingRepository.markMessageDelivered).toHaveBeenCalledWith(messageId);
+      expect(messagingRepository.markMessageDelivered).toHaveBeenCalledWith(
+        messageId,
+      );
     });
   });
 
@@ -217,8 +231,13 @@ describe('MessagingService', () => {
     it('should return messages when client exists', async () => {
       // Arrange
       const messages = [makeMessage()];
-      clientsRepository.findById.mockResolvedValue({ _id: new Types.ObjectId(clientId) });
-      messagingRepository.findMessages.mockResolvedValue({ data: messages, total: 1 });
+      clientsRepository.findById.mockResolvedValue({
+        _id: new Types.ObjectId(clientId),
+      });
+      messagingRepository.findMessages.mockResolvedValue({
+        data: messages,
+        total: 1,
+      });
 
       // Act
       const result = await service.getMessages(businessId, clientId, {
@@ -242,8 +261,14 @@ describe('MessagingService', () => {
 
       // Act & Assert
       await expect(
-        service.getMessages(businessId, clientId, { page: 1, limit: 20, skip: 0 }),
-      ).rejects.toThrow(new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND));
+        service.getMessages(businessId, clientId, {
+          page: 1,
+          limit: 20,
+          skip: 0,
+        }),
+      ).rejects.toThrow(
+        new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND),
+      );
       expect(messagingRepository.findMessages).not.toHaveBeenCalled();
     });
   });
@@ -337,7 +362,9 @@ describe('MessagingService', () => {
           sender: MessageSender.BUSINESS,
           content: 'Updated',
         }),
-      ).rejects.toThrow(new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED));
+      ).rejects.toThrow(
+        new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED),
+      );
     });
   });
 
@@ -376,7 +403,9 @@ describe('MessagingService', () => {
           businessId,
           sender: MessageSender.BUSINESS,
         }),
-      ).rejects.toThrow(new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED));
+      ).rejects.toThrow(
+        new NotFoundException(MESSAGING_MESSAGES.ERROR.SEND_FAILED),
+      );
     });
   });
 
@@ -533,7 +562,9 @@ describe('MessagingService', () => {
       const payload = service.toPayload(msg as Message & { createdAt?: Date });
 
       // Assert
-      expect(new Date(payload.createdAt).getTime()).toBeGreaterThanOrEqual(before);
+      expect(new Date(payload.createdAt).getTime()).toBeGreaterThanOrEqual(
+        before,
+      );
     });
   });
 });

@@ -2,7 +2,9 @@ import { registerAs } from '@nestjs/config';
 
 export const websocketConfig = registerAs('websocket', () => ({
   cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? ['http://localhost:3000'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') ?? [
+      'http://localhost:3000',
+    ],
     credentials: true,
   },
   pingTimeout: 20000,

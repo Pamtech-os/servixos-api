@@ -21,7 +21,11 @@ export class WsAuthGuard {
     const token = socket.handshake.auth?.token as string | undefined;
 
     if (!token) {
-      this.rejectSocket(socket, 'MISSING_TOKEN', WEBSOCKET_MESSAGES.ERROR.MISSING_TOKEN);
+      this.rejectSocket(
+        socket,
+        'MISSING_TOKEN',
+        WEBSOCKET_MESSAGES.ERROR.MISSING_TOKEN,
+      );
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.MISSING_TOKEN);
     }
 
@@ -29,19 +33,31 @@ export class WsAuthGuard {
     try {
       payload = this.jwtService.verify<JwtUser>(token);
     } catch {
-      this.rejectSocket(socket, 'INVALID_TOKEN', WEBSOCKET_MESSAGES.ERROR.INVALID_TOKEN);
+      this.rejectSocket(
+        socket,
+        'INVALID_TOKEN',
+        WEBSOCKET_MESSAGES.ERROR.INVALID_TOKEN,
+      );
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.INVALID_TOKEN);
     }
 
     const businessId = socket.handshake.auth?.businessId as string | undefined;
 
     if (!businessId || !Types.ObjectId.isValid(businessId)) {
-      this.rejectSocket(socket, 'MISSING_BUSINESS_ID', WEBSOCKET_MESSAGES.ERROR.MISSING_BUSINESS_ID);
+      this.rejectSocket(
+        socket,
+        'MISSING_BUSINESS_ID',
+        WEBSOCKET_MESSAGES.ERROR.MISSING_BUSINESS_ID,
+      );
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.MISSING_BUSINESS_ID);
     }
 
     if (payload.businessId !== businessId) {
-      this.rejectSocket(socket, 'TENANT_MISMATCH', WEBSOCKET_MESSAGES.ERROR.TENANT_MISMATCH);
+      this.rejectSocket(
+        socket,
+        'TENANT_MISMATCH',
+        WEBSOCKET_MESSAGES.ERROR.TENANT_MISMATCH,
+      );
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.TENANT_MISMATCH);
     }
 
@@ -62,13 +78,22 @@ export class WsAuthGuard {
     }
 
     if (!business || business.deletedAt) {
-      this.rejectSocket(socket, 'BUSINESS_NOT_FOUND', WEBSOCKET_MESSAGES.ERROR.BUSINESS_NOT_FOUND);
+      this.rejectSocket(
+        socket,
+        'BUSINESS_NOT_FOUND',
+        WEBSOCKET_MESSAGES.ERROR.BUSINESS_NOT_FOUND,
+      );
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.BUSINESS_NOT_FOUND);
     }
 
-    socket.data.userId = payload.sub;
-    socket.data.businessId = businessId;
-    socket.data.userRole = payload.userRole;
+    const data = socket.data as {
+      userId: string;
+      businessId: string;
+      userRole: string;
+    };
+    data.userId = payload.sub;
+    data.businessId = businessId;
+    data.userRole = payload.userRole;
   }
 
   private rejectSocket(socket: Socket, code: string, message: string): void {

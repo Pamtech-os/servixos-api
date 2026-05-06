@@ -1,6 +1,6 @@
 import { IoAdapter } from '@nestjs/platform-socket.io';
 import { INestApplication } from '@nestjs/common';
-import { ServerOptions } from 'socket.io';
+import { Server as SocketIOServer, ServerOptions } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
 
@@ -11,12 +11,12 @@ export class RedisIoAdapter extends IoAdapter {
     super(app);
   }
 
-  async connectToRedis(params: {
+  connectToRedis(params: {
     host: string;
     port: number;
     password?: string;
     tls?: boolean;
-  }): Promise<void> {
+  }): void {
     const options = {
       host: params.host,
       port: params.port,
@@ -31,8 +31,11 @@ export class RedisIoAdapter extends IoAdapter {
     this.adapterConstructor = createAdapter(pubClient, subClient);
   }
 
-  createIOServer(port: number, options?: ServerOptions): ReturnType<IoAdapter['createIOServer']> {
-    const server = super.createIOServer(port, options);
+  createIOServer(
+    port: number,
+    options?: ServerOptions,
+  ): ReturnType<IoAdapter['createIOServer']> {
+    const server = super.createIOServer(port, options) as SocketIOServer;
     server.adapter(this.adapterConstructor);
     return server;
   }

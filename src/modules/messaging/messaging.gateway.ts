@@ -23,7 +23,9 @@ import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 
 const MAX_CONTENT_LENGTH = 5000;
 
-interface JoinRoomPayload { clientId: string }
+interface JoinRoomPayload {
+  clientId: string;
+}
 interface SendMessagePayload {
   clientId: string;
   content?: string;
@@ -33,14 +35,26 @@ interface SendMessagePayload {
   fileName?: string;
   fileSize?: number;
 }
-interface TypingPayload { clientId: string }
-interface MarkReadPayload { clientId: string; upToMessageId: string }
-interface EditMessagePayload { messageId: string; content: string }
-interface DeleteMessagePayload { messageId: string }
+interface TypingPayload {
+  clientId: string;
+}
+interface MarkReadPayload {
+  clientId: string;
+  upToMessageId: string;
+}
+interface EditMessagePayload {
+  messageId: string;
+  content: string;
+}
+interface DeleteMessagePayload {
+  messageId: string;
+}
 
 @UseFilters(WsExceptionFilter)
 @WebSocketGateway({ namespace: '/chat' })
-export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class MessagingGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -57,14 +71,21 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     try {
       await this.wsAuthGuard.authenticate(socket);
 
-      const { userId, businessId } = socket.data as { userId: string; businessId: string };
+      const { userId, businessId } = socket.data as {
+        userId: string;
+        businessId: string;
+      };
 
       // Resolve display name — employee lookup first, fall back to 'Business'
       const employee = await this.employeesRepository.findByUserId(userId);
-      socket.data.senderName = employee?.fullName ?? 'Business';
+      (socket.data as { senderName: string }).senderName =
+        employee?.fullName ?? 'Business';
 
       await this.redis.sadd(`presence:chat:${businessId}`, userId);
-      await this.redis.expire(`presence:chat:${businessId}`, CACHE_TTL.WS_PRESENCE);
+      await this.redis.expire(
+        `presence:chat:${businessId}`,
+        CACHE_TTL.WS_PRESENCE,
+      );
 
       socket.emit(WsEvent.CONNECTED, { socketId: socket.id, userId });
       this.logger.log(`Chat connected: ${socket.id} (user: ${userId})`);
@@ -91,7 +112,10 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() socket: Socket,
     @MessageBody() payload: JoinRoomPayload,
   ): Promise<void> {
-    const { userId, businessId } = socket.data as { userId: string; businessId: string };
+    const { userId, businessId } = socket.data as {
+      userId: string;
+      businessId: string;
+    };
 
     if (!payload?.clientId || !Types.ObjectId.isValid(payload.clientId)) {
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.INVALID_CLIENT_ID);
@@ -100,15 +124,25 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     const room = `${businessId}:${payload.clientId}`;
     await socket.join(room);
 
-    await this.messagingService.setRoomActive(businessId, payload.clientId, true);
+    await this.messagingService.setRoomActive(
+      businessId,
+      payload.clientId,
+      true,
+    );
 
-    const history = await this.messagingService.getRecentMessages(businessId, payload.clientId, 20);
+    const history = await this.messagingService.getRecentMessages(
+      businessId,
+      payload.clientId,
+      20,
+    );
 
     socket.emit(WsEvent.ROOM_JOINED, {
       room,
-      history: history.reverse().map((m) =>
-        this.messagingService.toPayload(m as Message & { createdAt?: Date }),
-      ),
+      history: history
+        .reverse()
+        .map((m) =>
+          this.messagingService.toPayload(m as Message & { createdAt?: Date }),
+        ),
     });
 
     this.logger.log(`User ${userId} joined room ${room}`);
@@ -129,7 +163,11 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
 
     const room = `${businessId}:${payload.clientId}`;
     await socket.leave(room);
-    await this.messagingService.setRoomActive(businessId, payload.clientId, false);
+    await this.messagingService.setRoomActive(
+      businessId,
+      payload.clientId,
+      false,
+    );
   }
 
   // ─── send_message ────────────────────────────────────────────────────────────
@@ -138,7 +176,11 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
   async handleSendMessage(
     @ConnectedSocket() socket: Socket,
     @MessageBody() payload: SendMessagePayload,
-    callback?: (ack: { success: boolean; messageId?: string; error?: string }) => void,
+    callback?: (ack: {
+      success: boolean;
+      messageId?: string;
+      error?: string;
+    }) => void,
   ): Promise<void> {
     const { userId, businessId, senderName } = socket.data as {
       userId: string;
@@ -181,7 +223,9 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     );
 
     // Broadcast to all sockets in the room (including sender)
-    this.server.to(room).emit(WsEvent.MESSAGE_RECEIVED, { message: messagePayload });
+    this.server
+      .to(room)
+      .emit(WsEvent.MESSAGE_RECEIVED, { message: messagePayload });
 
     // Mark as delivered and notify sender
     await this.messagingService.markDelivered(message._id);
@@ -219,10 +263,15 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() socket: Socket,
     @MessageBody() payload: TypingPayload,
   ): void {
-    const { userId, businessId } = socket.data as { userId: string; businessId: string };
+    const { userId, businessId } = socket.data as {
+      userId: string;
+      businessId: string;
+    };
     if (!payload?.clientId || !Types.ObjectId.isValid(payload.clientId)) return;
 
-    socket.to(`${businessId}:${payload.clientId}`).emit(WsEvent.USER_STOPPED_TYPING, { userId });
+    socket
+      .to(`${businessId}:${payload.clientId}`)
+      .emit(WsEvent.USER_STOPPED_TYPING, { userId });
   }
 
   // ─── mark_read ───────────────────────────────────────────────────────────────
@@ -232,12 +281,18 @@ export class MessagingGateway implements OnGatewayConnection, OnGatewayDisconnec
     @ConnectedSocket() socket: Socket,
     @MessageBody() payload: MarkReadPayload,
   ): Promise<void> {
-    const { userId, businessId } = socket.data as { userId: string; businessId: string };
+    const { userId, businessId } = socket.data as {
+      userId: string;
+      businessId: string;
+    };
 
     if (!payload?.clientId || !Types.ObjectId.isValid(payload.clientId)) {
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.INVALID_CLIENT_ID);
     }
-    if (!payload.upToMessageId || !Types.ObjectId.isValid(payload.upToMessageId)) {
+    if (
+      !payload.upToMessageId ||
+      !Types.ObjectId.isValid(payload.upToMessageId)
+    ) {
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.INTERNAL);
     }
 

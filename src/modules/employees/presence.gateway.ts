@@ -38,7 +38,9 @@ const AVATAR_COLORS = [
 
 @UseFilters(WsExceptionFilter)
 @WebSocketGateway({ namespace: '/presence' })
-export class PresenceGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class PresenceGateway
+  implements OnGatewayConnection, OnGatewayDisconnect
+{
   @WebSocketServer()
   server: Server;
 
@@ -78,7 +80,9 @@ export class PresenceGateway implements OnGatewayConnection, OnGatewayDisconnect
 
       await socket.join(`presence:${businessId}`);
 
-      socket.to(`presence:${businessId}`).emit(PresenceEvent.USER_ONLINE, presence);
+      socket
+        .to(`presence:${businessId}`)
+        .emit(PresenceEvent.USER_ONLINE, presence);
 
       const onlineList = await this.getOnlineList(businessId);
       socket.emit(PresenceEvent.ONLINE_LIST, {

@@ -5,7 +5,10 @@ import { WEBSOCKET_MESSAGES } from '../constants/messages/websocket.messages';
 
 @Catch(WsException, HttpException, Error)
 export class WsExceptionFilter extends BaseWsExceptionFilter {
-  catch(exception: WsException | HttpException | Error, host: ArgumentsHost): void {
+  catch(
+    exception: WsException | HttpException | Error,
+    host: ArgumentsHost,
+  ): void {
     const client = host.switchToWs().getClient<Socket>();
 
     let message: string;
@@ -13,7 +16,10 @@ export class WsExceptionFilter extends BaseWsExceptionFilter {
 
     if (exception instanceof WsException) {
       const error = exception.getError();
-      message = typeof error === 'string' ? error : (error as { message: string }).message;
+      message =
+        typeof error === 'string'
+          ? error
+          : (error as { message: string }).message;
       code = 'WS_ERROR';
     } else if (exception instanceof HttpException) {
       message = exception.message;

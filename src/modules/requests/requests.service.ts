@@ -425,7 +425,12 @@ export class RequestsService implements OnModuleInit {
     id: string,
     businessId: string,
   ): Promise<
-    | { conversation: Conversation; messages: MessagePayload[]; clientId: string; requestStatus: RequestStatus }
+    | {
+        conversation: Conversation;
+        messages: MessagePayload[];
+        clientId: string;
+        requestStatus: RequestStatus;
+      }
     | NotFoundException
     | InternalServerErrorException
   > {
@@ -443,21 +448,33 @@ export class RequestsService implements OnModuleInit {
       );
 
       if (!client) {
-        return new NotFoundException(REQUESTS_MESSAGES.ERROR.CLIENT_NOT_PROVISIONED);
+        return new NotFoundException(
+          REQUESTS_MESSAGES.ERROR.CLIENT_NOT_PROVISIONED,
+        );
       }
 
       const clientId = client._id.toString();
-      const { conversation, messages } = await this.messagingService.getOrCreateConversation(
-        businessId,
-        clientId,
-      );
+      const { conversation, messages } =
+        await this.messagingService.getOrCreateConversation(
+          businessId,
+          clientId,
+        );
 
       // Lazily write conversationId back to the request (fire-and-forget)
       if (!request.conversationId) {
-        void this.requestsRepository.linkConversation(id, bId, conversation._id);
+        void this.requestsRepository.linkConversation(
+          id,
+          bId,
+          conversation._id,
+        );
       }
 
-      return { conversation, messages, clientId, requestStatus: request.status };
+      return {
+        conversation,
+        messages,
+        clientId,
+        requestStatus: request.status,
+      };
     } catch (error) {
       this.logger.error(
         `getOrCreateRequestConversation: unexpected error [id=${id}]: ${error instanceof Error ? error.stack : String(error)}`,

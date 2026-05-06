@@ -102,6 +102,6 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   }
 
   async hgetall(key: string): Promise<Record<string, string>> {
-    return this.client.hgetall(key) as Promise<Record<string, string>>;
+    return this.client.hgetall(key);
   }
 }
