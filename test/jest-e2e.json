@@ -8,7 +8,8 @@
       "tsconfig": {
         "module": "commonjs",
         "moduleResolution": "node",
-        "resolvePackageJsonExports": false
+        "resolvePackageJsonExports": false,
+        "isolatedModules": false
       }
     }]
   },

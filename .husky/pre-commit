@@ -1,2 +1,2 @@
 npm run lint:check
-npm run test:e2e
+npm run test:all

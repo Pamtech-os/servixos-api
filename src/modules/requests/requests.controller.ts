@@ -51,6 +51,22 @@ export class RequestsController {
     return { message: REQUESTS_MESSAGES.SUCCESS.FOUND, data: result };
   }
 
+  @Get(':id/conversation')
+  async getRequestConversation(
+    @CurrentUser() user: JwtUser,
+    @Param('id') id: string,
+  ) {
+    const result = await this.requestsService.getOrCreateRequestConversation(
+      id,
+      user.businessId,
+    );
+    if (result instanceof HttpException) throw result;
+    return {
+      message: REQUESTS_MESSAGES.SUCCESS.CONVERSATION_RETRIEVED,
+      data: result,
+    };
+  }
+
   @Get(':id/price-estimate')
   @HttpCode(HttpStatus.OK)
   async estimatePrice(@CurrentUser() user: JwtUser, @Param('id') id: string) {
