@@ -17,6 +17,8 @@ import { redisConfig } from './config/redis.config';
 import { encryptionConfig } from './config/encryption.config';
 import { mailConfig } from './config/mail.config';
 import { aiConfig } from './config/ai.config';
+import { websocketConfig } from './config/websocket.config';
+import { cloudinaryConfig } from './config/cloudinary.config';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
@@ -39,6 +41,8 @@ import { AgendaModule } from './modules/agenda/agenda.module';
 import { SecurityModule } from './modules/security/security.module';
 import { RequestsModule } from './modules/requests/requests.module';
 import { JobsModule } from './modules/jobs/jobs.module';
+import { MessagingModule } from './modules/messaging/messaging.module';
+import { EmployeesModule } from './modules/employees/employees.module';
 
 @Module({
   imports: [
@@ -51,6 +55,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
         encryptionConfig,
         mailConfig,
         aiConfig,
+        websocketConfig,
+        cloudinaryConfig,
       ],
     }),
     MongooseModule.forRootAsync({
@@ -75,6 +81,8 @@ import { JobsModule } from './modules/jobs/jobs.module';
     SecurityModule,
     RequestsModule,
     JobsModule,
+    EmployeesModule,
+    MessagingModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

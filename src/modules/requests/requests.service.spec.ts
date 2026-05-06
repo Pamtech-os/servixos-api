@@ -99,6 +99,7 @@ describe('RequestsService', () => {
       {} as UsersRepository,
       agendaService as unknown as AgendaService,
       redisService as unknown as RedisService,
+      {} as never,
     );
 
     loggerWarnSpy = jest

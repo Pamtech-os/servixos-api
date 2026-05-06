@@ -91,6 +91,10 @@ export class ServiceRequest {
   @prop()
   actionedBy?: Types.ObjectId;
 
+  /** Linked when the business first opens the chat for this request */
+  @prop({ ref: 'Conversation', type: Types.ObjectId })
+  conversationId?: Types.ObjectId;
+
   @prop()
   deletedAt?: Date;
 }

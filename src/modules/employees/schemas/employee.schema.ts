@@ -5,6 +5,8 @@ import { Types } from 'mongoose';
 @index({ businessId: 1, fullName: 'text' })
 @modelOptions({ schemaOptions: { collection: 'employees', timestamps: true } })
 export class Employee {
+  _id: Types.ObjectId;
+
   @prop({ ref: 'Business', type: Types.ObjectId, required: true })
   businessId: Types.ObjectId;
 

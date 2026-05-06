@@ -163,6 +163,22 @@ export class RequestsRepository {
     return this.sanitizeRequest(request);
   }
 
+  async linkConversation(
+    id: string,
+    businessId: Types.ObjectId,
+    conversationId: Types.ObjectId,
+  ): Promise<void> {
+    await this.requestModel.updateOne(
+      {
+        _id: id,
+        businessId,
+        deletedAt: null,
+        conversationId: { $exists: false },
+      },
+      { $set: { conversationId } },
+    );
+  }
+
   async softDelete(
     id: string,
     businessId: Types.ObjectId,

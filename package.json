@@ -19,6 +19,7 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:all": "npm test && npm run test:e2e",
     "prepare": "node -e \"try { require('husky').install() } catch (e) {}\""
   },
   "dependencies": {
@@ -30,11 +31,16 @@
     "@nestjs/mongoose": "^11.0.4",
     "@nestjs/passport": "^11.0.5",
     "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-socket.io": "^11.1.11",
+    "@nestjs/websockets": "^11.1.11",
+    "@socket.io/redis-adapter": "^8.3.0",
     "@typegoose/typegoose": "^13.1.0",
+    "@types/multer": "^2.1.0",
     "agenda": "^4.4.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "cloudinary": "^2.9.0",
     "helmet": "^8.1.0",
     "ioredis": "^5.8.2",
     "libphonenumber-js": "^1.12.33",
@@ -45,7 +51,8 @@
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "socket.io": "^4.8.3"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -87,7 +94,13 @@
     "rootDir": "src",
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
+      "^.+\\.(t|j)s$": ["ts-jest", {
+        "tsconfig": {
+          "module": "commonjs",
+          "moduleResolution": "node",
+          "isolatedModules": false
+        }
+      }]
     },
     "moduleNameMapper": {
       "^src/(.*)$": "<rootDir>/$1"

@@ -7,6 +7,7 @@ import { AppModule } from './app.module';
 import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
 import { AppLogger } from './common/utils/app-logger';
 import { AppEnvironment } from './common/constants/app.constants';
+import { RedisIoAdapter } from './common/adapters/redis-io.adapter';
 
 const SERVIXOS_ROOT_DOMAIN = 'servixos.com';
 
@@ -20,7 +21,7 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     JWT_EXPIRES_IN: 'xxxxxxxxxxxxxxxxxx',
     ENCRYPTION_SECRET: 'xxxxxxxxxxxxxxxxxx',
     API_KEY: 'xxxxxxxxxxxxxxxxxx',
-    FRONTEND_URLS: 'xxxxxxxxxxxxxxxxxx',
+    ALLOWED_ORIGINS: 'xxxxxxxxxxxxxxxxxx',
     APP_URL: 'xxxxxxxxxxxxxxxxxx',
     CLIENT_URL: 'xxxxxxxxxxxxxxxxxx',
     AI_PRICING_MODEL: 'xxxxxxxxxxxxxxxxxx',
@@ -102,9 +103,9 @@ async function bootstrap(): Promise<void> {
   app.use(json({ limit: uploadLimit }));
   app.use(urlencoded({ extended: true, limit: uploadLimit }));
 
-  // CORS — accepts origins listed in FRONTEND_URLS plus *.servixos.com
+  // CORS — accepts origins listed in ALLOWED_ORIGINS plus *.servixos.com
   const allowedOrigins = config
-    .get<string>('FRONTEND_URLS', '')
+    .get<string>('ALLOWED_ORIGINS', '')
     .split(',')
     .map((o) => o.trim())
     .filter(Boolean);
@@ -151,6 +152,18 @@ async function bootstrap(): Promise<void> {
   app.useGlobalInterceptors(new EncryptionInterceptor(config, reflector));
 
   app.setGlobalPrefix('api');
+
+  // WebSocket adapter backed by Redis pub/sub for horizontal scaling
+  const isProd = config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION;
+  const useTls = config.get<string>('REDIS_TLS') === 'true';
+  const redisIoAdapter = new RedisIoAdapter(app);
+  redisIoAdapter.connectToRedis({
+    host: config.get<string>('REDIS_HOST') ?? 'localhost',
+    port: config.get<number>('REDIS_PORT') ?? 6379,
+    password: isProd ? config.get<string>('REDIS_PASSWORD') : undefined,
+    tls: useTls,
+  });
+  app.useWebSocketAdapter(redisIoAdapter);
 
   const port = config.get<number>('PORT') ?? 3000;
   const nodeEnv = config.get<string>('NODE_ENV') ?? AppEnvironment.DEVELOPMENT;

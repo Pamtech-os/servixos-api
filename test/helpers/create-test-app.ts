@@ -23,7 +23,7 @@ export async function createTestApp(overrideEnv: {
   process.env.API_KEY = apiKey;
   process.env.ENCRYPTION_SECRET = 'a'.repeat(64);
   process.env.ENCRYPTION_IV = 'b'.repeat(24);
-  process.env.FRONTEND_URLS = 'http://localhost:3000';
+  process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
   process.env.NODE_ENV = 'test';
 
   const moduleRef = await Test.createTestingModule({

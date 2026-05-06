@@ -78,4 +78,30 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async ttl(key: string): Promise<number> {
     return this.client.ttl(key);
   }
+
+  // Set operations (used for presence tracking)
+  async sadd(key: string, ...members: string[]): Promise<void> {
+    await this.client.sadd(key, ...members);
+  }
+
+  async srem(key: string, ...members: string[]): Promise<void> {
+    await this.client.srem(key, ...members);
+  }
+
+  async smembers(key: string): Promise<string[]> {
+    return this.client.smembers(key);
+  }
+
+  // Hash operations (used for presence metadata)
+  async hset(key: string, field: string, value: string): Promise<void> {
+    await this.client.hset(key, field, value);
+  }
+
+  async hdel(key: string, field: string): Promise<void> {
+    await this.client.hdel(key, field);
+  }
+
+  async hgetall(key: string): Promise<Record<string, string>> {
+    return this.client.hgetall(key);
+  }
 }

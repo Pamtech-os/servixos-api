@@ -29,6 +29,7 @@ export const REQUESTS_MESSAGES = {
     CANCELLED: 'Service request cancelled',
     DELETED: 'Service request deleted successfully',
     PRICE_ESTIMATED: 'AI price estimate generated successfully',
+    CONVERSATION_RETRIEVED: 'Request conversation retrieved successfully',
   },
   ERROR: {
     NOT_FOUND: 'Service request not found',

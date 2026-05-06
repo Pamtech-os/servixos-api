@@ -6,6 +6,9 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
+import type { MessagePayload } from '../messaging/messaging.events';
+import type { Conversation } from '../messaging/schemas/conversation.schema';
+import { MessagingService } from '../messaging/messaging.service';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { Job } from 'agenda';
@@ -111,6 +114,7 @@ export class RequestsService implements OnModuleInit {
     private readonly usersRepository: UsersRepository,
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
+    private readonly messagingService: MessagingService,
   ) {
     this.anthropic = new Anthropic({
       apiKey: config.get<string>('ANTHROPIC_API_KEY'),
@@ -412,6 +416,68 @@ export class RequestsService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `deleteRequest: unexpected error [id=${id}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  async getOrCreateRequestConversation(
+    id: string,
+    businessId: string,
+  ): Promise<
+    | {
+        conversation: Conversation;
+        messages: MessagePayload[];
+        clientId: string;
+        requestStatus: RequestStatus;
+      }
+    | NotFoundException
+    | InternalServerErrorException
+  > {
+    try {
+      const bId = new Types.ObjectId(businessId);
+      const request = await this.requestsRepository.findById(id, bId);
+
+      if (!request) {
+        return new NotFoundException(REQUESTS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      const client = await this.clientsRepository.findByEmail(
+        request.clientEmail,
+        bId,
+      );
+
+      if (!client) {
+        return new NotFoundException(
+          REQUESTS_MESSAGES.ERROR.CLIENT_NOT_PROVISIONED,
+        );
+      }
+
+      const clientId = client._id.toString();
+      const { conversation, messages } =
+        await this.messagingService.getOrCreateConversation(
+          businessId,
+          clientId,
+        );
+
+      // Lazily write conversationId back to the request (fire-and-forget)
+      if (!request.conversationId) {
+        void this.requestsRepository.linkConversation(
+          id,
+          bId,
+          conversation._id,
+        );
+      }
+
+      return {
+        conversation,
+        messages,
+        clientId,
+        requestStatus: request.status,
+      };
+    } catch (error) {
+      this.logger.error(
+        `getOrCreateRequestConversation: unexpected error [id=${id}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
