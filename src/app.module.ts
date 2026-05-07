@@ -22,6 +22,7 @@ import { cloudinaryConfig } from './config/cloudinary.config';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
+import { ActivityLogInterceptor } from './common/interceptors/activity-log.interceptor';
 // import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
 // import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
 import { HmacGuard } from './common/guards/hmac.guard';
@@ -43,6 +44,9 @@ import { RequestsModule } from './modules/requests/requests.module';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { MessagingModule } from './modules/messaging/messaging.module';
 import { EmployeesModule } from './modules/employees/employees.module';
+import { ClientsModule } from './modules/clients/clients.module';
+import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
+import { ExportsModule } from './modules/exports/exports.module';
 
 @Module({
   imports: [
@@ -83,11 +87,16 @@ import { EmployeesModule } from './modules/employees/employees.module';
     JobsModule,
     EmployeesModule,
     MessagingModule,
+    ClientsModule,
+    ActivityLogsModule,
+    ExportsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     // { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
+    // ActivityLogInterceptor runs inner (after ResponseTransform) so it taps the raw handler output
+    { provide: APP_INTERCEPTOR, useClass: ActivityLogInterceptor },
     { provide: APP_GUARD, useClass: HmacGuard },
     // { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
