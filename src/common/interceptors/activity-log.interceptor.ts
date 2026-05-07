@@ -74,7 +74,7 @@ export class ActivityLogInterceptor implements NestInterceptor {
     }
 
     const ipAddress = this.extractIp(req);
-    const userAgent = (req.headers['user-agent'] as string | undefined) ?? '';
+    const userAgent = req.headers['user-agent'] ?? '';
     const action = this.deriveAction(method, req.path);
     const urlParamId = this.extractIdFromPath(req.path);
 
@@ -163,7 +163,7 @@ export class ActivityLogInterceptor implements NestInterceptor {
 
     if (typeof raw === 'string' && Types.ObjectId.isValid(raw)) return raw;
     if (raw instanceof Types.ObjectId) return raw.toString();
-    if (typeof raw === 'object' && 'toString' in (raw as object)) {
+    if (typeof raw === 'object' && 'toString' in raw) {
       const str = (raw as { toString(): string }).toString();
       if (Types.ObjectId.isValid(str)) return str;
     }

@@ -42,12 +42,17 @@ const BUSINESS_TZ_CACHE_PREFIX = 'business:tz:';
 const USER_NAME_CACHE_TTL = 60 * 30; // 30 minutes
 const BUSINESS_TZ_CACHE_TTL = 60 * 60; // 1 hour
 const IP_GEO_TIMEOUT_MS = 500;
-const PRIVATE_IP_PREFIXES = ['127.', '192.168.', '10.', '172.16.', '::1', 'localhost'];
+const PRIVATE_IP_PREFIXES = [
+  '127.',
+  '192.168.',
+  '10.',
+  '172.16.',
+  '::1',
+  'localhost',
+];
 
-const activityLogsListCacheKey = (
-  businessId: string,
-  params: string,
-): string => `${businessId}:activity-logs:list:${params}`;
+const activityLogsListCacheKey = (businessId: string, params: string): string =>
+  `${businessId}:activity-logs:list:${params}`;
 
 @Injectable()
 export class ActivityLogsService {
@@ -254,7 +259,9 @@ export class ActivityLogsService {
    * Docs: https://ip-api.com/docs/api:json
    */
   private async fetchGeoFromIp(ip: string): Promise<IpGeoResult> {
-    const isPrivate = PRIVATE_IP_PREFIXES.some((prefix) => ip.startsWith(prefix));
+    const isPrivate = PRIVATE_IP_PREFIXES.some((prefix) =>
+      ip.startsWith(prefix),
+    );
     if (isPrivate) return {};
 
     const controller = new AbortController();

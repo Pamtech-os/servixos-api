@@ -130,12 +130,18 @@ describe('ClientsService', () => {
 
   describe('listClients', () => {
     it('should return cached result when cache hit', async () => {
-      const cached = { data: [baseClient], meta: { page: 1, limit: 10, total: 1, totalPages: 1 } };
+      const cached = {
+        data: [baseClient],
+        meta: { page: 1, limit: 10, total: 1, totalPages: 1 },
+      };
       redisService.get
-        .mockResolvedValueOnce('1')                      // version key
-        .mockResolvedValueOnce(JSON.stringify(cached));  // list cache key
+        .mockResolvedValueOnce('1') // version key
+        .mockResolvedValueOnce(JSON.stringify(cached)); // list cache key
 
-      const result = await service.listClients(BUSINESS_ID, { page: 1, limit: 10 });
+      const result = await service.listClients(BUSINESS_ID, {
+        page: 1,
+        limit: 10,
+      });
 
       // After JSON.parse, ObjectIds become strings — compare serialized form
       expect(JSON.stringify(result)).toEqual(JSON.stringify(cached));
@@ -143,9 +149,15 @@ describe('ClientsService', () => {
     });
 
     it('should query repository and cache result when cache misses', async () => {
-      clientsRepository.findAll.mockResolvedValue({ data: [baseClient], total: 1 });
+      clientsRepository.findAll.mockResolvedValue({
+        data: [baseClient],
+        total: 1,
+      });
 
-      const result = await service.listClients(BUSINESS_ID, { page: 1, limit: 10 });
+      const result = await service.listClients(BUSINESS_ID, {
+        page: 1,
+        limit: 10,
+      });
 
       expect(clientsRepository.findAll).toHaveBeenCalledTimes(1);
       expect(redisService.set).toHaveBeenCalled();
@@ -211,7 +223,11 @@ describe('ClientsService', () => {
   // ─── createClient ───────────────────────────────────────────────────────────
 
   describe('createClient', () => {
-    const dto = { name: 'Jane Smith', email: 'jane@example.com', phone: '+12025550100' };
+    const dto = {
+      name: 'Jane Smith',
+      email: 'jane@example.com',
+      phone: '+12025550100',
+    };
 
     it('should create client and provision user when email is new', async () => {
       clientsRepository.findByEmail.mockResolvedValue(null);

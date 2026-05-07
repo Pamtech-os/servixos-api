@@ -152,7 +152,10 @@ describe('ActivityLogsService', () => {
       };
       redisService.get.mockResolvedValueOnce(JSON.stringify(cached));
 
-      const result = await service.listLogs(BUSINESS_ID, { page: 1, limit: 10 });
+      const result = await service.listLogs(BUSINESS_ID, {
+        page: 1,
+        limit: 10,
+      });
 
       expect(activityLogsRepository.findAll).not.toHaveBeenCalled();
       // After JSON.parse, Dates become strings and ObjectIds become strings — compare serialized
@@ -165,7 +168,10 @@ describe('ActivityLogsService', () => {
         total: 1,
       });
 
-      const result = await service.listLogs(BUSINESS_ID, { page: 1, limit: 10 });
+      const result = await service.listLogs(BUSINESS_ID, {
+        page: 1,
+        limit: 10,
+      });
 
       expect(activityLogsRepository.findAll).toHaveBeenCalledTimes(1);
       expect(redisService.set).toHaveBeenCalled();
@@ -195,8 +201,8 @@ describe('ActivityLogsService', () => {
       expect(activityLogsRepository.findAll).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         expect.objectContaining({
-          dateFrom: expect.any(Date),
-          dateTo: expect.any(Date),
+          dateFrom: expect.any(Date) as unknown,
+          dateTo: expect.any(Date) as unknown,
         }),
         expect.any(Object),
       );

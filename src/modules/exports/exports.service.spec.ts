@@ -28,7 +28,9 @@ describe('ExportsService', () => {
 
   beforeEach(() => {
     clientsRepository = { findById: jest.fn() };
-    jobsRepository = { findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }) };
+    jobsRepository = {
+      findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
+    };
 
     service = new ExportsService(
       clientsRepository as unknown as ClientsRepository,

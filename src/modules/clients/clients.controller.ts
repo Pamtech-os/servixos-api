@@ -29,7 +29,10 @@ export class ClientsController {
     @CurrentUser() user: JwtUser,
     @Query() query: QueryClientsDto,
   ) {
-    const result = await this.clientsService.listClients(user.businessId, query);
+    const result = await this.clientsService.listClients(
+      user.businessId,
+      query,
+    );
     if (result instanceof HttpException) throw result;
 
     return {

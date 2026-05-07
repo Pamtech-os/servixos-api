@@ -123,7 +123,8 @@ export class ClientsService {
         new Types.ObjectId(businessId),
       );
 
-      if (!client) return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+      if (!client)
+        return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
 
       await this.redisService
         .set(cacheKey, JSON.stringify(client), CACHE_TTL.CLIENT_DETAIL)
@@ -285,7 +286,8 @@ export class ClientsService {
       }
 
       const updated = await this.clientsRepository.updateById(id, bId, dto);
-      if (!updated) return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+      if (!updated)
+        return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
 
       void this.invalidateClientsListCache(businessId);
       await this.redisService
@@ -311,7 +313,8 @@ export class ClientsService {
         new Types.ObjectId(businessId),
       );
 
-      if (!deleted) return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+      if (!deleted)
+        return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
 
       void this.invalidateClientsListCache(businessId);
       await this.redisService

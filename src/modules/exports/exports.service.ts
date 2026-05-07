@@ -45,12 +45,15 @@ export class ExportsService {
   async exportClient(
     id: string,
     businessId: string,
-  ): Promise<ClientExportResult | NotFoundException | InternalServerErrorException> {
+  ): Promise<
+    ClientExportResult | NotFoundException | InternalServerErrorException
+  > {
     try {
       const bId = new Types.ObjectId(businessId);
 
       const client = await this.clientsRepository.findById(id, bId);
-      if (!client) return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+      if (!client)
+        return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
 
       const { data: jobs } = await this.jobsRepository.findAll(
         bId,
