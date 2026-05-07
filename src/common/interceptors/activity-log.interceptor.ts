@@ -116,7 +116,9 @@ export class ActivityLogInterceptor implements NestInterceptor {
   }
 
   private deriveAction(method: string, path: string): string {
-    const verb = METHOD_ACTION_VERB[method] ?? ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.MODIFIED;
+    const verb =
+      METHOD_ACTION_VERB[method] ??
+      ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.MODIFIED;
     const resourceType = this.deriveResourceType(path);
     return `${verb} ${resourceType}`;
   }

@@ -704,7 +704,10 @@ Requirements:
           },
         ],
         messages: [
-          { role: 'user', content: `Generate a service contract:\n${userContent}` },
+          {
+            role: 'user',
+            content: `Generate a service contract:\n${userContent}`,
+          },
         ],
       });
 
