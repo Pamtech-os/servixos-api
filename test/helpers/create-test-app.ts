@@ -2,6 +2,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { AppModule } from 'src/app.module';
 import { AgendaService } from 'src/modules/agenda/agenda.service';
+import { ActivityLogsService } from 'src/modules/activity-logs/activity-logs.service';
 
 export interface TestApp {
   app: INestApplication;
@@ -37,6 +38,11 @@ export async function createTestApp(overrideEnv: {
       every: jest.fn().mockResolvedValue(undefined),
       onModuleInit: jest.fn(),
       onModuleDestroy: jest.fn(),
+    })
+    .overrideProvider(ActivityLogsService)
+    .useValue({
+      log: jest.fn().mockResolvedValue(undefined),
+      listLogs: jest.fn().mockResolvedValue({ data: [], meta: {} }),
     })
     .compile();
 

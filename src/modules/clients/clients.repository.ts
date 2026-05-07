@@ -2,7 +2,12 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { ClientSession, Connection, Types } from 'mongoose';
+import { PaginationParams } from 'src/common/utils/pagination.util';
 import { Client } from './schemas/client.schema';
+
+export interface ListClientsFilters {
+  search?: string;
+}
 
 @Injectable()
 export class ClientsRepository {
@@ -12,6 +17,38 @@ export class ClientsRepository {
     this.clientModel = getModelForClass(Client, {
       existingConnection: connection,
     });
+  }
+
+  async findAll(
+    businessId: Types.ObjectId,
+    filters: ListClientsFilters,
+    pagination: PaginationParams,
+  ): Promise<{ data: Client[]; total: number }> {
+    const query: Record<string, unknown> = { businessId, deletedAt: null };
+
+    if (filters.search) {
+      /*
+       * Full-text search across name and email fields.
+       * Example: search="john" matches "John Smith" or "john@example.com"
+       */
+      query['$or'] = [
+        { name: { $regex: new RegExp(filters.search, 'i') } },
+        { email: { $regex: new RegExp(filters.search, 'i') } },
+      ];
+    }
+
+    const [data, total] = await Promise.all([
+      this.clientModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<Client[]>()
+        .exec(),
+      this.clientModel.countDocuments(query).exec(),
+    ]);
+
+    return { data, total };
   }
 
   async findByEmail(
@@ -40,6 +77,36 @@ export class ClientsRepository {
   ): Promise<Client> {
     const [client] = await this.clientModel.create([data], { session });
     return client.toObject() as Client;
+  }
+
+  async updateById(
+    id: string,
+    businessId: Types.ObjectId,
+    update: Partial<Client>,
+    session?: ClientSession,
+  ): Promise<Client | null> {
+    return this.clientModel
+      .findOneAndUpdate(
+        { _id: id, businessId, deletedAt: null },
+        { $set: update },
+        { returnDocument: 'after', session },
+      )
+      .lean<Client>()
+      .exec();
+  }
+
+  async softDelete(
+    id: string,
+    businessId: Types.ObjectId,
+  ): Promise<Client | null> {
+    return this.clientModel
+      .findOneAndUpdate(
+        { _id: id, businessId, deletedAt: null },
+        { $set: { deletedAt: new Date() } },
+        { returnDocument: 'after' },
+      )
+      .lean<Client>()
+      .exec();
   }
 
   async upsertFromRequest(
