@@ -9,7 +9,9 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Types } from 'mongoose';
 import type { JwtUser } from '../decorators/current-user.decorator';
-import { ActivityLogsService } from 'src/modules/activity-logs/activity-logs.service';
+import { AgendaService } from 'src/modules/agenda/agenda.service';
+import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 import { LogCategory } from 'src/modules/activity-logs/schemas/activity-log.schema';
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
@@ -33,10 +35,10 @@ const PATH_CATEGORY_MAP: Record<string, LogCategory> = {
 };
 
 const METHOD_ACTION_VERB: Record<string, string> = {
-  POST: 'Created',
-  PATCH: 'Updated',
-  PUT: 'Updated',
-  DELETE: 'Deleted',
+  POST: ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.CREATED,
+  PATCH: ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.UPDATED,
+  PUT: ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.UPDATED,
+  DELETE: ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.DELETED,
 };
 
 /**
@@ -53,7 +55,7 @@ const METHOD_ACTION_VERB: Record<string, string> = {
  */
 @Injectable()
 export class ActivityLogInterceptor implements NestInterceptor {
-  constructor(private readonly activityLogsService: ActivityLogsService) {}
+  constructor(private readonly agendaService: AgendaService) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<Request>();
@@ -87,7 +89,7 @@ export class ActivityLogInterceptor implements NestInterceptor {
         const resourceId =
           urlParamId ?? this.extractResourceIdFromResponse(responseData);
 
-        void this.activityLogsService.log({
+        void this.agendaService.now(JOBS.ACTIVITY_LOG_WRITE, {
           businessId: user.businessId,
           actorId: user.sub,
           actorRole: user.userRole,
@@ -114,7 +116,9 @@ export class ActivityLogInterceptor implements NestInterceptor {
   }
 
   private deriveAction(method: string, path: string): string {
-    const verb = METHOD_ACTION_VERB[method] ?? 'Modified';
+    const verb =
+      METHOD_ACTION_VERB[method] ??
+      ACTIVITY_LOGS_MESSAGES.ACTIONS.RESOURCE.MODIFIED;
     const resourceType = this.deriveResourceType(path);
     return `${verb} ${resourceType}`;
   }

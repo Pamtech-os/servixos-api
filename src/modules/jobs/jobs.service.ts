@@ -7,6 +7,7 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import Anthropic from '@anthropic-ai/sdk';
 import { Job as AgendaJob } from 'agenda';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
@@ -14,6 +15,7 @@ import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { JOBS_MESSAGES } from 'src/common/constants/messages/jobs.messages';
 import { buildMeta } from 'src/common/utils/pagination.util';
+import { toTwoDecimal } from 'src/common/utils/number.util';
 import { JOBS } from '../agenda/agenda.constants';
 import { AgendaService } from '../agenda/agenda.service';
 import { BusinessRepository } from '../business/business.repository';
@@ -76,6 +78,8 @@ export class JobsService implements OnModuleInit {
   private readonly cloudinaryApiKey: string;
   private readonly cloudinaryApiSecret: string;
   private readonly cloudinaryFolder: string;
+  private readonly anthropic: Anthropic;
+  private readonly contractModel: string;
 
   constructor(
     config: ConfigService,
@@ -97,6 +101,11 @@ export class JobsService implements OnModuleInit {
       config.get<string>('CLOUDINARY_API_SECRET') ?? '';
     this.cloudinaryFolder =
       config.get<string>('CLOUDINARY_CONTRACTS_FOLDER') ?? 'servixos/contracts';
+    this.anthropic = new Anthropic({
+      apiKey: config.get<string>('ANTHROPIC_API_KEY'),
+    });
+    this.contractModel =
+      config.get<string>('AI_CONTRACT_MODEL') ?? 'claude-opus-4-7';
   }
 
   onModuleInit(): void {
@@ -384,7 +393,7 @@ export class JobsService implements OnModuleInit {
       }
 
       const title = `${job.title} Service Contract`;
-      const html = this.buildContractHtml(job, client, business.name);
+      const html = await this.generateContractHtml(job, client, business.name);
 
       const pdfBuffer = await this.renderContractPdfBuffer(html);
       const uploaded = await this.uploadContractPdf(
@@ -651,6 +660,81 @@ export class JobsService implements OnModuleInit {
     };
   }
 
+  private async generateContractHtml(
+    job: Job,
+    client: JobClientPreview,
+    businessName: string,
+  ): Promise<string> {
+    try {
+      const priceLine =
+        typeof job.price === 'number'
+          ? `Price: ${toTwoDecimal(job.price)}`
+          : 'Price: To be agreed';
+
+      const systemPrompt = `You are a professional legal document generator for service businesses. Generate a complete, well-formatted HTML service contract.
+
+Requirements:
+- Return ONLY valid HTML starting with <!doctype html> — no markdown fences, no explanations
+- Use inline CSS; body font-family Arial sans-serif, padding 24px, color #111827
+- Include: contract title, parties (business and client), service details, payment terms, standard service agreement clauses (scope, payment, confidentiality, limitation of liability, governing law), and a signature block
+- Signature block: two-column grid — "Client Signature" and "Business Representative Signature", each with a horizontal line above the label
+- Professional, legally appropriate language; no placeholder content`;
+
+      const userContent = [
+        `Business: ${businessName}`,
+        `Client: ${client.name} (${client.email})`,
+        `Service: ${job.title}`,
+        job.description ? `Description: ${job.description}` : null,
+        `Scheduled Date: ${job.scheduledDate.toISOString()}`,
+        job.location ? `Location: ${job.location}` : null,
+        priceLine,
+        job.notes ? `Notes: ${job.notes}` : null,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const message = await this.anthropic.messages.create({
+        model: this.contractModel,
+        max_tokens: 4096,
+        system: [
+          {
+            type: 'text' as const,
+            text: systemPrompt,
+            cache_control: { type: 'ephemeral' as const },
+          },
+        ],
+        messages: [
+          {
+            role: 'user',
+            content: `Generate a service contract:\n${userContent}`,
+          },
+        ],
+      });
+
+      const block = message.content[0];
+      if (block.type !== 'text') {
+        return this.buildContractHtml(job, client, businessName);
+      }
+
+      const html = block.text
+        .replace(/^```html\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/\s*```$/i, '')
+        .trim();
+
+      if (!html.toLowerCase().includes('<html')) {
+        return this.buildContractHtml(job, client, businessName);
+      }
+
+      return html;
+    } catch (error) {
+      this.logger.warn(
+        `generateContractHtml: AI generation failed, using fallback [jobId=${job._id.toString()}]: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return this.buildContractHtml(job, client, businessName);
+    }
+  }
+
   private buildContractHtml(
     job: Job,
     client: JobClientPreview,
@@ -658,7 +742,7 @@ export class JobsService implements OnModuleInit {
   ): string {
     const priceLine =
       typeof job.price === 'number'
-        ? `<p><strong>Price:</strong> ${job.price.toFixed(2)}</p>`
+        ? `<p><strong>Price:</strong> ${toTwoDecimal(job.price)}</p>`
         : '<p><strong>Price:</strong> To be agreed</p>';
 
     return `

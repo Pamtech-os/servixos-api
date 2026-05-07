@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Ip,
   Post,
 } from '@nestjs/common';
 import { AuthService } from './auth.service';
@@ -44,8 +45,14 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  async login(@Body() dto: LoginDto) {
-    const result = await this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Headers('x-forwarded-for') forwardedFor?: string,
+    @Headers('user-agent') userAgent?: string,
+    @Ip() ip?: string,
+  ) {
+    const ipAddress = forwardedFor?.split(',')[0].trim() ?? ip;
+    const result = await this.authService.login(dto, ipAddress, userAgent);
     if (result instanceof HttpException) throw result;
     return { message: AUTH_MESSAGES.SUCCESS.LOGIN, data: result };
   }
