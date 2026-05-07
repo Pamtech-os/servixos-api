@@ -3,6 +3,7 @@ import { Types } from 'mongoose';
 import { BusinessRepository } from '../business/business.repository';
 import { RedisService } from '../redis/redis.service';
 import { UsersRepository } from '../users/users.repository';
+import { AgendaService } from '../agenda/agenda.service';
 import { ActivityLogsRepository } from './activity-logs.repository';
 import {
   ActivityLogsService,
@@ -66,11 +67,14 @@ describe('ActivityLogsService', () => {
       set: jest.fn().mockResolvedValue(undefined),
     };
 
+    const agendaService = { define: jest.fn() } as unknown as AgendaService;
+
     service = new ActivityLogsService(
       activityLogsRepository as unknown as ActivityLogsRepository,
       usersRepository as unknown as UsersRepository,
       businessRepository as unknown as BusinessRepository,
       redisService as unknown as RedisService,
+      agendaService,
     );
 
     loggerErrorSpy = jest

@@ -6,6 +6,7 @@ export const JOBS = {
   REQUEST_CLIENT_PROVISION: 'request:client-provision',
   REQUEST_ACCEPTED_CREATE_JOB: 'request:accepted:create-job',
   JOB_CONTRACT_SEND: 'job:contract:send',
+  ACTIVITY_LOG_WRITE: 'activity-log:write',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

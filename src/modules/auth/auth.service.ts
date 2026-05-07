@@ -50,6 +50,8 @@ import {
 } from '../agenda/jobs/email.jobs';
 import { RedisService } from '../redis/redis.service';
 import { UserRole } from '../users/schemas/user.schema';
+import { LogCategory } from '../activity-logs/schemas/activity-log.schema';
+import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 
 const PIN_MAX_ATTEMPTS = 3;
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -74,6 +76,8 @@ export class AuthService {
 
   async login(
     dto: LoginDto,
+    ipAddress?: string,
+    userAgent?: string,
   ): Promise<LoginData | UnauthorizedException | InternalServerErrorException> {
     try {
       const user = await this.usersRepository.findByEmail(dto.email);
@@ -104,6 +108,16 @@ export class AuthService {
         businessId,
         user.userRole,
       );
+
+      void this.agendaService.now(JOBS.ACTIVITY_LOG_WRITE, {
+        businessId: businessId.toString(),
+        actorId: userId.toString(),
+        actorRole: user.userRole,
+        action: ACTIVITY_LOGS_MESSAGES.ACTIONS.AUTH.LOGIN,
+        category: LogCategory.AUTH,
+        ipAddress,
+        userAgent,
+      });
 
       return {
         accessToken,

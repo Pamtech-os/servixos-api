@@ -2,12 +2,16 @@ import {
   Injectable,
   InternalServerErrorException,
   Logger,
+  OnModuleInit,
 } from '@nestjs/common';
+import { Job as AgendaJob } from 'agenda';
 import { Types } from 'mongoose';
 import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { AgendaService } from '../agenda/agenda.service';
+import { JOBS } from '../agenda/agenda.constants';
 import { BusinessRepository } from '../business/business.repository';
 import { RedisService } from '../redis/redis.service';
 import { UsersRepository } from '../users/users.repository';
@@ -55,7 +59,7 @@ const activityLogsListCacheKey = (businessId: string, params: string): string =>
   `${businessId}:activity-logs:list:${params}`;
 
 @Injectable()
-export class ActivityLogsService {
+export class ActivityLogsService implements OnModuleInit {
   private readonly logger = new Logger(ActivityLogsService.name);
 
   constructor(
@@ -63,7 +67,18 @@ export class ActivityLogsService {
     private readonly usersRepository: UsersRepository,
     private readonly businessRepository: BusinessRepository,
     private readonly redisService: RedisService,
+    private readonly agendaService: AgendaService,
   ) {}
+
+  onModuleInit(): void {
+    this.agendaService.define(
+      JOBS.ACTIVITY_LOG_WRITE,
+      async (job: AgendaJob): Promise<void> => {
+        const params = job.attrs.data as CreateActivityLogParams;
+        await this.log(params);
+      },
+    );
+  }
 
   /**
    * Creates an activity log entry for a mutating operation.
