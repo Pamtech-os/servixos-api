@@ -11,15 +11,15 @@ import { Server } from 'http';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
 import { signRequest } from '../helpers/sign-request';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { Business } from 'src/modules/business/schemas/business.schema';
-import { RedisService } from 'src/modules/redis/redis.service';
+import { RedisService } from 'src/modules/redis/services/redis.service';
 import {
   ClientProvisioningJobData,
   RequestsService,
-} from 'src/modules/requests/requests.service';
+} from 'src/modules/requests/services/requests.service';
 import {
   ServiceRequest,
   RequestStatus,

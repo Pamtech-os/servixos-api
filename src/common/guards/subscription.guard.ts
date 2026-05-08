@@ -14,7 +14,7 @@ import {
 import { REQUIRE_PLAN_KEY } from '../decorators/require-plan.decorator';
 import { SUBSCRIPTION_MESSAGES } from '../constants/messages/subscription.messages';
 import { TENANT_MESSAGES } from '../constants/messages/tenant.messages';
-import { BusinessRepository } from 'src/modules/business/business.repository';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 
 @Injectable()
 export class SubscriptionGuard implements CanActivate {

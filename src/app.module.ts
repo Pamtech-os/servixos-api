@@ -47,6 +47,8 @@ import { EmployeesModule } from './modules/employees/employees.module';
 import { ClientsModule } from './modules/clients/clients.module';
 import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module';
 import { ExportsModule } from './modules/exports/exports.module';
+import { InvoicesModule } from './modules/invoices/invoices.module';
+import { PaymentsModule } from './modules/payments/payments.module';
 
 @Module({
   imports: [
@@ -90,6 +92,8 @@ import { ExportsModule } from './modules/exports/exports.module';
     ClientsModule,
     ActivityLogsModule,
     ExportsModule,
+    InvoicesModule,
+    PaymentsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

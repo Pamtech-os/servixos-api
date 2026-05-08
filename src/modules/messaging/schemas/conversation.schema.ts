@@ -1,6 +1,6 @@
 import { prop, index, modelOptions } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
-import { MessageSender } from '../messaging.types';
+import { MessageSender } from '../types/messaging.types';
 
 @index({ businessId: 1, clientId: 1 }, { unique: true })
 @index({ businessId: 1, updatedAt: -1 })

@@ -11,14 +11,14 @@ import { Server } from 'http';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
 import { signRequest } from '../helpers/sign-request';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { RedisService } from 'src/modules/redis/redis.service';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { RedisService } from 'src/modules/redis/services/redis.service';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { User } from 'src/modules/users/schemas/user.schema';
 import { Role, DefaultRole } from 'src/modules/roles/schemas/role.schema';
 import { WebsiteConfig } from 'src/modules/website/schemas/website-config.schema';
 import { RefreshToken } from 'src/modules/auth/schemas/refresh-token.schema';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { hashToken } from 'src/common/utils/hash.util';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 

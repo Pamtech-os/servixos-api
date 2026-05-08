@@ -1,8 +1,8 @@
 import { prop, index, modelOptions } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
-import { MessageSender, MessageStatus } from '../messaging.types';
+import { MessageSender, MessageStatus } from '../types/messaging.types';
 
-export { MessageSender, MessageStatus } from '../messaging.types';
+export { MessageSender, MessageStatus } from '../types/messaging.types';
 
 @index({ businessId: 1, clientId: 1, createdAt: -1 })
 @index({ conversationId: 1, createdAt: -1 })

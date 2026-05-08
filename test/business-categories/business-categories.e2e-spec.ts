@@ -12,9 +12,9 @@ import { createHmac } from 'crypto';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
 import { signRequest } from '../helpers/sign-request';
-import { RedisService } from 'src/modules/redis/redis.service';
+import { RedisService } from 'src/modules/redis/services/redis.service';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
-import { BusinessCategoriesRepository } from 'src/modules/business-categories/business-categories.repository';
+import { BusinessCategoriesRepository } from 'src/modules/business-categories/repositories/business-categories.repository';
 import { BUSINESS_CATEGORIES_MESSAGES } from 'src/common/constants/messages/business-categories.messages';
 
 // ─── Response shape ───────────────────────────────────────────────────────────

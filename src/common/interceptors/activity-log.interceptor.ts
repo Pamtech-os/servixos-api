@@ -9,8 +9,8 @@ import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { Types } from 'mongoose';
 import type { JwtUser } from '../decorators/current-user.decorator';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 import { LogCategory } from 'src/modules/activity-logs/schemas/activity-log.schema';
 

@@ -9,7 +9,7 @@ import { Reflector } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { Request } from 'express';
-import { RedisService } from 'src/modules/redis/redis.service';
+import { RedisService } from 'src/modules/redis/services/redis.service';
 import { SKIP_SIGNATURE_KEY } from '../decorators/skip-signature.decorator';
 import { API_KEY_MESSAGES } from '../constants/messages/api-key.messages';
 import { COMMON_MESSAGES } from '../constants/messages/common.messages';

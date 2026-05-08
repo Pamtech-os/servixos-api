@@ -1,10 +1,10 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { MessagingRepository } from './messaging.repository';
-import { MessagingService } from './messaging.service';
+import { MessagingRepository } from './repositories/messaging.repository';
+import { MessagingService } from './services/messaging.service';
 import { MessagingGateway } from './messaging.gateway';
-import { MessagingController } from './messaging.controller';
+import { MessagingController } from './controllers/messaging.controller';
 import { WsAuthGuard } from 'src/common/guards/ws-auth.guard';
 import { BusinessModule } from '../business/business.module';
 import { ClientsModule } from '../clients/clients.module';

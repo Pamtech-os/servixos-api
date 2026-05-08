@@ -10,7 +10,22 @@ export enum JobStatus {
 
 @index({ businessId: 1, status: 1, scheduledDate: 1 })
 @index({ businessId: 1, clientId: 1, createdAt: -1 })
-@index({ businessId: 1, sourceRequestId: 1 }, { unique: true, sparse: true })
+/**
+ * Enforces one job per source request inside a business only when a request link exists.
+ *
+ * Example:
+ * - Manual jobs (sourceRequestId = null/undefined): unlimited
+ * - Accepted request jobs (sourceRequestId = ObjectId): unique per business
+ */
+@index(
+  { businessId: 1, sourceRequestId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      sourceRequestId: { $exists: true, $ne: null },
+    },
+  },
+)
 @modelOptions({ schemaOptions: { collection: 'jobs', timestamps: true } })
 export class Job {
   _id: Types.ObjectId;
@@ -44,6 +59,9 @@ export class Job {
 
   @prop({ enum: JobStatus, default: JobStatus.PENDING })
   status: JobStatus;
+
+  @prop()
+  startedAt?: Date;
 
   @prop()
   completedAt?: Date;

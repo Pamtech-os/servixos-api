@@ -1,13 +1,14 @@
 import { Module } from '@nestjs/common';
 import { BusinessModule } from '../business/business.module';
 import { ClientsModule } from '../clients/clients.module';
-import { ContractsRepository } from './contracts.repository';
-import { JobsController } from './jobs.controller';
-import { JobsRepository } from './jobs.repository';
-import { JobsService } from './jobs.service';
+import { InvoicesModule } from '../invoices/invoices.module';
+import { ContractsRepository } from './repositories/contracts.repository';
+import { JobsController } from './controllers/jobs.controller';
+import { JobsRepository } from './repositories/jobs.repository';
+import { JobsService } from './services/jobs.service';
 
 @Module({
-  imports: [BusinessModule, ClientsModule],
+  imports: [BusinessModule, ClientsModule, InvoicesModule],
   controllers: [JobsController],
   providers: [JobsRepository, ContractsRepository, JobsService],
   exports: [JobsRepository, JobsService],

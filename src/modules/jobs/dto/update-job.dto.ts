@@ -1,14 +1,12 @@
 import { Transform } from 'class-transformer';
 import {
   IsDateString,
-  IsEnum,
   IsNumber,
   IsOptional,
   IsString,
   Min,
 } from 'class-validator';
 import { JOBS_MESSAGES } from 'src/common/constants/messages/jobs.messages';
-import { JobStatus } from '../schemas/job.schema';
 
 export class UpdateJobDto {
   @IsOptional()
@@ -27,10 +25,6 @@ export class UpdateJobDto {
     { message: JOBS_MESSAGES.VALIDATION.SCHEDULED_DATE_INVALID },
   )
   scheduledDate?: string;
-
-  @IsOptional()
-  @IsEnum(JobStatus, { message: JOBS_MESSAGES.VALIDATION.STATUS_INVALID })
-  status?: JobStatus;
 
   @IsOptional()
   @IsString({ message: JOBS_MESSAGES.VALIDATION.LOCATION_INVALID })

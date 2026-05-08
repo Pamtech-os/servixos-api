@@ -1,10 +1,10 @@
 import { Agenda, Job } from 'agenda';
-import { EmailService } from '../../email/email.service';
+import { EmailService } from '../../email/services/email.service';
 import { clientCredentialsTemplate } from '../../email/templates/client-credentials.template';
 import { emailVerificationTemplate } from '../../email/templates/email-verification.template';
 import { passwordResetTemplate } from '../../email/templates/password-reset.template';
 import { welcomeTemplate } from '../../email/templates/welcome.template';
-import { JOBS } from '../agenda.constants';
+import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
   to: string;
