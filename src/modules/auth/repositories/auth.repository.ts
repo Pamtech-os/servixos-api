@@ -38,17 +38,25 @@ export class AuthRepository {
       .exec();
   }
 
-  async revokeRefreshToken(tokenHash: string): Promise<void> {
+  async revokeRefreshToken(
+    tokenHash: string,
+    session?: ClientSession,
+  ): Promise<void> {
     await this.refreshTokenModel.updateOne(
       { tokenHash },
       { $set: { revokedAt: new Date() } },
+      { session },
     );
   }
 
-  async revokeAllUserRefreshTokens(userId: Types.ObjectId): Promise<void> {
+  async revokeAllUserRefreshTokens(
+    userId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<void> {
     await this.refreshTokenModel.updateMany(
       { userId, revokedAt: null },
       { $set: { revokedAt: new Date() } },
+      { session },
     );
   }
 }

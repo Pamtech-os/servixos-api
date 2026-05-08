@@ -218,4 +218,102 @@ export class MessagingRepository {
     ]);
     return { data, total };
   }
+
+  async findConversationsForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<Conversation[]> {
+    return this.conversationModel
+      .find({ businessId, clientId })
+      .sort({ lastMessageAt: -1, updatedAt: -1 })
+      .lean<Conversation[]>()
+      .exec();
+  }
+
+  async findConversationByBusinessAndClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<Conversation | null> {
+    return this.conversationModel
+      .findOne({ businessId, clientId })
+      .lean<Conversation>()
+      .exec();
+  }
+
+  async markAllMessagesReadForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<void> {
+    await Promise.all([
+      this.messageModel.updateMany(
+        {
+          businessId,
+          clientId,
+          sender: MessageSender.BUSINESS,
+          status: { $ne: MessageStatus.READ },
+          deletedAt: null,
+        },
+        {
+          $set: {
+            status: MessageStatus.READ,
+            readAt: new Date(),
+          },
+        },
+      ),
+      this.conversationModel.updateOne(
+        { businessId, clientId },
+        { $set: { clientUnreadCount: 0 } },
+      ),
+    ]);
+  }
+
+  async findAttachmentsForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+    formatFilter: RegExp | null,
+    pagination: PaginationParams,
+    sort: Record<string, 1 | -1>,
+  ): Promise<{ data: Message[]; total: number }> {
+    const query: Record<string, unknown> = {
+      businessId,
+      clientId,
+      deletedAt: null,
+      attachmentUrl: { $exists: true, $ne: null },
+      fileName: { $exists: true, $ne: null },
+    };
+
+    if (formatFilter) {
+      query['fileName'] = { $regex: formatFilter };
+    }
+
+    const [data, total] = await Promise.all([
+      this.messageModel
+        .find(query)
+        .sort(sort)
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<Message[]>()
+        .exec(),
+      this.messageModel.countDocuments(query).exec(),
+    ]);
+
+    return { data, total };
+  }
+
+  async findAttachmentByIdForClient(
+    id: string,
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<Message | null> {
+    return this.messageModel
+      .findOne({
+        _id: id,
+        businessId,
+        clientId,
+        deletedAt: null,
+        attachmentUrl: { $exists: true, $ne: null },
+      })
+      .lean<Message>()
+      .exec();
+  }
 }

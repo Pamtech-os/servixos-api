@@ -14,6 +14,17 @@ interface ListInvoicesFilters {
   status?: InvoiceStatus;
 }
 
+interface ClientInvoicesFilters {
+  status?: InvoiceStatus;
+  from?: Date;
+  to?: Date;
+}
+
+interface ClientInvoicesSort {
+  field: 'dueDate' | 'totalAmount' | 'invoiceDate';
+  direction: 1 | -1;
+}
+
 export interface InvoiceListStatistics {
   totalCollected: number;
   outstanding: number;
@@ -221,6 +232,145 @@ export class InvoicesRepository {
       .exec();
 
     return this.sanitizeInvoices(data);
+  }
+
+  async findAllForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+    filters: ClientInvoicesFilters,
+    pagination: PaginationParams,
+    sort: ClientInvoicesSort,
+  ): Promise<{ data: Invoice[]; total: number }> {
+    const query: Record<string, unknown> = {
+      businessId,
+      clientId,
+      deletedAt: null,
+    };
+
+    if (filters.status) {
+      query['status'] = filters.status;
+    }
+
+    if (filters.from || filters.to) {
+      const dateFilter: Record<string, Date> = {};
+      if (filters.from) dateFilter['$gte'] = filters.from;
+      if (filters.to) dateFilter['$lte'] = filters.to;
+      query['invoiceDate'] = dateFilter;
+    }
+
+    const [data, total] = await Promise.all([
+      this.invoiceModel
+        .find(query)
+        .sort({
+          [sort.field]: sort.direction,
+          createdAt: -1,
+        })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<InvoiceWithMetadata[]>()
+        .exec(),
+      this.invoiceModel.countDocuments(query).exec(),
+    ]);
+
+    return { data: this.sanitizeInvoices(data), total };
+  }
+
+  async findByIdForClient(
+    id: string,
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<Invoice | null> {
+    const invoice = await this.invoiceModel
+      .findOne({
+        _id: id,
+        businessId,
+        clientId,
+        deletedAt: null,
+      })
+      .lean<InvoiceWithMetadata>()
+      .exec();
+
+    return this.sanitizeInvoice(invoice);
+  }
+
+  async getClientInvoiceSummary(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<{ outstandingBalance: number; totalPaid: number }> {
+    const [row] = await this.invoiceModel
+      .aggregate<{ outstandingBalance: number; totalPaid: number }>([
+        {
+          $match: {
+            businessId,
+            clientId,
+            deletedAt: null,
+          },
+        },
+        {
+          $project: {
+            status: 1,
+            totalAmount: 1,
+            amountPaid: 1,
+            outstandingAmount: {
+              $max: [{ $subtract: ['$totalAmount', '$amountPaid'] }, 0],
+            },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            outstandingBalance: {
+              $sum: {
+                $cond: [
+                  {
+                    $in: [
+                      '$status',
+                      [InvoiceStatus.PENDING, InvoiceStatus.PARTIAL],
+                    ],
+                  },
+                  '$outstandingAmount',
+                  0,
+                ],
+              },
+            },
+            totalPaid: {
+              $sum: {
+                $cond: [
+                  { $eq: ['$status', InvoiceStatus.PAID] },
+                  '$totalAmount',
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ])
+      .exec();
+
+    return {
+      outstandingBalance: toTwoDecimal(row?.outstandingBalance ?? 0),
+      totalPaid: toTwoDecimal(row?.totalPaid ?? 0),
+    };
+  }
+
+  async findPdfFilesForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+    limit = 200,
+  ): Promise<Invoice[]> {
+    const rows = await this.invoiceModel
+      .find({
+        businessId,
+        clientId,
+        deletedAt: null,
+        pdfUrl: { $exists: true, $ne: null },
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean<InvoiceWithMetadata[]>()
+      .exec();
+
+    return this.sanitizeInvoices(rows);
   }
 
   async getPaidSummaryByJob(

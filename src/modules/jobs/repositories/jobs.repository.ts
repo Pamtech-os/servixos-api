@@ -183,6 +183,24 @@ export class JobsRepository {
     return res.modifiedCount;
   }
 
+  async findByIds(
+    ids: Types.ObjectId[],
+    businessId: Types.ObjectId,
+  ): Promise<Job[]> {
+    if (ids.length === 0) return [];
+
+    const jobs = await this.jobModel
+      .find({
+        _id: { $in: ids },
+        businessId,
+        deletedAt: null,
+      })
+      .lean<JobWithMetadata[]>()
+      .exec();
+
+    return this.sanitizeJobs(jobs);
+  }
+
   private sanitizeJobs(jobs: JobWithMetadata[]): Job[] {
     return jobs.map((job) => this.sanitizeJob(job)!);
   }

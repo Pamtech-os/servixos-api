@@ -71,6 +71,16 @@ export class ClientsRepository {
       .exec();
   }
 
+  async findByUserId(
+    userId: Types.ObjectId,
+    businessId: Types.ObjectId,
+  ): Promise<Client | null> {
+    return this.clientModel
+      .findOne({ userId, businessId, deletedAt: null })
+      .lean<Client>()
+      .exec();
+  }
+
   async create(
     data: Partial<Client>,
     session?: ClientSession,
