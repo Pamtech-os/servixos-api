@@ -4,9 +4,9 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
-import { ClientsRepository } from 'src/modules/clients/clients.repository';
-import { ExportsService } from 'src/modules/exports/exports.service';
-import { JobsRepository } from 'src/modules/jobs/jobs.repository';
+import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
+import { ExportsService } from 'src/modules/exports/services/exports.service';
+import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';

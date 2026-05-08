@@ -1,14 +1,14 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { BusinessRepository } from 'src/modules/business/business.repository';
-import { RedisService } from 'src/modules/redis/redis.service';
-import { UsersRepository } from 'src/modules/users/users.repository';
-import { ActivityLogsRepository } from 'src/modules/activity-logs/activity-logs.repository';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { RedisService } from 'src/modules/redis/services/redis.service';
+import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { ActivityLogsRepository } from 'src/modules/activity-logs/repositories/activity-logs.repository';
 import {
   ActivityLogsService,
   CreateActivityLogParams,
-} from 'src/modules/activity-logs/activity-logs.service';
+} from 'src/modules/activity-logs/services/activity-logs.service';
 import {
   ActivityLog,
   LogCategory,

@@ -5,13 +5,13 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { BusinessRepository } from 'src/modules/business/business.repository';
-import { InvoicesRepository } from 'src/modules/invoices/invoices.repository';
+import { JOBS } from 'src/common/constants/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { InvoicesRepository } from 'src/modules/invoices/repositories/invoices.repository';
 import { InvoiceStatus } from 'src/modules/invoices/schemas/invoice.schema';
-import { PaymentsRepository } from 'src/modules/payments/payments.repository';
-import { PaymentsService } from 'src/modules/payments/payments.service';
+import { PaymentsRepository } from 'src/modules/payments/repositories/payments.repository';
+import { PaymentsService } from 'src/modules/payments/services/payments.service';
 import {
   Payment,
   PaymentMode,

@@ -1,5 +1,5 @@
 import { Global, Module } from '@nestjs/common';
-import { AgendaService } from './agenda.service';
+import { AgendaService } from './services/agenda.service';
 
 @Global()
 @Module({

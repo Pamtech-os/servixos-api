@@ -11,7 +11,7 @@ import { Types } from 'mongoose';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { TENANT_MESSAGES } from '../constants/messages/tenant.messages';
-import { BusinessRepository } from 'src/modules/business/business.repository';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { JwtUser } from '../decorators/current-user.decorator';
 import { SubscriptionStatus } from 'src/modules/business/schemas/business.schema';
 

@@ -6,13 +6,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { BusinessRepository } from 'src/modules/business/business.repository';
-import { ClientsRepository } from 'src/modules/clients/clients.repository';
-import { EmailService } from 'src/modules/email/email.service';
-import { InvoicesRepository } from 'src/modules/invoices/invoices.repository';
-import { InvoicesService } from 'src/modules/invoices/invoices.service';
+import { JOBS } from 'src/common/constants/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
+import { EmailService } from 'src/modules/email/services/email.service';
+import { InvoicesRepository } from 'src/modules/invoices/repositories/invoices.repository';
+import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
 import {
   Invoice,
   InvoiceStatus,

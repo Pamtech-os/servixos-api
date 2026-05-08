@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MailtrapClient } from 'mailtrap';
-import { IEmailBody } from '../email.types';
+import { IEmailBody } from '../types/email.types';
 import { IMailProvider } from './mail-provider.interface';
 
 @Injectable()

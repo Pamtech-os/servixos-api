@@ -4,9 +4,9 @@ import { v2 as cloudinary } from 'cloudinary';
 import { Types } from 'mongoose';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
-import { ClientsRepository } from 'src/modules/clients/clients.repository';
-import { MessagingRepository } from 'src/modules/messaging/messaging.repository';
-import { MessagingService } from 'src/modules/messaging/messaging.service';
+import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
+import { MessagingRepository } from 'src/modules/messaging/repositories/messaging.repository';
+import { MessagingService } from 'src/modules/messaging/services/messaging.service';
 import {
   MessageSender,
   MessageStatus,

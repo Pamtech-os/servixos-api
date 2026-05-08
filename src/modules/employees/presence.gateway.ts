@@ -8,8 +8,8 @@ import { Logger, UseFilters } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { WsAuthGuard } from 'src/common/guards/ws-auth.guard';
 import { WsExceptionFilter } from 'src/common/gateways/ws-exception.filter';
-import { RedisService } from '../redis/redis.service';
-import { EmployeesRepository } from './employees.repository';
+import { RedisService } from '../redis/services/redis.service';
+import { EmployeesRepository } from './repositories/employees.repository';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 
 export enum PresenceEvent {

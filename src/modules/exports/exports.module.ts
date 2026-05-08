@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common';
 import { ClientsModule } from '../clients/clients.module';
 import { JobsModule } from '../jobs/jobs.module';
-import { ExportsController } from './exports.controller';
-import { ExportsService } from './exports.service';
+import { ExportsController } from './controllers/exports.controller';
+import { ExportsService } from './services/exports.service';
 
 /*
  * ExportsModule owns cross-domain data assembly (e.g. client + jobs export).

@@ -11,8 +11,8 @@ import { Server } from 'http';
 import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
 import { signRequest } from '../helpers/sign-request';
-import { AgendaService } from 'src/modules/agenda/agenda.service';
-import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { JOBS_MESSAGES } from 'src/common/constants/messages/jobs.messages';
 import {
