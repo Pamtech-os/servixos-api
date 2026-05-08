@@ -6,13 +6,13 @@ import {
 import { Types } from 'mongoose';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import { AgendaService } from '../agenda/agenda.service';
-import { BusinessRepository } from '../business/business.repository';
-import { RedisService } from '../redis/redis.service';
-import { UsersRepository } from '../users/users.repository';
-import { ClientsRepository } from './clients.repository';
-import { ClientsService } from './clients.service';
-import { Client } from './schemas/client.schema';
+import { AgendaService } from 'src/modules/agenda/agenda.service';
+import { BusinessRepository } from 'src/modules/business/business.repository';
+import { ClientsRepository } from 'src/modules/clients/clients.repository';
+import { ClientsService } from 'src/modules/clients/clients.service';
+import { Client } from 'src/modules/clients/schemas/client.schema';
+import { RedisService } from 'src/modules/redis/redis.service';
+import { UsersRepository } from 'src/modules/users/users.repository';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';

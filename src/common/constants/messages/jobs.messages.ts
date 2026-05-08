@@ -2,6 +2,7 @@ export const JOBS_MESSAGES = {
   VALIDATION: {
     CLIENT_ID_REQUIRED: 'Client ID is required',
     CLIENT_ID_INVALID: 'Client ID must be a valid Mongo ID',
+    JOB_ID_INVALID: 'Job ID must be a valid Mongo ID',
     TITLE_REQUIRED: 'Job title is required',
     TITLE_INVALID: 'Job title must be a valid string',
     DESCRIPTION_INVALID: 'Description must be a valid string',
@@ -24,6 +25,8 @@ export const JOBS_MESSAGES = {
     RETRIEVED: 'Jobs retrieved successfully',
     FOUND: 'Job retrieved successfully',
     UPDATED: 'Job updated successfully',
+    STARTED: 'Job started successfully',
+    COMPLETED: 'Job completed successfully',
     DELETED: 'Job deleted successfully',
     CONTRACT_GENERATED: 'Contract generated successfully',
     CONTRACT_SENT: 'Contract sent to client successfully',
@@ -35,5 +38,13 @@ export const JOBS_MESSAGES = {
     CONTRACT_GEN_FAILED: 'Failed to generate contract PDF',
     CONTRACT_SEND_FAILED: 'Failed to send contract email',
     BULK_DELETE_FAILED: 'Failed to delete selected jobs',
+    START_NOT_ALLOWED:
+      'Only pending jobs can be started. Completed or cancelled jobs cannot be started.',
+    DEPOSIT_REQUIRED_TO_START:
+      'A minimum 50% deposit must be paid before this job can be started.',
+    PRICE_REQUIRED_TO_START:
+      'Set a valid job price before starting this job under the 50% upfront payment policy.',
+    COMPLETE_NOT_ALLOWED:
+      'Only in-progress jobs can be completed. Start the job before marking it as completed.',
   },
 } as const;

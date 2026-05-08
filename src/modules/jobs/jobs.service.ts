@@ -22,6 +22,7 @@ import { BusinessRepository } from '../business/business.repository';
 import { ClientsRepository } from '../clients/clients.repository';
 import { contractClientTemplate } from '../email/templates/contract-client.template';
 import { EmailService } from '../email/email.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { RedisService } from '../redis/redis.service';
 import { ContractsRepository } from './contracts.repository';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -90,6 +91,7 @@ export class JobsService implements OnModuleInit {
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
     private readonly emailService: EmailService,
+    private readonly invoicesService: InvoicesService,
   ) {
     this.appUrl = config.get<string>('APP_URL') ?? 'http://localhost:3000';
     this.clientAppUrl =
@@ -267,22 +269,10 @@ export class JobsService implements OnModuleInit {
         ...(dto.scheduledDate !== undefined && {
           scheduledDate: new Date(dto.scheduledDate),
         }),
-        ...(dto.status !== undefined && { status: dto.status }),
         ...(dto.location !== undefined && { location: dto.location }),
         ...(dto.price !== undefined && { price: dto.price }),
         ...(dto.notes !== undefined && { notes: dto.notes }),
       };
-
-      if (dto.status === JobStatus.COMPLETED) {
-        /*
-         * We store timestamps in UTC and keep the business timezone on the job.
-         * Example: completedAt=2026-05-03T10:00:00Z with timezone="Africa/Lagos"
-         * can be rendered as 11:00 local time in the client app.
-         */
-        update.completedAt = new Date();
-      } else if (dto.status) {
-        update.completedAt = undefined;
-      }
 
       const updated = await this.jobsRepository.updateById(id, bId, update);
       if (!updated) {
@@ -296,6 +286,154 @@ export class JobsService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `updateJob: unexpected error [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  async startJob(
+    id: string,
+    businessId: string,
+  ): Promise<
+    Job | NotFoundException | BadRequestException | InternalServerErrorException
+  > {
+    try {
+      const bId = new Types.ObjectId(businessId);
+      const existing = await this.jobsRepository.findById(id, bId);
+      if (!existing) {
+        return new NotFoundException(JOBS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      if (existing.status === JobStatus.IN_PROGRESS) {
+        return existing;
+      }
+      if (existing.status !== JobStatus.PENDING) {
+        return new BadRequestException(JOBS_MESSAGES.ERROR.START_NOT_ALLOWED);
+      }
+
+      const baselineAmount =
+        typeof existing.price === 'number' && existing.price > 0
+          ? existing.price
+          : null;
+      if (baselineAmount === null) {
+        return new BadRequestException(
+          JOBS_MESSAGES.ERROR.PRICE_REQUIRED_TO_START,
+        );
+      }
+
+      const paidSummary = await this.invoicesService.getPaidSummaryForJob(
+        businessId,
+        id,
+      );
+      if (paidSummary instanceof InternalServerErrorException) {
+        return paidSummary;
+      }
+
+      const minimumDeposit = toTwoDecimal(baselineAmount * 0.5);
+      if (paidSummary.amountPaid + 0.000001 < minimumDeposit) {
+        return new BadRequestException(
+          JOBS_MESSAGES.ERROR.DEPOSIT_REQUIRED_TO_START,
+        );
+      }
+
+      /*
+       * Compare-and-set transition for race safety:
+       * two devices can call "start" at nearly the same time; exactly one write
+       * moves the record from pending -> in_progress, and retries become safe reads.
+       */
+      const startedAt = this.toBusinessLocalTime(new Date(), existing.timezone);
+      const started = await this.jobsRepository.transitionStatusById(
+        id,
+        bId,
+        [JobStatus.PENDING],
+        {
+          status: JobStatus.IN_PROGRESS,
+          startedAt,
+          completedAt: undefined,
+        },
+      );
+
+      if (!started) {
+        const latest = await this.jobsRepository.findById(id, bId);
+        if (!latest) {
+          return new NotFoundException(JOBS_MESSAGES.ERROR.NOT_FOUND);
+        }
+        if (latest.status === JobStatus.IN_PROGRESS) {
+          return latest;
+        }
+        return new BadRequestException(JOBS_MESSAGES.ERROR.START_NOT_ALLOWED);
+      }
+
+      void this.invalidateJobsListCache(businessId);
+      await this.setCachedJobDetail(jobDetailCacheKey(businessId, id), started);
+      return started;
+    } catch (error) {
+      this.logger.error(
+        `startJob: failed [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  async completeJob(
+    id: string,
+    businessId: string,
+  ): Promise<
+    Job | NotFoundException | BadRequestException | InternalServerErrorException
+  > {
+    try {
+      const bId = new Types.ObjectId(businessId);
+      const existing = await this.jobsRepository.findById(id, bId);
+      if (!existing) {
+        return new NotFoundException(JOBS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      if (existing.status === JobStatus.COMPLETED) {
+        return existing;
+      }
+      if (existing.status !== JobStatus.IN_PROGRESS) {
+        return new BadRequestException(
+          JOBS_MESSAGES.ERROR.COMPLETE_NOT_ALLOWED,
+        );
+      }
+
+      const completedAt = this.toBusinessLocalTime(
+        new Date(),
+        existing.timezone,
+      );
+      const completed = await this.jobsRepository.transitionStatusById(
+        id,
+        bId,
+        [JobStatus.IN_PROGRESS],
+        {
+          status: JobStatus.COMPLETED,
+          startedAt: existing.startedAt ?? completedAt,
+          completedAt,
+        },
+      );
+
+      if (!completed) {
+        const latest = await this.jobsRepository.findById(id, bId);
+        if (!latest) {
+          return new NotFoundException(JOBS_MESSAGES.ERROR.NOT_FOUND);
+        }
+        if (latest.status === JobStatus.COMPLETED) {
+          return latest;
+        }
+        return new BadRequestException(
+          JOBS_MESSAGES.ERROR.COMPLETE_NOT_ALLOWED,
+        );
+      }
+
+      void this.invalidateJobsListCache(businessId);
+      await this.setCachedJobDetail(
+        jobDetailCacheKey(businessId, id),
+        completed,
+      );
+      return completed;
+    } catch (error) {
+      this.logger.error(
+        `completeJob: failed [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -920,6 +1058,43 @@ Requirements:
   private buildContractSigningUrl(contractId: string, jobId: string): string {
     const base = this.clientAppUrl.replace(/\/$/, '');
     return `${base}/contracts/sign/${contractId}?jobId=${jobId}`;
+  }
+
+  /**
+   * Converts UTC "now" to a Date whose UTC components match business-local time.
+   *
+   * Example:
+   * - utcDate: 2026-05-08T15:00:00.000Z
+   * - timezone: "America/New_York" (UTC-4)
+   * - stored Date becomes 2026-05-08T11:00:00.000Z
+   *
+   * This keeps operational timestamps aligned with each business's local clock.
+   */
+  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).formatToParts(utcDate);
+
+      const p: Record<string, string> = {};
+      for (const part of parts) {
+        p[part.type] = part.value;
+      }
+
+      const hour = p['hour'] === '24' ? '00' : p['hour'];
+      const localStr = `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}`;
+
+      return new Date(`${localStr}Z`);
+    } catch {
+      return utcDate;
+    }
   }
 
   private resolveJobsPagination(

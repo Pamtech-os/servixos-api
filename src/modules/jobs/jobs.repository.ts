@@ -96,7 +96,12 @@ export class JobsRepository {
   }
 
   async create(data: Partial<Job>, session?: ClientSession): Promise<Job> {
-    const [job] = await this.jobModel.create([data], { session });
+    const payload: Partial<Job> = { ...data };
+    if (payload.sourceRequestId == null) {
+      delete payload.sourceRequestId;
+    }
+
+    const [job] = await this.jobModel.create([payload], { session });
     return this.sanitizeJob(job.toObject() as JobWithMetadata) as Job;
   }
 
@@ -106,20 +111,7 @@ export class JobsRepository {
     update: Partial<Job>,
     session?: ClientSession,
   ): Promise<Job | null> {
-    const $set: Record<string, unknown> = {};
-    const $unset: Record<string, ''> = {};
-
-    for (const [key, value] of Object.entries(update)) {
-      if (value === undefined) {
-        $unset[key] = '';
-      } else {
-        $set[key] = value;
-      }
-    }
-
-    const op: Record<string, unknown> = {};
-    if (Object.keys($set).length) op['$set'] = $set;
-    if (Object.keys($unset).length) op['$unset'] = $unset;
+    const op = this.buildUpdateOperator(update);
 
     const updated = await this.jobModel
       .findOneAndUpdate({ _id: id, businessId, deletedAt: null }, op, {
@@ -130,6 +122,35 @@ export class JobsRepository {
       .exec();
 
     return this.sanitizeJob(updated);
+  }
+
+  async transitionStatusById(
+    id: string,
+    businessId: Types.ObjectId,
+    expectedStatuses: JobStatus[],
+    update: Partial<Job>,
+    session?: ClientSession,
+  ): Promise<Job | null> {
+    const op = this.buildUpdateOperator(update);
+
+    const transitioned = await this.jobModel
+      .findOneAndUpdate(
+        {
+          _id: id,
+          businessId,
+          deletedAt: null,
+          status: { $in: expectedStatuses },
+        },
+        op,
+        {
+          returnDocument: 'after',
+          session,
+        },
+      )
+      .lean<JobWithMetadata>()
+      .exec();
+
+    return this.sanitizeJob(transitioned);
   }
 
   async softDelete(
@@ -164,6 +185,25 @@ export class JobsRepository {
 
   private sanitizeJobs(jobs: JobWithMetadata[]): Job[] {
     return jobs.map((job) => this.sanitizeJob(job)!);
+  }
+
+  private buildUpdateOperator(update: Partial<Job>): Record<string, unknown> {
+    const $set: Record<string, unknown> = {};
+    const $unset: Record<string, ''> = {};
+
+    for (const [key, value] of Object.entries(update)) {
+      if (value === undefined) {
+        $unset[key] = '';
+      } else {
+        $set[key] = value;
+      }
+    }
+
+    const op: Record<string, unknown> = {};
+    if (Object.keys($set).length) op['$set'] = $set;
+    if (Object.keys($unset).length) op['$unset'] = $unset;
+
+    return op;
   }
 
   private sanitizeJob(job: JobWithMetadata | null): Job | null {

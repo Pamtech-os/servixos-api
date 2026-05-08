@@ -1,15 +1,18 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { BusinessRepository } from '../business/business.repository';
-import { RedisService } from '../redis/redis.service';
-import { UsersRepository } from '../users/users.repository';
-import { AgendaService } from '../agenda/agenda.service';
-import { ActivityLogsRepository } from './activity-logs.repository';
+import { AgendaService } from 'src/modules/agenda/agenda.service';
+import { BusinessRepository } from 'src/modules/business/business.repository';
+import { RedisService } from 'src/modules/redis/redis.service';
+import { UsersRepository } from 'src/modules/users/users.repository';
+import { ActivityLogsRepository } from 'src/modules/activity-logs/activity-logs.repository';
 import {
   ActivityLogsService,
   CreateActivityLogParams,
-} from './activity-logs.service';
-import { ActivityLog, LogCategory } from './schemas/activity-log.schema';
+} from 'src/modules/activity-logs/activity-logs.service';
+import {
+  ActivityLog,
+  LogCategory,
+} from 'src/modules/activity-logs/schemas/activity-log.schema';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const ACTOR_ID = '664abc000000000000000001';

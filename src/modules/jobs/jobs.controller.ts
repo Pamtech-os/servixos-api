@@ -16,6 +16,7 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { BulkDeleteJobsDto } from './dto/bulk-delete-jobs.dto';
 import { CreateJobDto } from './dto/create-job.dto';
+import { JobActionParamsDto } from './dto/job-action-params.dto';
 import { ListJobsDto } from './dto/list-jobs.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { JobsService } from './jobs.service';
@@ -73,6 +74,39 @@ export class JobsController {
 
     return {
       message: JOBS_MESSAGES.SUCCESS.UPDATED,
+      data: result,
+    };
+  }
+
+  @Patch(':id/start')
+  @HttpCode(HttpStatus.OK)
+  async startJob(
+    @CurrentUser() user: JwtUser,
+    @Param() params: JobActionParamsDto,
+  ) {
+    const result = await this.jobsService.startJob(params.id, user.businessId);
+    if (result instanceof HttpException) throw result;
+
+    return {
+      message: JOBS_MESSAGES.SUCCESS.STARTED,
+      data: result,
+    };
+  }
+
+  @Patch(':id/complete')
+  @HttpCode(HttpStatus.OK)
+  async completeJob(
+    @CurrentUser() user: JwtUser,
+    @Param() params: JobActionParamsDto,
+  ) {
+    const result = await this.jobsService.completeJob(
+      params.id,
+      user.businessId,
+    );
+    if (result instanceof HttpException) throw result;
+
+    return {
+      message: JOBS_MESSAGES.SUCCESS.COMPLETED,
       data: result,
     };
   }

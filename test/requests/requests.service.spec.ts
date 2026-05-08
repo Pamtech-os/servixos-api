@@ -8,18 +8,21 @@ import { Types } from 'mongoose';
 import { AI_MESSAGES } from 'src/common/constants/messages/ai.messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
-import { JOBS } from '../agenda/agenda.constants';
-import { AgendaService } from '../agenda/agenda.service';
-import { BusinessRepository } from '../business/business.repository';
-import { ClientsRepository } from '../clients/clients.repository';
-import { RedisService } from '../redis/redis.service';
-import { UsersRepository } from '../users/users.repository';
-import { RequestsRepository } from './requests.repository';
-import { ClientProvisioningJobData, RequestsService } from './requests.service';
+import { JOBS } from 'src/modules/agenda/agenda.constants';
+import { AgendaService } from 'src/modules/agenda/agenda.service';
+import { BusinessRepository } from 'src/modules/business/business.repository';
+import { ClientsRepository } from 'src/modules/clients/clients.repository';
+import { RedisService } from 'src/modules/redis/redis.service';
+import { RequestsRepository } from 'src/modules/requests/requests.repository';
+import {
+  ClientProvisioningJobData,
+  RequestsService,
+} from 'src/modules/requests/requests.service';
 import {
   RequestStatus,
   ServiceRequest,
-} from './schemas/service-request.schema';
+} from 'src/modules/requests/schemas/service-request.schema';
+import { UsersRepository } from 'src/modules/users/users.repository';
 
 describe('RequestsService', () => {
   let service: RequestsService;

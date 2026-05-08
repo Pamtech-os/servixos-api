@@ -1,15 +1,18 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { Types } from 'mongoose';
-import { v2 as cloudinary } from 'cloudinary';
 import { PassThrough } from 'stream';
-import { MessagingService } from './messaging.service';
-import { MessagingRepository } from './messaging.repository';
-import { ClientsRepository } from '../clients/clients.repository';
-import { MessageSender, MessageStatus } from './schemas/message.schema';
+import { v2 as cloudinary } from 'cloudinary';
+import { Types } from 'mongoose';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
-import type { Message } from './schemas/message.schema';
-import type { Conversation } from './schemas/conversation.schema';
+import { ClientsRepository } from 'src/modules/clients/clients.repository';
+import { MessagingRepository } from 'src/modules/messaging/messaging.repository';
+import { MessagingService } from 'src/modules/messaging/messaging.service';
+import {
+  MessageSender,
+  MessageStatus,
+} from 'src/modules/messaging/schemas/message.schema';
+import type { Conversation } from 'src/modules/messaging/schemas/conversation.schema';
+import type { Message } from 'src/modules/messaging/schemas/message.schema';
 
 jest.mock('cloudinary', () => ({
   v2: {
