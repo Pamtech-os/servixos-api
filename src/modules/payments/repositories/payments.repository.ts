@@ -200,6 +200,50 @@ export class PaymentsRepository {
     return !!row;
   }
 
+  async findAllForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+    pagination: PaginationParams,
+  ): Promise<{ data: Payment[]; total: number }> {
+    const query = {
+      businessId,
+      clientId,
+      deletedAt: null,
+    };
+
+    const [data, total] = await Promise.all([
+      this.paymentModel
+        .find(query)
+        .sort({ paymentDate: -1, createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<PaymentWithMetadata[]>()
+        .exec(),
+      this.paymentModel.countDocuments(query).exec(),
+    ]);
+
+    return { data: this.sanitizePayments(data), total };
+  }
+
+  async findRecentForClient(
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+    limit = 20,
+  ): Promise<Payment[]> {
+    const rows = await this.paymentModel
+      .find({
+        businessId,
+        clientId,
+        deletedAt: null,
+      })
+      .sort({ paymentDate: -1, createdAt: -1 })
+      .limit(limit)
+      .lean<PaymentWithMetadata[]>()
+      .exec();
+
+    return this.sanitizePayments(rows);
+  }
+
   private buildUpdateOperator(
     update: Partial<Payment>,
   ): Record<string, unknown> {

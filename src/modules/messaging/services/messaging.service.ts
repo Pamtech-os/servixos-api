@@ -286,4 +286,127 @@ export class MessagingService {
       createdAt: (message.createdAt ?? new Date()).toISOString(),
     };
   }
+
+  async listConversationsForClient(
+    businessId: string,
+    clientId: string,
+  ): Promise<Conversation[]> {
+    return this.messagingRepository.findConversationsForClient(
+      new Types.ObjectId(businessId),
+      new Types.ObjectId(clientId),
+    );
+  }
+
+  async listConversationMessagesForClient(
+    businessId: string,
+    clientId: string,
+    providerId: string,
+    pagination: PaginationParams,
+  ): Promise<{ data: Message[]; total: number }> {
+    if (providerId !== businessId) {
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.CLIENT_NOT_FOUND);
+    }
+
+    return this.messagingRepository.findMessages(
+      new Types.ObjectId(businessId),
+      new Types.ObjectId(clientId),
+      pagination,
+    );
+  }
+
+  async markConversationAsReadForClient(
+    businessId: string,
+    clientId: string,
+    providerId: string,
+  ): Promise<void> {
+    if (providerId !== businessId) {
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.CLIENT_NOT_FOUND);
+    }
+
+    await this.messagingRepository.markAllMessagesReadForClient(
+      new Types.ObjectId(businessId),
+      new Types.ObjectId(clientId),
+    );
+  }
+
+  async sendMessageFromClient(
+    businessId: string,
+    clientId: string,
+    providerId: string,
+    content: string,
+  ): Promise<MessagePayload> {
+    if (providerId !== businessId) {
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.CLIENT_NOT_FOUND);
+    }
+
+    const client = await this.clientsRepository.findById(
+      clientId,
+      new Types.ObjectId(businessId),
+    );
+    if (!client) {
+      throw new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+    }
+
+    const message = await this.createMessage({
+      businessId,
+      clientId,
+      sender: MessageSender.CLIENT,
+      senderName: client.name,
+      content,
+    });
+
+    return this.toPayload(message as Message & { createdAt?: Date });
+  }
+
+  async getConversationSummaryForClient(
+    businessId: string,
+    clientId: string,
+    providerId: string,
+  ): Promise<Conversation> {
+    if (providerId !== businessId) {
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.CLIENT_NOT_FOUND);
+    }
+
+    const conversation =
+      await this.messagingRepository.findConversationByBusinessAndClient(
+        new Types.ObjectId(businessId),
+        new Types.ObjectId(clientId),
+      );
+
+    if (!conversation) {
+      throw new NotFoundException(MESSAGING_MESSAGES.ERROR.CLIENT_NOT_FOUND);
+    }
+
+    return conversation;
+  }
+
+  async listAttachmentsForClient(
+    businessId: string,
+    clientId: string,
+    options: {
+      formatPattern: RegExp | null;
+      pagination: PaginationParams;
+      sort: Record<string, 1 | -1>;
+    },
+  ): Promise<{ data: Message[]; total: number }> {
+    return this.messagingRepository.findAttachmentsForClient(
+      new Types.ObjectId(businessId),
+      new Types.ObjectId(clientId),
+      options.formatPattern,
+      options.pagination,
+      options.sort,
+    );
+  }
+
+  async getAttachmentForClient(
+    businessId: string,
+    clientId: string,
+    messageId: string,
+  ): Promise<Message | null> {
+    return this.messagingRepository.findAttachmentByIdForClient(
+      messageId,
+      new Types.ObjectId(businessId),
+      new Types.ObjectId(clientId),
+    );
+  }
 }

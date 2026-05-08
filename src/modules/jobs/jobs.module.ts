@@ -11,6 +11,6 @@ import { JobsService } from './services/jobs.service';
   imports: [BusinessModule, ClientsModule, InvoicesModule],
   controllers: [JobsController],
   providers: [JobsRepository, ContractsRepository, JobsService],
-  exports: [JobsRepository, JobsService],
+  exports: [JobsRepository, ContractsRepository, JobsService],
 })
 export class JobsModule {}

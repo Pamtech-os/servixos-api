@@ -31,6 +31,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
 import { AuthModule } from './modules/auth/auth.module';
+import { ClientAuthModule } from './modules/client-auth/client-auth.module';
+import { ClientPortalModule } from './modules/client-portal/client-portal.module';
 import { UsersModule } from './modules/users/users.module';
 import { BusinessModule } from './modules/business/business.module';
 import { RolesModule } from './modules/roles/roles.module';
@@ -79,6 +81,8 @@ import { PaymentsModule } from './modules/payments/payments.module';
     EmailModule,
     AgendaModule,
     AuthModule,
+    ClientAuthModule,
+    ClientPortalModule,
     UsersModule,
     BusinessModule,
     RolesModule,
