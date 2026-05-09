@@ -1,0 +1,7 @@
+import { IsMongoId } from 'class-validator';
+import { TIME_TRACKING_MESSAGES } from 'src/common/constants/messages/time-tracking.messages';
+
+export class ClockStatusParamDto {
+  @IsMongoId({ message: TIME_TRACKING_MESSAGES.VALIDATION.EMPLOYEE_ID_INVALID })
+  employeeId: string;
+}

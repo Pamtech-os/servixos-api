@@ -3,6 +3,8 @@ import { Types } from 'mongoose';
 
 @index({ businessId: 1, email: 1 }, { unique: true })
 @index({ businessId: 1, fullName: 'text' })
+@index({ businessId: 1, userId: 1 })
+@index({ businessId: 1, createdAt: -1 })
 @modelOptions({ schemaOptions: { collection: 'employees', timestamps: true } })
 export class Employee {
   _id: Types.ObjectId;
