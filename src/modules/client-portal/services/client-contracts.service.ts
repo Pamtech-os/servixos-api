@@ -13,6 +13,7 @@ import { CLIENT_MESSAGES } from 'src/client/constants/messages';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { JobsRepository } from '../../jobs/repositories/jobs.repository';
@@ -204,7 +205,7 @@ export class ClientContractsService {
         );
       }
 
-      const signedAt = this.toBusinessLocalTime(
+      const signedAt = toBusinessLocalTime(
         new Date(),
         business?.timezone ?? 'UTC',
       );
@@ -357,41 +358,6 @@ export class ClientContractsService {
     if (!sentAt) return null;
 
     return new Date(sentAt.getTime() + 30 * 24 * 60 * 60 * 1000);
-  }
-
-  /**
-   * Converts UTC wall-clock into the business local timestamp before persistence.
-   *
-   * Example:
-   * - utcDate: 2026-05-08T15:00:00.000Z
-   * - timezone: America/New_York (UTC-4)
-   * - stored value: 2026-05-08T11:00:00.000Z
-   */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      return new Date(
-        `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}Z`,
-      );
-    } catch {
-      return utcDate;
-    }
   }
 
   private toMinorUnits(amount: number): number {

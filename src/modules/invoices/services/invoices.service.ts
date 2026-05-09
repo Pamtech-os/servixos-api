@@ -14,6 +14,7 @@ import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { INVOICES_MESSAGES } from 'src/common/constants/messages/invoices.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
@@ -457,7 +458,7 @@ export class InvoicesService implements OnModuleInit {
         attachments,
       });
 
-      const sentAt = this.toBusinessLocalTime(new Date(), ensured.timezone);
+      const sentAt = toBusinessLocalTime(new Date(), ensured.timezone);
       await this.invoicesRepository.updateById(
         ensured._id.toString(),
         new Types.ObjectId(payload.businessId),
@@ -738,40 +739,5 @@ export class InvoicesService implements OnModuleInit {
       name: client.name,
       email: client.email,
     };
-  }
-
-  /**
-   * Converts UTC to business-local wall-clock time while storing a Date.
-   *
-   * Example:
-   * - utcDate: 2026-05-08T15:00:00.000Z
-   * - timezone: America/New_York (UTC-4)
-   * - stored date: 2026-05-08T11:00:00.000Z
-   */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      return new Date(
-        `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}Z`,
-      );
-    } catch {
-      return utcDate;
-    }
   }
 }

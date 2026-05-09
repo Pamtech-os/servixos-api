@@ -15,6 +15,7 @@ import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { JOBS_MESSAGES } from 'src/common/constants/messages/jobs.messages';
 import { buildMeta } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
@@ -341,7 +342,7 @@ export class JobsService implements OnModuleInit {
        * two devices can call "start" at nearly the same time; exactly one write
        * moves the record from pending -> in_progress, and retries become safe reads.
        */
-      const startedAt = this.toBusinessLocalTime(new Date(), existing.timezone);
+      const startedAt = toBusinessLocalTime(new Date(), existing.timezone);
       const started = await this.jobsRepository.transitionStatusById(
         id,
         bId,
@@ -397,10 +398,7 @@ export class JobsService implements OnModuleInit {
         );
       }
 
-      const completedAt = this.toBusinessLocalTime(
-        new Date(),
-        existing.timezone,
-      );
+      const completedAt = toBusinessLocalTime(new Date(), existing.timezone);
       const completed = await this.jobsRepository.transitionStatusById(
         id,
         bId,
@@ -1070,33 +1068,6 @@ Requirements:
    *
    * This keeps operational timestamps aligned with each business's local clock.
    */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      const localStr = `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}`;
-
-      return new Date(`${localStr}Z`);
-    } catch {
-      return utcDate;
-    }
-  }
-
   private resolveJobsPagination(
     page?: number,
     limit?: number,

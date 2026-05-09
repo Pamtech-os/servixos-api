@@ -11,6 +11,7 @@ import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { TIME_TRACKING_MESSAGES } from 'src/common/constants/messages/time-tracking.messages';
 import { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { toTwoDecimal } from 'src/common/utils/number.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { UserRole } from 'src/modules/users/schemas/user.schema';
@@ -80,7 +81,7 @@ export class ClockService {
       }
 
       const timezone = await this.resolveBusinessTimezone(businessId);
-      const clockedInAt = this.toBusinessLocalTime(new Date(), timezone);
+      const clockedInAt = toBusinessLocalTime(new Date(), timezone);
 
       const created = await this.clockRecordsRepository.create({
         businessId: bId,
@@ -139,7 +140,7 @@ export class ClockService {
         );
       }
 
-      const clockedOutAt = this.toBusinessLocalTime(
+      const clockedOutAt = toBusinessLocalTime(
         new Date(),
         active.timezone ?? 'UTC',
       );
@@ -210,7 +211,7 @@ export class ClockService {
         );
       }
 
-      const breakStartedAt = this.toBusinessLocalTime(
+      const breakStartedAt = toBusinessLocalTime(
         new Date(),
         active.timezone ?? 'UTC',
       );
@@ -423,33 +424,6 @@ export class ClockService {
         CACHE_TTL.CLOCK_STATUS,
       )
       .catch(() => undefined);
-  }
-
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      return new Date(
-        `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}Z`,
-      );
-    } catch {
-      return utcDate;
-    }
   }
 
   private isDuplicateKeyError(error: unknown): boolean {

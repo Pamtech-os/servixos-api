@@ -1,267 +1,166 @@
-# CLAUDE.md — Project Intelligence for ServixOS API
+# CLAUDE.md
 
-## Project Overview
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-ServixOS API is a **multi-tenant SaaS backend** for service businesses (scheduling, invoicing, employee management, client chat). It is built with **NestJS**, **TypeScript**, **MongoDB** (Typegoose), **Redis** (ioredis), and **Socket.io** for real-time messaging. Validation uses `class-validator` + `class-transformer`. Tests run with **Jest** + `ts-jest`.
-
-## Key Commands
+## Commands
 
 ```bash
 # Development
-npm run start:dev       # Watch mode (recommended for local dev)
-npm run start:debug     # Debug mode with inspector
+npm run start:dev        # watch mode
+npm run build            # compile to dist/
 
-# Build & Production
-npm run build           # Compile TypeScript → dist/ (run before pushing)
-npm run start:prod      # Run compiled output
+# Linting & Formatting
+npm run lint             # ESLint with auto-fix
+npm run lint:check       # ESLint without fix
+npm run format           # Prettier write
 
 # Testing
-npm run test:all                      # Run unit + e2e tests (also runs on pre-commit)
-npm test                              # Unit tests only
-npm run test:e2e                      # E2E / integration tests only
-npm run test:watch                    # Unit tests in watch mode
-npm run test:cov                      # Unit tests with coverage report
-npm test -- --testPathPattern=auth    # Run a single unit test file by pattern
+npm test                 # unit tests (Jest)
+npm run test:watch       # unit tests in watch mode
+npm run test:e2e         # end-to-end tests
+npm run test:all         # unit + e2e
+npm run test:cov         # coverage report
 
-# Code Quality
-npm run lint            # Fix lint issues automatically
-npm run lint:check      # Check without fixing
-npm run format          # Prettier format
+# Run a single test file
+npx jest src/path/to/file.spec.ts
 ```
 
-## Project Structure
+**Pre-commit hook** runs `npm run lint`, restages, then `npm run test:all` — both must pass before a commit lands.
 
-```
-src/
-├── app.module.ts           # Root module — imports, global guards, interceptors
-├── main.ts                 # Bootstrap: CORS, pipes, WebSocket adapter, env validation
-├── config/                 # registerAs() config namespaces (jwt, redis, cloudinary, websocket…)
-├── common/
-│   ├── adapters/           # RedisIoAdapter (Socket.io ↔ Redis pub/sub)
-│   ├── constants/
-│   │   ├── messages/       # All user-facing strings — NEVER use inline strings
-│   │   ├── cache-ttl.constants.ts
-│   │   └── app.constants.ts
-│   ├── decorators/         # @Public(), @CurrentUser(), @Permissions(), @RequirePlan(), @Encrypt()
-│   ├── filters/            # AllExceptionsFilter, WsExceptionFilter
-│   ├── gateways/           # WsExceptionFilter
-│   ├── guards/             # HmacGuard, JwtAuthGuard, TenantGuard, PermissionsGuard, SubscriptionGuard, WsAuthGuard
-│   ├── interceptors/       # ResponseTransformInterceptor, EncryptionInterceptor, ActivityLogInterceptor
-│   ├── middleware/         # DecryptionMiddleware (disabled)
-│   └── utils/              # pagination.util, hash.util, app-logger
-└── modules/
-    ├── agenda/             # Background job scheduling (Agenda.js)
-    ├── auth/               # JWT auth, refresh tokens, PIN, email OTP
-    ├── business/           # Business/tenant schema + repository
-    ├── business-categories/
-    ├── clients/            # Client schema + repository
-    ├── email/              # Mailtrap / Mailjet transports
-    ├── employees/          # Employee schema, PresenceGateway (/presence namespace)
-    ├── jobs/               # Job scheduling per client
-    ├── messaging/          # MessagingGateway (/chat), MessagingService, REST history + upload
-    ├── redis/              # Global RedisService (ioredis wrapper)
-    ├── requests/           # Service request lifecycle + chat integration
-    ├── roles/              # RBAC roles + permissions
-    ├── security/
-    ├── users/              # User schema + repository
-    └── website/            # Business website generation
-```
+## Testing
 
-Each feature module follows this layout:
-
-```
-modules/<feature>/
-  *.module.ts       — NestJS module (imports, providers, exports)
-  *.service.ts      — Business logic
-  *.controller.ts   — HTTP handlers
-  *.repository.ts   — Data access (Typegoose, raw Mongoose queries)
-  schemas/          — Typegoose schema classes
-  dto/              — class-validator DTO classes
-```
-
-## Coding Standards
-
-### DTOs & Validation (CRITICAL)
-
-All request bodies, query strings, and params must be validated with **class-validator DTOs**. Do **not** accept raw `any` or unvalidated `req.body`.
-
-Key rules:
-
-- DTOs live in `modules/<feature>/dto/`
-- Use decorators from `class-validator` (`@IsString()`, `@IsMongoId()`, `@IsOptional()`, etc.)
-- Import `JwtUser` with `import type` when used only as a type in decorated parameters — required by `isolatedModules`
-- Return shapes come from `ResponseTransformInterceptor` — never return `{ success, statusCode }` manually
-- All error strings **must** come from `src/common/constants/messages/` — no inline error strings
-- Pagination: use `resolvePagination()` + `buildMeta()` from `src/common/utils/pagination.util.ts`
-
-Response shape (applied automatically by `ResponseTransformInterceptor`):
+All tests follow the **AAA pattern**:
 
 ```typescript
-{
-  success: boolean,
-  statusCode: number,
-  message: string,
-  data?: T,
-  meta?: { page, limit, total, totalPages }
-}
+it('should do something', async () => {
+  // Arrange — set up inputs, mocks, and expected values
+  const input = { ... };
+  mockService.method.mockResolvedValue(expected);
+
+  // Act — invoke the unit under test
+  const result = await service.method(input);
+
+  // Assert — verify outcome
+  expect(result).toEqual(expected);
+});
 ```
 
-### Schemas (Typegoose)
+- Each `it` block must have all three sections separated by a blank line and labeled with `// Arrange`, `// Act`, `// Assert`.
+- One behaviour per test — do not assert multiple unrelated things in a single `it`.
+- Mock at the boundary (repository/external service); never mock the module under test itself.
 
-Schemas use **class-based Typegoose decorators** — never plain Mongoose Schema objects.
+## Architecture
+
+ServixOS is a multi-tenant SaaS field service management API (NestJS + TypeScript + MongoDB/Typegoose + Redis + Socket.io).
+
+### Three portals, one codebase
+
+| Portal                     | Route prefix    | JWT audience | Guard                          |
+| -------------------------- | --------------- | ------------ | ------------------------------ |
+| Business (owner/employees) | `/api/…`        | `business`   | `JwtAuthGuard` + `TenantGuard` |
+| Client                     | `/client/api/…` | `client`     | `JwtClientAuthGuard`           |
+| Admin                      | `/admin/api/…`  | `admin`      | `JwtAdminAuthGuard`            |
+
+The same module can serve multiple portals — e.g. `invoices/` has both `invoices.controller.ts` (`/api/invoices`) and `client-invoices.controller.ts` (`/client/api/invoices`).
+
+### Request lifecycle (business portal)
+
+```
+HTTP → HmacGuard → JwtAuthGuard → TenantGuard → SubscriptionGuard → PermissionsGuard → Controller → Service → Repository → MongoDB
+                                                                                                         ↕ Redis cache
+Response ← ResponseTransformInterceptor ← EncryptionInterceptor (opt-in via @Encrypt())
+```
+
+`ActivityLogInterceptor` runs after `ResponseTransformInterceptor` and fires a fire-and-forget Agenda job on every mutating request (POST/PATCH/PUT/DELETE).
+
+### Repository pattern rules
+
+- **Controllers** call services only — never repositories directly.
+- **Services** own all business logic, cache reads/writes, and activity logging orchestration.
+- **Repositories** hold all Mongoose/Typegoose queries — no business logic.
+- All repository queries are scoped by `businessId` derived from the validated `X-Business-Id` header (never from user-supplied query params).
+
+### Standard response shape
+
+Every endpoint returns `ApiResponse<T>` (wrapped automatically by `ResponseTransformInterceptor`). Services return `ServiceResponse<T>` (`{ message, data?, meta?, statistics? }`); the interceptor adds `success` and `statusCode`.
 
 ```typescript
-@index({ businessId: 1, email: 1 }, { unique: true })
-@modelOptions({ schemaOptions: { collection: 'users', timestamps: true } })
-export class User {
-  _id: Types.ObjectId;   // declare explicitly so TypeScript sees it
+// Service returns:
+return { message: CLIENTS_MESSAGES.SUCCESS.RETRIEVED, data: clients, meta };
 
-  @prop({ required: true, lowercase: true, trim: true })
-  email: string;
-}
+// Wire response:
+{ success: true, statusCode: 200, message: "...", data: [...], meta: { page, limit, total, totalPages } }
 ```
 
-- Declare `_id: Types.ObjectId` explicitly on every schema class
-- Use compound indexes for multi-tenant uniqueness: `[businessId, email]`
-- Soft delete pattern: `deletedAt?: Date` — always filter `{ deletedAt: null }` in queries
-- `timestamps: true` adds `createdAt` / `updatedAt` automatically — do not redeclare them
+### Multi-tenancy
 
-### Multi-Tenancy (CRITICAL)
+Every protected business-portal request must include the `X-Business-Id` header. `TenantGuard` validates it is a valid ObjectId, the business exists and is active, and it matches the `businessId` claim in the JWT — preventing all cross-tenant access.
 
-Every authenticated request carries a `x-business-id` header validated by `TenantGuard`.
+### Subscription gating
 
-- All DB queries **must** be scoped by `businessId`
-- Never return data from a different tenant, even if the document ID is valid
-- `JwtUser.businessId` is the source of truth — never trust a `businessId` from the request body for auth decisions
+`@RequirePlan('feature.key')` on a controller method activates `SubscriptionGuard`, which checks `business.subscription.features[]` against `FEATURE_PLAN_MAP` in `src/common/constants/subscription-features.constants.ts`. Plans: `starter < growth < pro`.
 
-### Guard Order
+### Payload encryption (opt-in)
 
-Guards run globally in this order on protected routes:
+Apply `@Encrypt()` to a controller method to activate AES-256-GCM for that route's request body and response `data`. Only use on sensitive routes (auth credentials, payments, PII). Most routes are plain JSON.
 
-1. `HmacGuard` — validates `x-signature` on client-portal requests
-2. `JwtAuthGuard` — validates Bearer token; skips routes with `@Public()`
-3. `TenantGuard` — validates `x-business-id` matches JWT claim and business is active
+### Caching pattern
 
-Per-route guards applied as decorators:
+Redis is managed via `RedisService` (ioredis, not `@nestjs/cache-manager`). All TTL values live in `src/common/constants/cache-ttl.constants.ts`. Use cache-busting version counters (e.g. `CLIENTS_LIST_VERSION`) for list caches rather than individual key invalidation.
 
-4. `PermissionsGuard` — enforces `@Permissions(...perms)`
-5. `SubscriptionGuard` — enforces `@RequirePlan(feature)`
+### Background jobs
 
-### WebSocket (Socket.io)
+`AgendaService` wraps the `agenda` library (MongoDB-backed job queue). Job names are typed via `AgendaJobName` enum in `src/common/constants/agenda.constants.ts`. Use `agendaService.now(JOBS.XXX, data)` for fire-and-forget tasks (email sends, activity log writes).
 
-Two namespaces:
+### WebSocket
 
-| Namespace | Purpose |
-|-----------|---------|
-| `/chat` | Business ↔ client real-time messaging |
-| `/presence` | Team online status widget |
+Two Socket.io namespaces: `/chat` (business team messaging) and `/client-messages` (client portal). The adapter is `RedisIoAdapter` for horizontal scaling. WebSocket auth uses `WsAuthGuard` / `WsJwtClientAuthGuard`.
 
-Authentication via `WsAuthGuard.authenticate(socket)` — called manually inside `handleConnection`. It verifies the JWT from `socket.handshake.auth.token`, cross-checks `businessId`, and attaches `{ userId, businessId, userRole, senderName }` to `socket.data`.
+## Key conventions
 
-Room naming: `{businessId}:{clientId}`. Both business and client sockets join the same room.
+**Error messages** — always reference constants, never inline strings:
 
-All WS event names come from the `WsEvent` enum in `src/modules/messaging/messaging.events.ts` — never use raw strings.
+```typescript
+return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+```
 
-### Redis & Caching
+Message files live in `src/common/constants/messages/`.
 
-- All cache TTLs come from `CACHE_TTL` in `src/common/constants/cache-ttl.constants.ts`
-- `RedisService` (global module) wraps ioredis — use its typed methods (`get`, `set`, `hset`, `sadd`, etc.)
-- Cache keys follow the pattern: `<domain>:<scope>:<id>` (e.g., `requests:list:version:${businessId}`)
-- List caches use a version counter for invalidation via `incr` — do not delete individual list keys
+**Typegoose schemas** — always pass `PropType.ARRAY` as second arg to `@prop()` for array fields:
 
-### Testing
+```typescript
+@prop({ type: () => String, default: [] }, PropType.ARRAY)
+services: string[];
+```
 
-Tests use **Jest** with `ts-jest`. Unit tests are co-located (`*.spec.ts`). E2E tests live in `test/`.
+**Sub-documents** — define typed classes with `@prop()` fields; never use `Schema.Types.Mixed`.
 
-Key rules:
+**Type-only imports** — use `import type { JwtUser }` when only used as a TypeScript type annotation.
 
-- New features and bug fixes **must** include tests
-- Unit tests: `src/modules/<feature>/*.spec.ts` — run with `npm test`
-- E2E / integration tests: `test/*.e2e-spec.ts` — run with `npm run test:e2e`
-- Both suites run together via `npm run test:all`, which is enforced on **pre-commit**
-- Integration tests must use a real MongoDB instance via TestContainers — no mocking the DB
-- Mock all external services (Anthropic AI, Cloudinary, Agenda, email providers) — never call real services in tests
-- Follow AAA pattern (Arrange, Act, Assert)
-- Test names: `"should [expected behaviour] when [condition]"`
-- Do not share mutable state between tests
+**Phone validation** — use `@IsPhoneNumber(undefined, { message: '...' })` (not `null`).
 
-### Commits
+**JSDoc** — add a short `/** ... */` JSDoc comment on all public service methods.
 
-- Use conventional commits: `<type>(optional scope): <description>`
-- Types: `feat`, `fix`, `docs`, `refactor`, `chore`, `test`, `perf`, `style`, `build`, `ci`, `revert`
-- Imperative mood (`"add"` not `"added"`), no period at end, under 100 characters
-- No `console.log()` in committed code — use `AppLogger` or `Logger` from `@nestjs/common`
+**Comments** — use sparingly; only comment code whose intent is non-obvious. Exception: whenever an algorithm or data structure is used, add a brief comment naming the type and explaining why it was chosen (e.g. `// Hash map for O(1) lookups by employeeId`).
 
-### Code Style
+**Performance** — always write time- and space-efficient code. Prefer O(n) over O(n²), avoid redundant iterations, use appropriate data structures (Map/Set for O(1) lookup, sorted structures for binary search, etc.). Annotate algorithmic choices with Big-O complexity where it aids understanding.
 
-- ESLint + Prettier handle formatting — run `npm run lint` before committing
-- No `any` types — use proper types or `unknown` with a type guard
-- TypeScript strict mode is enabled — `npm run build` must pass before pushing
-- Always import `JwtUser` with `import type` in files that use it only as a parameter type
+**Pagination** — use `buildMeta()` from `src/common/utils/pagination.util.ts` for `PaginationMeta`; accept `PaginationDto` (page/limit) in list endpoints.
 
-## PR Review Checklist
+**Timezone** — use `toBusinessLocalTime(utcDate, timezone)` from `src/common/utils/timezone.util.ts` when converting stored UTC dates to business-local wall-clock times for display.
 
-When reviewing a pull request, verify ALL of the following:
+**Decorators available on controllers:**
 
-### 1. The PR Fixes What It Claims
+- `@CurrentUser()` → `JwtUser` (business portal)
+- `@CurrentClient()` → client portal equivalent
+- `@Public()` → bypasses all auth guards
+- `@Permissions('resource.action')` → RBAC check
+- `@RequirePlan('feature.key')` → subscription gate
+- `@Encrypt()` → AES-256-GCM on request/response
 
-- Changes actually address the described problem
-- Fix is correct and complete — not a band-aid
-- No regressions to existing functionality
-- Edge cases are handled (not found, already actioned, wrong tenant, etc.)
+## Environment variables
 
-### 2. DTOs & Validation
+Required at startup (server exits if any are missing — see `main.ts`):
+`DATABASE_URL`, `JWT_SECRET`, `JWT_EXPIRES_IN`, `ENCRYPTION_SECRET`, `API_KEY`, `ALLOWED_ORIGINS`, `APP_URL`, `CLIENT_URL`, `CLOUDINARY_*`, `MAILJET_*`, `MAIL_FROM_*`, `ANTHROPIC_API_KEY`, `AI_WEBSITE_MODEL`, `AI_PRICING_MODEL`, `DEFAULT_CURRENCY`, `UPLOAD_SIZE_LIMIT`, `MAILTRAP_TOKEN`, `MAIL_PROVIDER`
 
-- Request bodies use class-validator DTOs — no raw `any` bodies
-- `@IsMongoId()` used for ObjectId params, `@IsOptional()` for optional fields
-- `JwtUser` imported with `import type` when used only as a decorated parameter type
-- Error strings come from `src/common/constants/messages/` — no inline strings
-- Pagination uses `resolvePagination()` + `buildMeta()`
-
-### 3. Multi-Tenancy
-
-- Every DB query is scoped by `businessId` from the JWT — not from the request body
-- No cross-tenant data leakage possible through the new code
-- Soft-delete filter (`deletedAt: null`) applied to all queries
-
-### 4. Schemas
-
-- New Typegoose schema classes declare `_id: Types.ObjectId` explicitly
-- Compound indexes added for uniqueness constraints involving `businessId`
-- `timestamps: true` used — `createdAt`/`updatedAt` not redeclared
-- Soft delete uses `deletedAt?: Date` pattern consistently
-
-### 5. WebSocket (if applicable)
-
-- Event names use `WsEvent` enum constants — no raw strings
-- `WsAuthGuard.authenticate(socket)` called inside `handleConnection`
-- Errors emitted via `WsExceptionFilter` — no silent swallowing
-- Room names follow `{businessId}:{clientId}` convention
-
-### 6. Testing
-
-- Bug fixes include a test that would have caught the bug
-- New features include unit tests and/or E2E tests
-- Tests follow AAA pattern with descriptive names
-- External services (AI, Cloudinary, Agenda, email) are mocked
-- No shared mutable state between tests
-
-### 7. Type Safety
-
-- No new `any` types introduced without justification
-- `npm run build` passes — TypeScript strict mode
-- No `as` type assertions used to silence errors — fix the underlying type
-
-### 8. Code Quality
-
-- No `console.log()` statements
-- No dead code, commented-out code, or TODO comments without an issue reference
-- `ResponseTransformInterceptor` wraps all responses automatically — handlers return `{ message, data, meta }` shapes only
-- Error handling is correct — 404 for not found, 400 for bad input, 403 for tenant/permission violations
-- No security issues (injection, auth bypass, cross-tenant leaks)
-
-### 9. Commit Hygiene
-
-- Commits follow conventional commit format
-- Commit messages are descriptive and accurate
-- Logical, atomic commits — not one massive commit or dozens of tiny fixups
+Optional: `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD`, `REDIS_TLS`, `NODE_ENV`, `PORT`

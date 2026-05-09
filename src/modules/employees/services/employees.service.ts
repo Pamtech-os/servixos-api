@@ -13,6 +13,7 @@ import { JOBS } from 'src/common/constants/agenda.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { EMPLOYEES_MESSAGES } from 'src/common/constants/messages/employees.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { hashValue } from 'src/common/utils/hash.util';
 import { EmployeeInvitationJobData } from 'src/modules/agenda/jobs/email.jobs';
@@ -169,7 +170,7 @@ export class EmployeesService {
       }
 
       const business = await this.businessRepository.findById(businessId);
-      const nowLocal = this.toBusinessLocalTime(
+      const nowLocal = toBusinessLocalTime(
         new Date(),
         business?.timezone ?? 'UTC',
       );
@@ -521,10 +522,10 @@ export class EmployeesService {
       const timezone = business?.timezone ?? 'UTC';
 
       const startDate = dto.startDate
-        ? this.toBusinessLocalTime(new Date(dto.startDate), timezone)
+        ? toBusinessLocalTime(new Date(dto.startDate), timezone)
         : undefined;
       const endDate = dto.endDate
-        ? this.toBusinessLocalTime(new Date(dto.endDate), timezone)
+        ? toBusinessLocalTime(new Date(dto.endDate), timezone)
         : undefined;
 
       if (startDate && endDate && startDate > endDate) {
@@ -631,33 +632,6 @@ export class EmployeesService {
    * - timezone: America/New_York (UTC-4)
    * - stored: 2026-05-08T11:00:00.000Z
    */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      return new Date(
-        `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}Z`,
-      );
-    } catch {
-      return utcDate;
-    }
-  }
-
   private async getListVersion(businessId: string): Promise<string> {
     try {
       const key = employeesListVersionKey(businessId);
