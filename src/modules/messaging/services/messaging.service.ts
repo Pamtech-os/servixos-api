@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { Message, MessageSender } from '../schemas/message.schema';
 import { Conversation } from '../schemas/conversation.schema';
 import { MessagePayload } from '../messaging.events';
 import { PaginationParams } from 'src/common/utils/pagination.util';
+import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
 import { ClientsRepository } from '../../clients/repositories/clients.repository';
@@ -22,6 +24,16 @@ export interface UploadResult {
   mimeType: string;
   fileName: string;
   fileSize: number;
+}
+
+interface PaginatedMessages {
+  data: Message[];
+  total: number;
+}
+
+interface PaginatedConversations {
+  data: Conversation[];
+  total: number;
 }
 
 const ALLOWED_MIME_TYPES = new Set([
@@ -126,18 +138,28 @@ export class MessagingService {
     businessId: string,
     clientId: string,
     pagination: PaginationParams,
-  ): Promise<{ data: Message[]; total: number }> {
-    const client = await this.clientsRepository.findById(
-      clientId,
-      new Types.ObjectId(businessId),
-    );
-    if (!client) throw new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
+  ): Promise<
+    PaginatedMessages | NotFoundException | InternalServerErrorException
+  > {
+    try {
+      const client = await this.clientsRepository.findById(
+        clientId,
+        new Types.ObjectId(businessId),
+      );
+      if (!client)
+        return new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND);
 
-    return this.messagingRepository.findMessages(
-      new Types.ObjectId(businessId),
-      new Types.ObjectId(clientId),
-      pagination,
-    );
+      return this.messagingRepository.findMessages(
+        new Types.ObjectId(businessId),
+        new Types.ObjectId(clientId),
+        pagination,
+      );
+    } catch (error) {
+      this.logger.error(
+        `getMessages: failed [businessId=${businessId}, clientId=${clientId}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
   }
 
   async getRecentMessages(
@@ -224,64 +246,80 @@ export class MessagingService {
   async getConversations(
     businessId: string,
     pagination: PaginationParams,
-  ): Promise<{ data: Conversation[]; total: number }> {
-    return this.messagingRepository.findConversations(
-      new Types.ObjectId(businessId),
-      pagination,
-    );
+  ): Promise<PaginatedConversations | InternalServerErrorException> {
+    try {
+      return this.messagingRepository.findConversations(
+        new Types.ObjectId(businessId),
+        pagination,
+      );
+    } catch (error) {
+      this.logger.error(
+        `getConversations: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
   }
 
   async uploadAttachment(
     file: Express.Multer.File,
     businessId: string,
-  ): Promise<UploadResult> {
-    if (file.size > MAX_FILE_SIZE) {
-      this.logger.warn(
-        `uploadAttachment: attachment too large [businessId=${businessId}, size=${file.size}]`,
+  ): Promise<
+    UploadResult | BadRequestException | InternalServerErrorException
+  > {
+    try {
+      if (file.size > MAX_FILE_SIZE) {
+        this.logger.warn(
+          `uploadAttachment: attachment too large [businessId=${businessId}, size=${file.size}]`,
+        );
+        return new BadRequestException(
+          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE,
+        );
+      }
+
+      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
+        this.logger.warn(
+          `uploadAttachment: invalid attachment type [businessId=${businessId}, mimeType=${file.mimetype}]`,
+        );
+        return new BadRequestException(
+          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
+        );
+      }
+
+      return await new Promise<UploadResult>((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          {
+            folder: `attachments/${businessId}`,
+            resource_type: 'auto',
+            use_filename: true,
+            unique_filename: true,
+          },
+          (error, result) => {
+            if (error || !result) {
+              this.logger.error(
+                `uploadAttachment: cloudinary upload failed [businessId=${businessId}]: ${error?.message ?? 'No upload response'}`,
+              );
+              return reject(
+                new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
+              );
+            }
+            resolve({
+              attachmentUrl: result.secure_url,
+              publicId: result.public_id,
+              mimeType: file.mimetype,
+              fileName: file.originalname,
+              fileSize: file.size,
+            });
+          },
+        );
+
+        Readable.from(file.buffer).pipe(uploadStream);
+      });
+    } catch (error) {
+      this.logger.error(
+        `uploadAttachment: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
-      throw new BadRequestException(
-        MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE,
-      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
-
-    if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      this.logger.warn(
-        `uploadAttachment: invalid attachment type [businessId=${businessId}, mimeType=${file.mimetype}]`,
-      );
-      throw new BadRequestException(
-        MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
-      );
-    }
-
-    return new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: `attachments/${businessId}`,
-          resource_type: 'auto',
-          use_filename: true,
-          unique_filename: true,
-        },
-        (error, result) => {
-          if (error || !result) {
-            this.logger.error(
-              `uploadAttachment: cloudinary upload failed [businessId=${businessId}]: ${error?.message ?? 'No upload response'}`,
-            );
-            return reject(
-              new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
-            );
-          }
-          resolve({
-            attachmentUrl: result.secure_url,
-            publicId: result.public_id,
-            mimeType: file.mimetype,
-            fileName: file.originalname,
-            fileSize: file.size,
-          });
-        },
-      );
-
-      Readable.from(file.buffer).pipe(uploadStream);
-    });
   }
 
   toPayload(message: Message & { createdAt?: Date }): MessagePayload {

@@ -13,6 +13,7 @@ import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { PAYMENTS_MESSAGES } from 'src/common/constants/messages/payments.messages';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
@@ -82,7 +83,7 @@ export class PaymentsService implements OnModuleInit {
 
       const asOf =
         business && !business.deletedAt
-          ? this.toBusinessLocalTime(new Date(), business.timezone)
+          ? toBusinessLocalTime(new Date(), business.timezone)
           : new Date();
       const statistics = await this.invoicesRepository.getReceivablesStatistics(
         bId,
@@ -143,7 +144,7 @@ export class PaymentsService implements OnModuleInit {
         return new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
       }
 
-      const localPaymentDate = this.toBusinessLocalTime(
+      const localPaymentDate = toBusinessLocalTime(
         new Date(dto.paymentDate),
         business.timezone,
       );
@@ -322,7 +323,7 @@ export class PaymentsService implements OnModuleInit {
               : undefined,
           }),
           ...(dto.paymentDate !== undefined && {
-            paymentDate: this.toBusinessLocalTime(
+            paymentDate: toBusinessLocalTime(
               new Date(dto.paymentDate),
               business.timezone,
             ),
@@ -461,7 +462,7 @@ export class PaymentsService implements OnModuleInit {
         businessId: bId,
         invoiceId: invoice._id,
         clientId: invoice.clientId,
-        paymentDate: this.toBusinessLocalTime(new Date(), invoice.timezone),
+        paymentDate: toBusinessLocalTime(new Date(), invoice.timezone),
         paymentMode: PaymentMode.BANK_TRANSFER,
         amount: autoAmount,
         status: PaymentStatus.COMPLETED,
@@ -522,30 +523,4 @@ export class PaymentsService implements OnModuleInit {
    * - timezone: America/New_York (UTC-4)
    * - stored: 2026-05-08T11:00:00.000Z
    */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      return new Date(
-        `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}Z`,
-      );
-    } catch {
-      return utcDate;
-    }
-  }
 }

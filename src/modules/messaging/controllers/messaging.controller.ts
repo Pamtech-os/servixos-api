@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  HttpException,
   Param,
   Post,
   Query,
@@ -25,14 +26,15 @@ export class MessagingController {
     @Query() query: ListMessagesDto,
   ) {
     const pagination = resolvePagination(query.page, query.limit);
-    const { data, total } = await this.messagingService.getConversations(
+    const result = await this.messagingService.getConversations(
       user.businessId,
       pagination,
     );
+    if (result instanceof HttpException) throw result;
     return {
       message: MESSAGING_MESSAGES.SUCCESS.MESSAGES_RETRIEVED,
-      data,
-      meta: buildMeta(pagination.page, pagination.limit, total),
+      data: result.data,
+      meta: buildMeta(pagination.page, pagination.limit, result.total),
     };
   }
 
@@ -43,15 +45,16 @@ export class MessagingController {
     @Query() query: ListMessagesDto,
   ) {
     const pagination = resolvePagination(query.page, query.limit);
-    const { data, total } = await this.messagingService.getMessages(
+    const result = await this.messagingService.getMessages(
       user.businessId,
       clientId,
       pagination,
     );
+    if (result instanceof HttpException) throw result;
     return {
       message: MESSAGING_MESSAGES.SUCCESS.MESSAGES_RETRIEVED,
-      data,
-      meta: buildMeta(pagination.page, pagination.limit, total),
+      data: result.data,
+      meta: buildMeta(pagination.page, pagination.limit, result.total),
     };
   }
 
@@ -67,6 +70,7 @@ export class MessagingController {
       file,
       user.businessId,
     );
+    if (result instanceof HttpException) throw result;
     return {
       message: MESSAGING_MESSAGES.SUCCESS.MESSAGE_SENT,
       data: result,

@@ -26,6 +26,7 @@ import {
   hashToken,
   hashValue,
 } from 'src/common/utils/hash.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AuthRepository } from '../repositories/auth.repository';
 import { LoginData, TokenData } from '../types/auth.types';
 import { LoginDto } from '../dto/login.dto';
@@ -103,10 +104,16 @@ export class AuthService {
       const userId = user._id;
       const businessId = user.businessId!;
 
+      const business = await this.businessRepository.findById(
+        businessId.toString(),
+      );
+      const timezone = business?.timezone ?? 'UTC';
+
       const { accessToken, refreshToken } = await this.issueSession(
         userId,
         businessId,
         user.userRole,
+        timezone,
       );
 
       void this.agendaService.now(JOBS.ACTIVITY_LOG_WRITE, {
@@ -606,6 +613,7 @@ export class AuthService {
         user._id,
         businessId,
         user.userRole,
+        dto.timezone ?? 'UTC',
       );
 
       await this.agendaService
@@ -737,6 +745,7 @@ export class AuthService {
     userId: Types.ObjectId,
     businessId: Types.ObjectId,
     userRole: UserRole,
+    timezone = 'UTC',
   ): Promise<{ accessToken: string; refreshToken: string }> {
     const accessToken = this.signAccessToken({
       sub: userId.toString(),
@@ -752,7 +761,9 @@ export class AuthService {
     );
 
     await Promise.all([
-      this.usersRepository.updateById(userId, { lastLoginAt: new Date() }),
+      this.usersRepository.updateById(userId, {
+        lastLoginAt: toBusinessLocalTime(new Date(), timezone),
+      }),
       this.authRepository.createRefreshToken({
         userId,
         businessId,

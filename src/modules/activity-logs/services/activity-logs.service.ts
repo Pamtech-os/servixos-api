@@ -10,6 +10,7 @@ import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-l
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { BusinessRepository } from '../../business/repositories/business.repository';
@@ -105,7 +106,7 @@ export class ActivityLogsService implements OnModuleInit {
         ? await this.fetchGeoFromIp(params.ipAddress)
         : {};
 
-      const timestamp = this.toBusinessLocalTime(new Date(), timezone);
+      const timestamp = toBusinessLocalTime(new Date(), timezone);
 
       await this.activityLogsRepository.create({
         businessId: new Types.ObjectId(params.businessId),
@@ -238,34 +239,6 @@ export class ActivityLogsService implements OnModuleInit {
    * Example: UTC 15:00, timezone "America/New_York" (UTC-5) → stored as 10:00Z.
    * This lets consumers display the stored value directly without further conversion.
    */
-  private toBusinessLocalTime(utcDate: Date, timezone: string): Date {
-    try {
-      const parts = new Intl.DateTimeFormat('en-US', {
-        timeZone: timezone,
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: false,
-      }).formatToParts(utcDate);
-
-      const p: Record<string, string> = {};
-      for (const part of parts) {
-        p[part.type] = part.value;
-      }
-
-      // hour '24' is returned for midnight in some locales — normalise to '00'
-      const hour = p['hour'] === '24' ? '00' : p['hour'];
-      const localStr = `${p['year']}-${p['month']}-${p['day']}T${hour}:${p['minute']}:${p['second']}`;
-
-      return new Date(localStr + 'Z');
-    } catch {
-      return utcDate;
-    }
-  }
-
   /**
    * Looks up approximate city and country for a given IP address using ip-api.com.
    * Silently returns empty on failure or timeout — never throws.

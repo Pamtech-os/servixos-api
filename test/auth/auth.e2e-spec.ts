@@ -20,6 +20,7 @@ import { WebsiteConfig } from 'src/modules/website/schemas/website-config.schema
 import { RefreshToken } from 'src/modules/auth/schemas/refresh-token.schema';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { hashToken } from 'src/common/utils/hash.util';
+import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 
 // ─── Response shape ───────────────────────────────────────────────────────────
@@ -1238,8 +1239,13 @@ describe('Auth (integration)', () => {
       });
 
       it('updates lastLoginAt on the user document', async () => {
-        // Arrange
-        const before = Date.now();
+        // Arrange — lastLoginAt is stored as business-local wall-clock time,
+        // so the lower bound must be in the same frame of reference.
+        const SEEDED_BUSINESS_TIMEZONE = 'America/New_York';
+        const before = toBusinessLocalTime(
+          new Date(),
+          SEEDED_BUSINESS_TIMEZONE,
+        ).getTime();
         // Act
         await authed(
           req().post('/api/auth/login').send({

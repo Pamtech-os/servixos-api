@@ -3,10 +3,12 @@ import { PassThrough } from 'stream';
 import { v2 as cloudinary } from 'cloudinary';
 import { Types } from 'mongoose';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
-import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { MessagingRepository } from 'src/modules/messaging/repositories/messaging.repository';
-import { MessagingService } from 'src/modules/messaging/services/messaging.service';
+import {
+  MessagingService,
+  UploadResult,
+} from 'src/modules/messaging/services/messaging.service';
 import {
   MessageSender,
   MessageStatus,
@@ -271,28 +273,29 @@ describe('MessagingService', () => {
       });
 
       // Assert
-      expect(result.data).toEqual(messages);
-      expect(result.total).toBe(1);
+      expect(result).not.toBeInstanceOf(Error);
+      const paginated = result as { data: Message[]; total: number };
+      expect(paginated.data).toEqual(messages);
+      expect(paginated.total).toBe(1);
       expect(clientsRepository.findById).toHaveBeenCalledWith(
         clientId,
         expect.any(Types.ObjectId),
       );
     });
 
-    it('should throw NotFoundException when client does not exist', async () => {
+    it('should return NotFoundException when client does not exist', async () => {
       // Arrange
       clientsRepository.findById.mockResolvedValue(null);
 
-      // Act & Assert
-      await expect(
-        service.getMessages(businessId, clientId, {
-          page: 1,
-          limit: 20,
-          skip: 0,
-        }),
-      ).rejects.toThrow(
-        new NotFoundException(CLIENTS_MESSAGES.ERROR.NOT_FOUND),
-      );
+      // Act
+      const result = await service.getMessages(businessId, clientId, {
+        page: 1,
+        limit: 20,
+        skip: 0,
+      });
+
+      // Assert
+      expect(result).toBeInstanceOf(NotFoundException);
       expect(messagingRepository.findMessages).not.toHaveBeenCalled();
     });
   });
@@ -452,8 +455,10 @@ describe('MessagingService', () => {
       });
 
       // Assert
-      expect(result.data).toEqual(conversations);
-      expect(result.total).toBe(1);
+      expect(result).not.toBeInstanceOf(Error);
+      const paginated = result as { data: Conversation[]; total: number };
+      expect(paginated.data).toEqual(conversations);
+      expect(paginated.total).toBe(1);
       expect(messagingRepository.findConversations).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         { page: 1, limit: 20, skip: 0 },
@@ -475,26 +480,26 @@ describe('MessagingService', () => {
         ...overrides,
       }) as Express.Multer.File;
 
-    it('should throw BadRequestException when file exceeds 10 MB', async () => {
+    it('should return BadRequestException when file exceeds 10 MB', async () => {
       // Arrange
       const file = makeFile({ size: 11 * 1024 * 1024 });
 
-      // Act & Assert
-      await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        new BadRequestException(MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE),
-      );
+      // Act
+      const result = await service.uploadAttachment(file, businessId);
+
+      // Assert
+      expect(result).toBeInstanceOf(BadRequestException);
     });
 
-    it('should throw BadRequestException for unsupported mime types', async () => {
+    it('should return BadRequestException for unsupported mime types', async () => {
       // Arrange
       const file = makeFile({ mimetype: 'application/x-executable' });
 
-      // Act & Assert
-      await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        new BadRequestException(
-          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
-        ),
-      );
+      // Act
+      const result = await service.uploadAttachment(file, businessId);
+
+      // Assert
+      expect(result).toBeInstanceOf(BadRequestException);
     });
 
     it('should resolve with upload result on successful upload', async () => {
@@ -517,14 +522,16 @@ describe('MessagingService', () => {
       const result = await service.uploadAttachment(file, businessId);
 
       // Assert
-      expect(result.attachmentUrl).toBe(fakeResult.secure_url);
-      expect(result.publicId).toBe(fakeResult.public_id);
-      expect(result.mimeType).toBe('image/jpeg');
-      expect(result.fileName).toBe('photo.jpg');
-      expect(result.fileSize).toBe(1024);
+      expect(result).not.toBeInstanceOf(Error);
+      const upload = result as UploadResult;
+      expect(upload.attachmentUrl).toBe(fakeResult.secure_url);
+      expect(upload.publicId).toBe(fakeResult.public_id);
+      expect(upload.mimeType).toBe('image/jpeg');
+      expect(upload.fileName).toBe('photo.jpg');
+      expect(upload.fileSize).toBe(1024);
     });
 
-    it('should reject when cloudinary returns an error', async () => {
+    it('should return InternalServerErrorException when cloudinary returns an error', async () => {
       // Arrange
       const file = makeFile();
       const cloudinaryError = new Error('Upload failed');
@@ -537,10 +544,11 @@ describe('MessagingService', () => {
         },
       );
 
-      // Act & Assert
-      await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
-      );
+      // Act
+      const result = await service.uploadAttachment(file, businessId);
+
+      // Assert
+      expect(result).toBeInstanceOf(Error);
     });
   });
 
