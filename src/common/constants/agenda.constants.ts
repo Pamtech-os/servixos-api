@@ -3,6 +3,7 @@ export const JOBS = {
   EMAIL_PASSWORD_RESET: 'email:password-reset',
   EMAIL_WELCOME: 'email:welcome',
   EMAIL_CLIENT_CREDENTIALS: 'email:client-credentials',
+  EMAIL_EMPLOYEE_INVITATION: 'email:employee-invitation',
   REQUEST_CLIENT_PROVISION: 'request:client-provision',
   REQUEST_ACCEPTED_CREATE_JOB: 'request:accepted:create-job',
   JOB_CONTRACT_SEND: 'job:contract:send',

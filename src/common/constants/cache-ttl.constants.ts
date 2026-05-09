@@ -31,6 +31,7 @@ export const CACHE_TTL = {
 
   // Team
   EMPLOYEES_LIST: 60 * 5, // 5 minutes
+  EMPLOYEES_LIST_VERSION: 60 * 60 * 24 * 30, // 30 days (cache-busting marker)
   EMPLOYEE_DETAIL: 60 * 5, // 5 minutes
   SCHEDULES_WEEK: 60 * 3, // 3 minutes
   CLOCK_STATUS: 30, // 30 seconds (near real-time)
