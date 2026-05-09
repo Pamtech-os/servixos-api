@@ -68,7 +68,7 @@ export const CLIENT_MESSAGES = {
     },
     ERROR: {
       CONVERSATION_NOT_FOUND: 'Conversation not found',
-      WS_UNAUTHORIZED: 'Unauthorized',
+      WS_UNAUTHORIZED: 'Authentication required',
       WS_ROOM_NOT_FOUND:
         'You must join the conversation room before sending messages',
     },

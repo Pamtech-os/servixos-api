@@ -35,9 +35,9 @@ export const JOBS_MESSAGES = {
     NOT_FOUND: 'Job not found',
     CLIENT_NOT_FOUND: 'Assigned client not found',
     CONTRACT_NOT_FOUND: 'Contract not found for this job',
-    CONTRACT_GEN_FAILED: 'Failed to generate contract PDF',
-    CONTRACT_SEND_FAILED: 'Failed to send contract email',
-    BULK_DELETE_FAILED: 'Failed to delete selected jobs',
+    CONTRACT_GEN_FAILED: 'Unable to generate contract document at this time',
+    CONTRACT_SEND_FAILED: 'Unable to send contract communication at this time',
+    BULK_DELETE_FAILED: 'Unable to delete selected jobs at this time',
     START_NOT_ALLOWED:
       'Only pending jobs can be started. Completed or cancelled jobs cannot be started.',
     DEPOSIT_REQUIRED_TO_START:

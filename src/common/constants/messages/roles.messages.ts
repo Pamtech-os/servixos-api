@@ -1,6 +1,6 @@
 export const ROLES_MESSAGES = {
   VALIDATION: {
-    ID_INVALID: 'Role ID must be a valid ObjectId',
+    ID_INVALID: 'Invalid role identifier format',
     NAME_REQUIRED: 'Role name is required',
     NAME_INVALID: 'Role name must be a valid string',
     NAME_TOO_LONG: 'Role name must not exceed 60 characters',
@@ -17,11 +17,12 @@ export const ROLES_MESSAGES = {
     PERMISSIONS_RETRIEVED: 'Permissions retrieved successfully',
   },
   ERROR: {
-    NOT_FOUND: 'Role not found',
-    NAME_TAKEN: 'A role with this name already exists',
-    DEFAULT_ROLE: 'Default roles cannot be deleted',
-    ROLE_IN_USE: 'Role cannot be deleted while users are still assigned to it',
-    OWNER_ROLE_PERMISSIONS: 'Permissions of the owner role cannot be modified',
-    INVALID_PERMISSION: 'One or more permissions are invalid',
+    NOT_FOUND: 'Requested role was not found',
+    NAME_TAKEN: 'Role name is already in use',
+    DEFAULT_ROLE: 'System roles are protected and cannot be deleted',
+    ROLE_IN_USE: 'Role is assigned to active users and cannot be deleted',
+    OWNER_ROLE_PERMISSIONS:
+      'Owner role permissions are protected and cannot be modified',
+    INVALID_PERMISSION: 'One or more permission values are not allowed',
   },
 } as const;

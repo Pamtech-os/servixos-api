@@ -83,7 +83,12 @@ export class RolesService {
         new Types.ObjectId(businessId),
       );
 
-      if (!role) return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
+      if (!role) {
+        this.logger.warn(
+          `getRole: role not found [id=${id}, businessId=${businessId}]`,
+        );
+        return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
+      }
 
       return this.sanitizeRole(role);
     } catch (error) {
@@ -128,11 +133,17 @@ export class RolesService {
 
       if (!name) {
         await session.abortTransaction();
+        this.logger.warn(
+          `createRole: empty role name rejected [businessId=${businessId}]`,
+        );
         return new BadRequestException(ROLES_MESSAGES.VALIDATION.NAME_REQUIRED);
       }
 
       if (!this.hasOnlyValidPermissions(dto.permissions)) {
         await session.abortTransaction();
+        this.logger.warn(
+          `createRole: invalid permission payload rejected [businessId=${businessId}]`,
+        );
         return new BadRequestException(ROLES_MESSAGES.ERROR.INVALID_PERMISSION);
       }
 
@@ -143,6 +154,9 @@ export class RolesService {
 
       if (existing) {
         await session.abortTransaction();
+        this.logger.warn(
+          `createRole: duplicate role name rejected [businessId=${businessId}, roleName=${name}]`,
+        );
         return new ConflictException(ROLES_MESSAGES.ERROR.NAME_TAKEN);
       }
 
@@ -165,6 +179,9 @@ export class RolesService {
       await this.abortQuietly(session);
 
       if (this.isDuplicateKeyError(error)) {
+        this.logger.warn(
+          `createRole: duplicate key conflict [businessId=${businessId}]`,
+        );
         return new ConflictException(ROLES_MESSAGES.ERROR.NAME_TAKEN);
       }
 
@@ -198,11 +215,17 @@ export class RolesService {
 
       if (!existing) {
         await session.abortTransaction();
+        this.logger.warn(
+          `updateRole: role not found [id=${id}, businessId=${businessId}]`,
+        );
         return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
       }
 
       if (this.isOwnerRole(existing) && dto.permissions !== undefined) {
         await session.abortTransaction();
+        this.logger.warn(
+          `updateRole: owner role permission change blocked [id=${id}, businessId=${businessId}]`,
+        );
         return new ForbiddenException(
           ROLES_MESSAGES.ERROR.OWNER_ROLE_PERMISSIONS,
         );
@@ -214,6 +237,9 @@ export class RolesService {
         const name = this.normalizeRoleName(dto.name);
         if (!name) {
           await session.abortTransaction();
+          this.logger.warn(
+            `updateRole: empty role name rejected [id=${id}, businessId=${businessId}]`,
+          );
           return new BadRequestException(
             ROLES_MESSAGES.VALIDATION.NAME_REQUIRED,
           );
@@ -227,6 +253,9 @@ export class RolesService {
 
         if (duplicate) {
           await session.abortTransaction();
+          this.logger.warn(
+            `updateRole: duplicate role name rejected [id=${id}, businessId=${businessId}, roleName=${name}]`,
+          );
           return new ConflictException(ROLES_MESSAGES.ERROR.NAME_TAKEN);
         }
 
@@ -236,6 +265,9 @@ export class RolesService {
       if (dto.permissions !== undefined) {
         if (!this.hasOnlyValidPermissions(dto.permissions)) {
           await session.abortTransaction();
+          this.logger.warn(
+            `updateRole: invalid permission payload rejected [id=${id}, businessId=${businessId}]`,
+          );
           return new BadRequestException(
             ROLES_MESSAGES.ERROR.INVALID_PERMISSION,
           );
@@ -252,6 +284,9 @@ export class RolesService {
 
       if (!updated) {
         await session.abortTransaction();
+        this.logger.warn(
+          `updateRole: role missing at update commit stage [id=${id}, businessId=${businessId}]`,
+        );
         return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
       }
 
@@ -263,6 +298,9 @@ export class RolesService {
       await this.abortQuietly(session);
 
       if (this.isDuplicateKeyError(error)) {
+        this.logger.warn(
+          `updateRole: duplicate key conflict [id=${id}, businessId=${businessId}]`,
+        );
         return new ConflictException(ROLES_MESSAGES.ERROR.NAME_TAKEN);
       }
 
@@ -294,11 +332,17 @@ export class RolesService {
 
       if (!existing) {
         await session.abortTransaction();
+        this.logger.warn(
+          `deleteRole: role not found [id=${id}, businessId=${businessId}]`,
+        );
         return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
       }
 
       if (this.isSystemRole(existing)) {
         await session.abortTransaction();
+        this.logger.warn(
+          `deleteRole: system role deletion blocked [id=${id}, businessId=${businessId}]`,
+        );
         return new ForbiddenException(ROLES_MESSAGES.ERROR.DEFAULT_ROLE);
       }
 
@@ -309,12 +353,18 @@ export class RolesService {
       );
       if (attachedUsersCount > 0) {
         await session.abortTransaction();
+        this.logger.warn(
+          `deleteRole: role-in-use deletion blocked [id=${id}, businessId=${businessId}, attachedUsers=${attachedUsersCount}]`,
+        );
         return new ConflictException(ROLES_MESSAGES.ERROR.ROLE_IN_USE);
       }
 
       const deleted = await this.rolesRepository.deleteById(id, bId, session);
       if (!deleted) {
         await session.abortTransaction();
+        this.logger.warn(
+          `deleteRole: role missing at delete commit stage [id=${id}, businessId=${businessId}]`,
+        );
         return new NotFoundException(ROLES_MESSAGES.ERROR.NOT_FOUND);
       }
 

@@ -8,6 +8,9 @@ export const MESSAGING_MESSAGES = {
   },
   ERROR: {
     CLIENT_NOT_FOUND: 'Client not found for messaging',
-    SEND_FAILED: 'Failed to send message',
+    SEND_FAILED: 'Unable to process message request at this time',
+    ATTACHMENT_TOO_LARGE: 'Attachment size exceeds the allowed limit',
+    ATTACHMENT_TYPE_INVALID: 'Attachment file type is not allowed',
+    ATTACHMENT_UPLOAD_FAILED: 'Unable to upload attachment at this time',
   },
 } as const;

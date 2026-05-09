@@ -7,7 +7,7 @@ export const FILES_MESSAGES = {
   },
   ERROR: {
     NOT_FOUND: 'File not found',
-    UPLOAD_FAILED: 'File upload failed',
+    UPLOAD_FAILED: 'Unable to upload file at this time',
     INVALID_TYPE: 'Invalid file type. Only PDF and DOC files are allowed',
     SIZE_EXCEEDED: 'File size exceeds the 10 MB limit',
   },

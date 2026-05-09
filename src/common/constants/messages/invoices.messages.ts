@@ -34,10 +34,10 @@ export const INVOICES_MESSAGES = {
     NOT_FOUND: 'Invoice not found',
     NUMBER_TAKEN: 'Invoice number already exists',
     CLIENT_NOT_FOUND: 'Assigned client not found',
-    PDF_FAILED: 'Failed to generate invoice PDF',
-    SEND_FAILED: 'Failed to send invoice email',
+    PDF_FAILED: 'Unable to generate invoice document at this time',
+    SEND_FAILED: 'Unable to send invoice communication at this time',
     NO_LINE_ITEMS: 'Invoice must have at least one line item',
     AUTO_PAYMENT_CREATE_FAILED:
-      'Failed to create linked payment record for paid invoice',
+      'Unable to create linked payment record at this time',
   },
 } as const;

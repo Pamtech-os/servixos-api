@@ -10,7 +10,7 @@ export const SETTINGS_MESSAGES = {
   },
   ERROR: {
     PROFILE_NOT_FOUND: 'Business profile not found',
-    ACCOUNT_DELETE_FAILED: 'Failed to delete account',
+    ACCOUNT_DELETE_FAILED: 'Unable to delete account at this time',
     INVALID_PASSWORD: 'Incorrect password',
   },
 } as const;

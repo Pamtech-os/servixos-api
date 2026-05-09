@@ -24,6 +24,8 @@ jest.mock('cloudinary', () => ({
 
 describe('MessagingService', () => {
   let service: MessagingService;
+  let loggerWarnSpy: jest.SpyInstance;
+  let loggerErrorSpy: jest.SpyInstance;
   let messagingRepository: {
     upsertConversation: jest.Mock;
     createMessage: jest.Mock;
@@ -91,6 +93,25 @@ describe('MessagingService', () => {
       messagingRepository as unknown as MessagingRepository,
       clientsRepository as unknown as ClientsRepository,
     );
+
+    loggerWarnSpy = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+
+    loggerErrorSpy = jest
+      .spyOn(
+        (service as unknown as { logger: { error: () => void } }).logger,
+        'error',
+      )
+      .mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    loggerWarnSpy.mockRestore();
+    loggerErrorSpy.mockRestore();
   });
 
   // ─── createMessage ─────────────────────────────────────────────────────────
@@ -460,7 +481,7 @@ describe('MessagingService', () => {
 
       // Act & Assert
       await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        new BadRequestException('File size exceeds the 10 MB limit'),
+        new BadRequestException(MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE),
       );
     });
 
@@ -470,7 +491,9 @@ describe('MessagingService', () => {
 
       // Act & Assert
       await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        new BadRequestException('File type not supported'),
+        new BadRequestException(
+          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
+        ),
       );
     });
 
@@ -516,7 +539,7 @@ describe('MessagingService', () => {
 
       // Act & Assert
       await expect(service.uploadAttachment(file, businessId)).rejects.toThrow(
-        cloudinaryError,
+        new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
       );
     });
   });

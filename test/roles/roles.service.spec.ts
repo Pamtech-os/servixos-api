@@ -44,6 +44,7 @@ describe('RolesService', () => {
     abortTransaction: jest.Mock;
     endSession: jest.Mock;
   };
+  let loggerWarnSpy: jest.SpyInstance;
   let loggerErrorSpy: jest.SpyInstance;
 
   const baseRole: Role = {
@@ -91,6 +92,13 @@ describe('RolesService', () => {
       usersRepository as unknown as UsersRepository,
     );
 
+    loggerWarnSpy = jest
+      .spyOn(
+        (service as unknown as { logger: { warn: () => void } }).logger,
+        'warn',
+      )
+      .mockImplementation(() => undefined);
+
     loggerErrorSpy = jest
       .spyOn(
         (service as unknown as { logger: { error: () => void } }).logger,
@@ -100,6 +108,7 @@ describe('RolesService', () => {
   });
 
   afterEach(() => {
+    loggerWarnSpy.mockRestore();
     loggerErrorSpy.mockRestore();
   });
 
