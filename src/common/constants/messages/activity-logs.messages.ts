@@ -3,7 +3,7 @@ export const ACTIVITY_LOGS_MESSAGES = {
     RETRIEVED: 'Activity logs retrieved successfully',
   },
   ERROR: {
-    RETRIEVAL_FAILED: 'Failed to retrieve activity logs',
+    RETRIEVAL_FAILED: 'Unable to retrieve activity logs at this time',
   },
   VALIDATION: {
     CATEGORY_INVALID: 'Category must be a valid log category',

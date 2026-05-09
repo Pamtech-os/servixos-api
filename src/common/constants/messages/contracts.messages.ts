@@ -10,7 +10,7 @@ export const CONTRACTS_MESSAGES = {
   },
   ERROR: {
     NOT_FOUND: 'Contract not found',
-    PDF_FAILED: 'Failed to generate contract PDF',
-    SEND_FAILED: 'Failed to send contract email',
+    PDF_FAILED: 'Unable to generate contract document at this time',
+    SEND_FAILED: 'Unable to send contract communication at this time',
   },
 } as const;

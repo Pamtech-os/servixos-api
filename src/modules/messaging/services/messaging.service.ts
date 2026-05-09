@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -41,6 +42,8 @@ const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
 @Injectable()
 export class MessagingService {
+  private readonly logger = new Logger(MessagingService.name);
+
   constructor(
     private readonly messagingRepository: MessagingRepository,
     private readonly clientsRepository: ClientsRepository,
@@ -233,11 +236,21 @@ export class MessagingService {
     businessId: string,
   ): Promise<UploadResult> {
     if (file.size > MAX_FILE_SIZE) {
-      throw new BadRequestException('File size exceeds the 10 MB limit');
+      this.logger.warn(
+        `uploadAttachment: attachment too large [businessId=${businessId}, size=${file.size}]`,
+      );
+      throw new BadRequestException(
+        MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE,
+      );
     }
 
     if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-      throw new BadRequestException('File type not supported');
+      this.logger.warn(
+        `uploadAttachment: invalid attachment type [businessId=${businessId}, mimeType=${file.mimetype}]`,
+      );
+      throw new BadRequestException(
+        MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
+      );
     }
 
     return new Promise((resolve, reject) => {
@@ -249,8 +262,14 @@ export class MessagingService {
           unique_filename: true,
         },
         (error, result) => {
-          if (error || !result)
-            return reject(new Error(error?.message ?? 'Upload failed'));
+          if (error || !result) {
+            this.logger.error(
+              `uploadAttachment: cloudinary upload failed [businessId=${businessId}]: ${error?.message ?? 'No upload response'}`,
+            );
+            return reject(
+              new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
+            );
+          }
           resolve({
             attachmentUrl: result.secure_url,
             publicId: result.public_id,

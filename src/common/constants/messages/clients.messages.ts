@@ -10,8 +10,8 @@ export const CLIENTS_MESSAGES = {
   ERROR: {
     NOT_FOUND: 'Client not found',
     EMAIL_TAKEN: 'Unable to create client with the provided details',
-    DELETE_FAILED: 'Failed to delete client',
-    EXPORT_FAILED: 'Failed to export client data',
+    DELETE_FAILED: 'Unable to delete client at this time',
+    EXPORT_FAILED: 'Unable to export client data at this time',
   },
   VALIDATION: {
     NAME_REQUIRED: 'Client name is required',

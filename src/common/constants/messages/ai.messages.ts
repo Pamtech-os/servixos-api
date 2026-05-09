@@ -6,8 +6,8 @@ export const AI_MESSAGES = {
     WEBSITE_GENERATION_STARTED: 'Website generation started',
   },
   ERROR: {
-    INSIGHTS_FAILED: 'Failed to generate AI insights',
-    ADVISOR_FAILED: 'AI advisor encountered an error',
+    INSIGHTS_FAILED: 'Unable to generate AI insights at this time',
+    ADVISOR_FAILED: 'Unable to process AI advisor request at this time',
     AI_UNAVAILABLE: 'AI service is currently unavailable',
     RATE_LIMITED: 'Too many AI requests. Please wait before trying again',
   },

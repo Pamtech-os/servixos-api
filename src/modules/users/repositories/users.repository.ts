@@ -64,4 +64,20 @@ export class UsersRepository {
       .lean<User>()
       .exec();
   }
+
+  async countByRoleId(
+    businessId: Types.ObjectId,
+    roleId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<number> {
+    const query = this.userModel.countDocuments({
+      businessId,
+      roleId,
+      deletedAt: null,
+    });
+
+    if (session) query.session(session);
+
+    return query.exec();
+  }
 }

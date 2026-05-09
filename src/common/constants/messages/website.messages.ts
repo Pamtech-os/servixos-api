@@ -9,8 +9,8 @@ export const WEBSITE_MESSAGES = {
   },
   ERROR: {
     NOT_FOUND: 'Website configuration not found',
-    PUBLISH_FAILED: 'Failed to publish website',
+    PUBLISH_FAILED: 'Unable to publish website at this time',
     INVALID_FIELD: 'Invalid booking form field configuration',
-    BOOKING_FAILED: 'Failed to submit booking request',
+    BOOKING_FAILED: 'Unable to submit booking request at this time',
   },
 } as const;

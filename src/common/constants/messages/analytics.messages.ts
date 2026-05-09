@@ -5,6 +5,6 @@ export const ANALYTICS_MESSAGES = {
     JOBS_RETRIEVED: 'Jobs analytics retrieved successfully',
   },
   ERROR: {
-    RETRIEVAL_FAILED: 'Failed to retrieve analytics data',
+    RETRIEVAL_FAILED: 'Unable to retrieve analytics data at this time',
   },
 } as const;
