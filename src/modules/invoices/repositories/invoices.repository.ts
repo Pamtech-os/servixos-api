@@ -165,6 +165,10 @@ export class InvoicesRepository {
     return this.sanitizeInvoice(invoice);
   }
 
+  async countByBusiness(businessId: Types.ObjectId): Promise<number> {
+    return this.invoiceModel.countDocuments({ businessId }).exec();
+  }
+
   async findByInvoiceNumber(
     businessId: Types.ObjectId,
     invoiceNumber: string,

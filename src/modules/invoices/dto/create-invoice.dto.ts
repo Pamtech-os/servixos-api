@@ -4,10 +4,8 @@ import {
   IsArray,
   IsDateString,
   IsMongoId,
-  IsNotEmpty,
   IsNumber,
   IsOptional,
-  IsString,
   Max,
   Min,
   ValidateNested,
@@ -18,10 +16,6 @@ import { InvoiceLineItemDto } from './line-item.dto';
 export class CreateInvoiceDto {
   @IsMongoId({ message: INVOICES_MESSAGES.VALIDATION.CLIENT_ID_INVALID })
   clientId: string;
-
-  @IsString({ message: INVOICES_MESSAGES.VALIDATION.NUMBER_INVALID })
-  @IsNotEmpty({ message: INVOICES_MESSAGES.VALIDATION.NUMBER_REQUIRED })
-  invoiceNumber: string;
 
   @IsDateString(
     {},

@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -144,7 +143,6 @@ export class InvoicesService implements OnModuleInit {
     dto: CreateInvoiceDto,
   ): Promise<
     | Invoice
-    | ConflictException
     | NotFoundException
     | BadRequestException
     | InternalServerErrorException
@@ -155,10 +153,9 @@ export class InvoicesService implements OnModuleInit {
       }
 
       const bId = new Types.ObjectId(businessId);
-      const [business, client, existingNumber] = await Promise.all([
+      const [business, client] = await Promise.all([
         this.businessRepository.findById(businessId),
         this.clientsRepository.findById(dto.clientId, bId),
-        this.invoicesRepository.findByInvoiceNumber(bId, dto.invoiceNumber),
       ]);
 
       if (!business || business.deletedAt) {
@@ -167,42 +164,45 @@ export class InvoicesService implements OnModuleInit {
       if (!client) {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.CLIENT_NOT_FOUND);
       }
-      if (existingNumber) {
-        return new ConflictException(INVOICES_MESSAGES.ERROR.NUMBER_TAKEN);
-      }
 
       const totalAmount = this.computeInvoiceTotal(
         dto.lineItems as InvoiceLineItem[],
         dto.taxRate ?? 0,
       );
 
-      const invoice = await this.invoicesRepository.create({
-        businessId: bId,
-        clientId: client._id,
-        invoiceNumber: dto.invoiceNumber.trim(),
-        invoiceDate: new Date(dto.invoiceDate),
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-        lineItems: dto.lineItems as InvoiceLineItem[],
-        taxRate: dto.taxRate ?? 0,
-        totalAmount,
-        amountPaid: 0,
-        status: InvoiceStatus.PENDING,
-        jobId: dto.jobId ? new Types.ObjectId(dto.jobId) : undefined,
-        timezone: business.timezone,
-      });
+      // Retry up to 3 times on the rare duplicate-number collision
+      const MAX_ATTEMPTS = 3;
+      for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+        const invoiceNumber = await this.generateInvoiceNumber(bId, attempt);
+        try {
+          return await this.invoicesRepository.create({
+            businessId: bId,
+            clientId: client._id,
+            invoiceNumber,
+            invoiceDate: new Date(dto.invoiceDate),
+            dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+            lineItems: dto.lineItems as InvoiceLineItem[],
+            taxRate: dto.taxRate ?? 0,
+            totalAmount,
+            amountPaid: 0,
+            status: InvoiceStatus.PENDING,
+            jobId: dto.jobId ? new Types.ObjectId(dto.jobId) : undefined,
+            timezone: business.timezone,
+          });
+        } catch (err) {
+          const isDuplicate =
+            typeof err === 'object' &&
+            err !== null &&
+            'code' in err &&
+            (err as { code?: number }).code === 11000;
 
-      return invoice;
-    } catch (error) {
-      const duplicateKeyError =
-        typeof error === 'object' &&
-        error !== null &&
-        'code' in error &&
-        (error as { code?: number }).code === 11000;
-
-      if (duplicateKeyError) {
-        return new ConflictException(INVOICES_MESSAGES.ERROR.NUMBER_TAKEN);
+          if (isDuplicate && attempt < MAX_ATTEMPTS - 1) continue;
+          throw err;
+        }
       }
 
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    } catch (error) {
       this.logger.error(
         `createInvoice: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
@@ -511,6 +511,17 @@ export class InvoicesService implements OnModuleInit {
         INVOICES_MESSAGES.ERROR.PDF_FAILED,
       );
     }
+  }
+
+  /** Generates a sequential invoice number: INV-{YEAR}-{NNNN}. offset handles rare duplicate retries. */
+  private async generateInvoiceNumber(
+    businessId: Types.ObjectId,
+    offset = 0,
+  ): Promise<string> {
+    const count = await this.invoicesRepository.countByBusiness(businessId);
+    const year = new Date().getFullYear();
+    const seq = String(count + 1 + offset).padStart(4, '0');
+    return `INV-${year}-${seq}`;
   }
 
   private computeInvoiceTotal(

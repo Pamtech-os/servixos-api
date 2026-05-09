@@ -126,9 +126,14 @@ describe('ClientAuthService', () => {
   });
 
   describe('login', () => {
+    let passwordHash: string;
+
+    beforeAll(async () => {
+      passwordHash = await hashValue('Password123');
+    });
+
     it('logs in a valid client user and returns session tokens', async () => {
       const password = 'Password123';
-      const passwordHash = await hashValue(password);
       usersRepository.findByEmail.mockResolvedValue({
         _id: USER_ID,
         email: 'client@test.local',

@@ -67,7 +67,6 @@ describe('Jobs (integration)', () => {
   let nowSpy: jest.Mock;
   let ownerAccessToken = '';
   let ownerBusinessId = '';
-  let invoiceSeq = 0;
   let mongoContainer: StartedMongoDBContainer;
   let redisContainer: StartedTestContainer;
 
@@ -303,13 +302,11 @@ describe('Jobs (integration)', () => {
       JOBS_MESSAGES.ERROR.DEPOSIT_REQUIRED_TO_START,
     );
 
-    const invoiceNumber = `INV-${Date.now()}-${++invoiceSeq}`;
     const createInvoiceRes = await asOwner(
       req()
         .post('/api/invoices')
         .send({
           clientId,
-          invoiceNumber,
           invoiceDate: new Date().toISOString(),
           dueDate: new Date(Date.now() + 7 * 86_400_000).toISOString(),
           lineItems: [
@@ -399,13 +396,11 @@ describe('Jobs (integration)', () => {
     expect(createJobRes.status).toBe(201);
     const jobId = (createJobRes.body as ApiBody<{ _id: string }>).data!._id;
 
-    const depositInvoiceNumber = `INV-${Date.now()}-${++invoiceSeq}`;
     const createDepositInvoiceRes = await asOwner(
       req()
         .post('/api/invoices')
         .send({
           clientId,
-          invoiceNumber: depositInvoiceNumber,
           invoiceDate: new Date().toISOString(),
           dueDate: new Date(Date.now() + 3 * 86_400_000).toISOString(),
           lineItems: [
@@ -453,13 +448,11 @@ describe('Jobs (integration)', () => {
       (completeJobRes.body as ApiBody<{ status: string }>).data?.status,
     ).toBe('completed');
 
-    const balanceInvoiceNumber = `INV-${Date.now()}-${++invoiceSeq}`;
     const createBalanceInvoiceRes = await asOwner(
       req()
         .post('/api/invoices')
         .send({
           clientId,
-          invoiceNumber: balanceInvoiceNumber,
           invoiceDate: new Date().toISOString(),
           dueDate: new Date(Date.now() + 5 * 86_400_000).toISOString(),
           lineItems: [

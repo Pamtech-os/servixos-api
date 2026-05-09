@@ -1,5 +1,4 @@
 import {
-  ConflictException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
@@ -47,6 +46,7 @@ describe('InvoicesService', () => {
   let invoicesRepository: {
     findAll: jest.Mock;
     findByInvoiceNumber: jest.Mock;
+    countByBusiness: jest.Mock;
     findById: jest.Mock;
     create: jest.Mock;
     updateById: jest.Mock;
@@ -75,6 +75,7 @@ describe('InvoicesService', () => {
         },
       }),
       findByInvoiceNumber: jest.fn().mockResolvedValue(null),
+      countByBusiness: jest.fn().mockResolvedValue(10),
       findById: jest.fn(),
       create: jest.fn(),
       updateById: jest.fn(),
@@ -130,7 +131,6 @@ describe('InvoicesService', () => {
 
     const result = await service.createInvoice(BUSINESS_ID, {
       clientId: CLIENT_ID,
-      invoiceNumber: 'INV-0042',
       invoiceDate: '2026-05-08T10:00:00.000Z',
       dueDate: '2026-05-14T10:00:00.000Z',
       lineItems: [{ description: 'Labour', quantity: 1, unitPrice: 100 }],
@@ -147,18 +147,18 @@ describe('InvoicesService', () => {
     expect(result).not.toBeInstanceOf(InternalServerErrorException);
   });
 
-  it('returns conflict when invoice number already exists', async () => {
-    invoicesRepository.findByInvoiceNumber.mockResolvedValueOnce(baseInvoice);
+  it('returns 500 when all retry attempts fail with a duplicate key error', async () => {
+    const dupError = Object.assign(new Error('duplicate key'), { code: 11000 });
+    invoicesRepository.create.mockRejectedValue(dupError);
 
     const result = await service.createInvoice(BUSINESS_ID, {
       clientId: CLIENT_ID,
-      invoiceNumber: baseInvoice.invoiceNumber,
       invoiceDate: '2026-05-08T10:00:00.000Z',
       lineItems: [{ description: 'Labour', quantity: 1, unitPrice: 100 }],
       taxRate: 0,
     });
 
-    expect(result).toBeInstanceOf(ConflictException);
+    expect(result).toBeInstanceOf(InternalServerErrorException);
   });
 
   it('queues auto-payment creation when status transitions to paid', async () => {
