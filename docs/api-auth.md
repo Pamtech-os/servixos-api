@@ -2,7 +2,8 @@
 
 Base URL: `/api/auth`
 
-All endpoints in this module are **public** — no JWT or `X-Business-Id` header is required. However, most non-auth routes require the global HMAC signature headers (see [Request Signing](#request-signing)).
+All endpoints in this module are `@Public()` at the Nest guard level (no global JWT guard).  
+However, some endpoints (for example `POST /api/auth/verify-pin` and `POST /api/auth/complete-setup`) still require an `Authorization: Bearer <token>` header and validate the token inside the service layer.
 
 ---
 
@@ -70,23 +71,6 @@ Authenticate an existing user.
 | `password` | string | yes | |
 
 **Response `200`**
-
-If the user has a PIN set, a `stepUpToken` is returned and the client must call `/verify-pin` to receive the real tokens.
-
-```json
-{
-  "success": true,
-  "statusCode": 200,
-  "message": "Login successful",
-  "data": {
-    "requiresPin": true,
-    "stepUpToken": "<short-lived jwt>"
-  }
-}
-```
-
-Or, when no PIN is required:
-
 ```json
 {
   "success": true,
@@ -96,31 +80,37 @@ Or, when no PIN is required:
     "accessToken": "<jwt>",
     "refreshToken": "<opaque>",
     "user": {
-      "_id": "...",
+      "id": "...",
       "firstName": "Jane",
       "lastName": "Doe",
-      "email": "owner@example.com"
+      "email": "owner@example.com",
+      "businessId": "...",
+      "mustChangePassword": false
     }
   }
 }
 ```
+
+**Integration notes**
+
+- For business auth flow (owner/employee), the returned `accessToken` is issued with `pinVerified: false`.
+- Invited employees will receive `mustChangePassword: true` on first login and must complete account setup before protected employee routes.
 
 **Error responses**
 
 | Status | Meaning |
 |---|---|
 | 401 | Invalid credentials |
-| 403 | Account not verified |
 
 ---
 
 ### POST /api/auth/verify-pin
 
-Exchange the `stepUpToken` (from login) for real tokens by verifying the 4-digit PIN.
+Exchange the login token for a new access token with `pinVerified: true` by verifying the 4-digit PIN.
 
 **Headers**
 ```
-Authorization: Bearer <stepUpToken>
+Authorization: Bearer <accessToken from /api/auth/login>
 ```
 
 **Request body**
@@ -135,14 +125,83 @@ Authorization: Bearer <stepUpToken>
 {
   "success": true,
   "statusCode": 200,
-  "message": "PIN verified",
+  "message": "Verified successfully",
   "data": {
-    "accessToken": "<jwt>",
-    "refreshToken": "<opaque>",
-    "user": { ... }
+    "accessToken": "<jwt>"
   }
 }
 ```
+
+**Error responses**
+
+| Status | Meaning |
+|---|---|
+| 401 | Invalid PIN / PIN locked / invalid or expired token |
+
+---
+
+### POST /api/auth/complete-setup
+
+For invited **employee** users on first login (`mustChangePassword: true`), this endpoint sets a new password and PIN in one request.
+
+**Headers**
+```
+Authorization: Bearer <accessToken from /api/auth/login>
+```
+
+**Request body**
+```json
+{
+  "newPassword": "EmployeeNew123",
+  "confirmPassword": "EmployeeNew123",
+  "pin": "7788",
+  "confirmPin": "7788"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `newPassword` | string | yes | min 8 chars, 1 uppercase, 1 digit |
+| `confirmPassword` | string | yes | must match `newPassword` |
+| `pin` | string | yes | exactly 4 digits |
+| `confirmPin` | string | yes | must match `pin` |
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Account setup completed successfully",
+  "data": {
+    "accessToken": "<jwt>"
+  }
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|---|---|
+| 400 | Setup not required for this account |
+| 401 | Unauthorized / expired token / invalid credentials |
+
+---
+
+### Frontend Integration — Invited Employee First Login
+
+```text
+1) POST /api/auth/login (email + temporary password)
+2) if user.mustChangePassword === true, show setup screen
+3) POST /api/auth/complete-setup (newPassword + pin)
+4) replace stored access token with returned setup token
+5) call protected employee APIs with Authorization + X-Business-Id
+```
+
+After setup:
+
+- Future logins use permanent password via `/api/auth/login`
+- Then frontend calls `/api/auth/verify-pin` to get `pinVerified: true` token before protected employee routes
+- If an employee calls protected routes with `pinVerified: false`, API returns `401 PIN_NOT_VERIFIED`
 
 ---
 
@@ -416,8 +475,8 @@ Decoded `accessToken` contains:
 {
   "sub": "<userId>",
   "businessId": "<businessId>",
-  "roleId": "<roleId>",
-  "aud": "business",
+  "userRole": "owner | employee | client",
+  "pinVerified": false,
   "iat": 1700000000,
   "exp": 1700086400
 }

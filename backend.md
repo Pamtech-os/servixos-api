@@ -544,7 +544,7 @@ Payload encryption is **opt-in per route**. By default all endpoints send and re
 
 Apply `@Encrypt()` to routes that handle:
 
-- Authentication credentials (`POST /auth/login`, `POST /auth/register`, `POST /auth/verify-pin`, `POST /auth/reset-password`)
+- Authentication credentials (`POST /auth/login`, `POST /auth/register`, `POST /auth/verify-pin`, `POST /auth/complete-setup`, `POST /auth/reset-password`)
 - Financial data (`POST /payments`, `PATCH /payments/:id`, `POST /invoices`, `GET /invoices/:id`)
 - Personally identifiable information (`POST /clients`, `PATCH /clients/:id`, `POST /employees`)
 - AI conversations (`POST /ai/advisor`, `POST /ai/insights`)
@@ -3778,18 +3778,22 @@ Registers a new owner, creates their Business document, generates default roles 
   "data": {
     "accessToken": "...",
     "refreshToken": "...",
-    "requiresPin": true,
     "user": {
       "id": "...",
       "firstName": "John",
       "lastName": "Doe",
       "email": "john@example.com",
-      "userRole": "owner",
-      "businessId": "..."
+      "businessId": "...",
+      "mustChangePassword": false
     }
   }
 }
 ```
+
+**Integration notes:**
+
+- `accessToken` returned from `/auth/login` is issued with `pinVerified: false` for owner/employee auth flow.
+- For invited employees, `mustChangePassword` will be `true` on first login.
 
 **Error responses:** `401` (invalid credentials)
 
@@ -3797,7 +3801,13 @@ Registers a new owner, creates their Business document, generates default roles 
 
 #### `POST /auth/verify-pin`
 
-Called immediately after login. A valid PIN issues the final `pinVerified: true` flag embedded in a fresh short-lived access token.
+Used after login to exchange an access token with `pinVerified: false` for a new access token with `pinVerified: true`.
+
+**Headers:**
+
+```http
+Authorization: Bearer <accessToken from /auth/login>
+```
 
 **Request Body:**
 
@@ -3811,12 +3821,59 @@ Called immediately after login. A valid PIN issues the final `pinVerified: true`
 {
   "success": true,
   "statusCode": 200,
-  "message": "PIN verified successfully",
-  "data": { "accessToken": "...", "refreshToken": "..." }
+  "message": "Verified successfully",
+  "data": { "accessToken": "..." }
 }
 ```
 
-**Error responses:** `401` (wrong PIN), `429` (too many attempts — rate limited via Redis)
+**Error responses:** `401` (`INVALID_PIN`, `PIN_LOCKED`, `EXPIRED_TOKEN`)
+
+---
+
+#### `POST /auth/complete-setup`
+
+For invited **employee** users on first login (`mustChangePassword: true`), this endpoint sets their permanent password and their PIN in one request.
+
+**Headers:**
+
+```http
+Authorization: Bearer <accessToken from /auth/login>
+```
+
+**Request Body:**
+
+```json
+{
+  "newPassword": "EmployeeNew123",
+  "confirmPassword": "EmployeeNew123",
+  "pin": "7788",
+  "confirmPin": "7788"
+}
+```
+
+**Response `200`:**
+
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Account setup completed successfully",
+  "data": { "accessToken": "..." }
+}
+```
+
+**Error responses:** `400` (`SETUP_NOT_REQUIRED`), `401` (`UNAUTHORIZED`, `EXPIRED_TOKEN`, `INVALID_CREDENTIALS`)
+
+---
+
+#### Frontend Integration — Invited Employee First Login
+
+1. Call `POST /auth/login` with employee email + temporary password.
+2. If `data.user.mustChangePassword === true`, route user to setup screen.
+3. Call `POST /auth/complete-setup` with new password + PIN.
+4. Replace stored access token with the returned setup token (`pinVerified: true`).
+5. Continue normal app bootstrap and protected API calls.
+6. On future sessions, login with permanent password then call `POST /auth/verify-pin` before protected employee routes.
 
 ---
 
@@ -4190,7 +4247,7 @@ Includes `weeklyHours` (aggregated from `ClockRecord` for the current week) and 
 **Side effects:**
 
 - Creates `Employee` document.
-- Creates a `User` account with a system-generated temporary password `Servix@2024` (hashed).
+- Creates a `User` account with a system-generated strong temporary password (hashed).
 - Sends an invitation email with login credentials.
 
 ---
@@ -5144,10 +5201,9 @@ Applied globally via `APP_GUARD`.
 
 - Extracts the `Authorization: Bearer <token>` header.
 - Verifies signature and expiry of the access JWT.
-- Decodes claims: `{ userId, businessId, userRole, permissions, pinVerified }`.
+- Decodes claims: `{ sub, businessId, userRole, pinVerified }`.
 - Attaches the decoded payload to `req.user`.
 - Routes decorated with `@Public()` skip JWT validation.
-- If `pinVerified !== true` and the route is not `/auth/verify-pin` or `/auth/logout` → `401 PIN_NOT_VERIFIED`.
 
 **JWT payload shape:**
 
@@ -5156,12 +5212,24 @@ interface JwtPayload {
   sub: string; // userId
   businessId: string;
   userRole: UserRole;
-  permissions: Permission[];
   pinVerified: boolean;
   iat: number;
   exp: number;
 }
 ```
+
+---
+
+### (3) PIN Verified Guard
+
+**File:** `src/common/guards/pin-verified.guard.ts`
+
+Applied globally via `APP_GUARD` after `JwtAuthGuard`.
+
+- Skips all routes decorated with `@Public()`.
+- Enforces PIN verification only for `employee` role users.
+- If an employee token has `pinVerified !== true`, protected routes return `401` with `PIN_NOT_VERIFIED`.
+- This is why invited employees must finish `/auth/complete-setup` (first login) or `/auth/verify-pin` (subsequent logins) before using protected employee endpoints.
 
 ---
 
@@ -5402,7 +5470,7 @@ Runs last in the interceptor chain, after response shape is finalised. Acts as a
 | Scope                   | Limit          | Window     | Enforcement                  |
 | ----------------------- | -------------- | ---------- | ---------------------------- |
 | Global (all endpoints)  | 100 requests   | 1 minute   | Per IP                       |
-| `POST /auth/verify-pin` | 5 attempts     | 5 minutes  | Per `userId` (Redis counter) |
+| `POST /auth/verify-pin` | 3 attempts     | 5 minutes  | Per `userId` (Redis counter) |
 | `POST /auth/login`      | 10 attempts    | 15 minutes | Per IP                       |
 | `POST /ai/*`            | 30 requests    | 1 hour     | Per `businessId`             |
 | `POST /website/booking` | 10 submissions | 1 hour     | Per IP                       |
@@ -5415,15 +5483,12 @@ Exceeding any limit returns `429 Too Many Requests` with a `Retry-After` header.
 
 ```typescript
 providers: [
-  { provide: APP_GUARD,       useClass: JwtAuthGuard       },  // (3)
-  { provide: APP_GUARD,       useClass: TenantGuard        },  // (4) — X-Business-Id validation
-  { provide: APP_GUARD,       useClass: SubscriptionGuard  },  // (5)
-  { provide: APP_GUARD,       useClass: PermissionsGuard   },  // (6)
-  { provide: APP_INTERCEPTOR, useClass: ActivityLogInterceptor      },
+  { provide: APP_GUARD,       useClass: HmacGuard                 },
+  { provide: APP_GUARD,       useClass: JwtAuthGuard              },
+  { provide: APP_GUARD,       useClass: PinVerifiedGuard          },
+  { provide: APP_GUARD,       useClass: TenantGuard               }, // X-Business-Id validation
   { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
-  { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor        },
-  { provide: APP_PIPE,
-    useValue: new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }) },
+  { provide: APP_INTERCEPTOR, useClass: ActivityLogInterceptor       },
 ],
 ```
 
@@ -5528,10 +5593,14 @@ POST /auth/login
   ✓ should return 400 when body is missing required fields
 
 POST /auth/verify-pin
-  ✓ should return 200 and fresh tokens when pin is correct
+  ✓ should return 200 and fresh accessToken when pin is correct
   ✓ should return 401 when pin is incorrect
-  ✓ should return 429 after 5 failed pin attempts within 5 minutes
-  ✓ pin lockout should reset after TTL expires (requires time-travel helper)
+  ✓ should return 401 PIN_LOCKED after 3 failed pin attempts within 5 minutes
+  ✓ should clear pin_attempts counter after successful verification
+
+POST /auth/complete-setup
+  ✓ should allow invited employee to set password + pin on first login
+  ✓ should return accessToken with pinVerified=true for protected routes
 
 POST /auth/refresh
   ✓ should issue new token pair with valid refresh token
@@ -5723,7 +5792,7 @@ GET /employees/:id
 
 POST /employees
   ✓ should create employee and linked User account (201)
-  ✓ linked User should have temporary password 'Servix@2024'
+  ✓ linked User should receive a generated temporary password
   ✓ should return 409 when email already exists within the business
   ✓ should require employees.create permission
 
@@ -6451,7 +6520,7 @@ Input validation
 Rate limiting
   ✓ Exceeding 100 req/min from same IP returns 429 with Retry-After header
   ✓ POST /auth/login throttles at 10 attempts / 15 min per IP
-  ✓ POST /auth/verify-pin throttles at 5 attempts / 5 min per user
+  ✓ POST /auth/verify-pin locks after 3 failed attempts / 5 min per user
   ✓ AI endpoints throttle at 30 req/hour per business
   ✓ POST /website/booking throttles at 10 submissions/hour per IP
 ```

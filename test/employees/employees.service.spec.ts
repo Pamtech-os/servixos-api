@@ -4,7 +4,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { EMPLOYEES_MESSAGES } from 'src/common/constants/messages/employees.messages';
+import * as hashUtil from 'src/common/utils/hash.util';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { EmployeesRepository } from 'src/modules/employees/repositories/employees.repository';
@@ -82,6 +84,10 @@ describe('EmployeesService', () => {
     abortTransaction: jest.Mock;
     endSession: jest.Mock;
   };
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
 
   beforeEach(() => {
     mockSession = {
@@ -233,6 +239,15 @@ describe('EmployeesService', () => {
     };
 
     it('creates employee + linked user and queues invitation', async () => {
+      const generatedTemporaryPassword = 'StrongPass#2486';
+      const generatedPasswordHash = 'hashed-temp-password';
+      jest
+        .spyOn(hashUtil, 'generateStrongPassword')
+        .mockReturnValue(generatedTemporaryPassword);
+      jest
+        .spyOn(hashUtil, 'hashValue')
+        .mockResolvedValue(generatedPasswordHash);
+
       employeesRepository.findByEmail.mockResolvedValue(null);
       usersRepository.findByEmail.mockResolvedValue(null);
       usersRepository.create.mockResolvedValue({
@@ -244,8 +259,21 @@ describe('EmployeesService', () => {
 
       expect(result).toEqual(baseEmployee);
       expect(usersRepository.create).toHaveBeenCalledTimes(1);
+      expect(usersRepository.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          passwordHash: generatedPasswordHash,
+        }),
+        mockSession,
+      );
       expect(usersRepository.updateById).toHaveBeenCalledTimes(1);
       expect(agendaService.now).toHaveBeenCalledTimes(1);
+      expect(agendaService.now).toHaveBeenCalledWith(
+        JOBS.EMAIL_EMPLOYEE_INVITATION,
+        expect.objectContaining({
+          to: dto.email,
+          temporaryPassword: generatedTemporaryPassword,
+        }),
+      );
       expect(mockSession.commitTransaction).toHaveBeenCalled();
     });
 

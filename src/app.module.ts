@@ -28,6 +28,7 @@ import { ActivityLogInterceptor } from './common/interceptors/activity-log.inter
 import { HmacGuard } from './common/guards/hmac.guard';
 // import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { PinVerifiedGuard } from './common/guards/pin-verified.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
 import { AuthModule } from './modules/auth/auth.module';
@@ -108,6 +109,7 @@ import { PaymentsModule } from './modules/payments/payments.module';
     { provide: APP_GUARD, useClass: HmacGuard },
     // { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: PinVerifiedGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
   ],
 })

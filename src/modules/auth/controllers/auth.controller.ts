@@ -21,6 +21,7 @@ import { CreateAccountDto } from '../dto/create-account.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { ResendOtpDto } from '../dto/resend-otp.dto';
 import { SetPinDto } from '../dto/set-pin.dto';
+import { CompleteSetupDto } from '../dto/complete-setup.dto';
 import { CreateBusinessDto } from '../dto/create-business.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
@@ -66,6 +67,17 @@ export class AuthController {
     const result = await this.authService.verifyPin(authorization, dto.pin);
     if (result instanceof HttpException) throw result;
     return { message: AUTH_MESSAGES.SUCCESS.PIN_VERIFIED, data: result };
+  }
+
+  @Post('complete-setup')
+  @HttpCode(HttpStatus.OK)
+  async completeSetup(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() dto: CompleteSetupDto,
+  ) {
+    const result = await this.authService.completeSetup(authorization, dto);
+    if (result instanceof HttpException) throw result;
+    return { message: AUTH_MESSAGES.SUCCESS.SETUP_COMPLETED, data: result };
   }
 
   @Post('refresh')

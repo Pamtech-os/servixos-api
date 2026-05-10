@@ -48,6 +48,7 @@ export const AUTH_MESSAGES = {
     LOGIN: 'Login successful',
     LOGOUT: 'Logged out successfully',
     PIN_VERIFIED: 'Verified successfully',
+    SETUP_COMPLETED: 'Account setup completed successfully',
     PASSWORD_RESET_SENT: 'If an account exists, a reset code has been sent',
     PASSWORD_RESET: 'Password updated successfully',
     TOKEN_REFRESHED: 'Session refreshed successfully',
@@ -57,6 +58,7 @@ export const AUTH_MESSAGES = {
     EMAIL_TAKEN: 'Unable to create account with the provided details',
     INVALID_PIN: 'Invalid PIN',
     PIN_LOCKED: 'Too many attempts. Please try again later',
+    PIN_NOT_VERIFIED: 'Please verify your PIN before continuing',
     EXPIRED_TOKEN: 'Session has expired. Please log in again',
     INVALID_TOKEN: 'Invalid or expired token',
     INVALID_OTP: 'Invalid or expired verification code',
@@ -64,6 +66,7 @@ export const AUTH_MESSAGES = {
     EMAIL_ALREADY_VERIFIED: 'No action required',
     EMAIL_NOT_VERIFIED: 'Please verify your email before continuing',
     PIN_NOT_SET: 'Please set your PIN before continuing',
+    SETUP_NOT_REQUIRED: 'Account setup is not required',
     BUSINESS_ALREADY_SETUP: 'Business is already set up',
     SUBDOMAIN_TAKEN:
       'Business name is already taken. Please try a different name.',

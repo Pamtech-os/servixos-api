@@ -37,6 +37,7 @@ import { CreateAccountDto } from '../dto/create-account.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { ResendOtpDto } from '../dto/resend-otp.dto';
 import { SetPinDto } from '../dto/set-pin.dto';
+import { CompleteSetupDto } from '../dto/complete-setup.dto';
 import { CreateBusinessDto } from '../dto/create-business.dto';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { BusinessRepository } from '../../business/repositories/business.repository';
@@ -228,6 +229,87 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         `verifyPin: unexpected error: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  async completeSetup(
+    authorization: string | undefined,
+    dto: CompleteSetupDto,
+  ): Promise<
+    | TokenData
+    | BadRequestException
+    | UnauthorizedException
+    | InternalServerErrorException
+  > {
+    try {
+      const token = authorization?.replace('Bearer ', '');
+      if (!token) {
+        this.logger.warn('completeSetup: missing authorization header');
+        return new UnauthorizedException(AUTH_MESSAGES.ERROR.UNAUTHORIZED);
+      }
+
+      let payload: JwtUser;
+      try {
+        payload = this.jwtService.verify<JwtUser>(token);
+      } catch (err) {
+        this.logger.warn(
+          `completeSetup: JWT verification failed: ${err instanceof Error ? err.message : String(err)}`,
+        );
+        return new UnauthorizedException(AUTH_MESSAGES.ERROR.EXPIRED_TOKEN);
+      }
+
+      const user = await this.usersRepository.findById(payload.sub);
+      if (!user || !user.isActive || user.deletedAt) {
+        this.logger.warn(
+          `completeSetup: user not found or inactive [userId=${payload.sub}]`,
+        );
+        return new UnauthorizedException(
+          AUTH_MESSAGES.ERROR.INVALID_CREDENTIALS,
+        );
+      }
+
+      if (user.userRole !== UserRole.EMPLOYEE || !user.mustChangePassword) {
+        this.logger.warn(
+          `completeSetup: setup not required [userId=${payload.sub}]`,
+        );
+        return new BadRequestException(AUTH_MESSAGES.ERROR.SETUP_NOT_REQUIRED);
+      }
+
+      const businessId = user.businessId?.toString() ?? payload.businessId;
+      if (!businessId) {
+        this.logger.warn(
+          `completeSetup: missing business scope [userId=${payload.sub}]`,
+        );
+        return new UnauthorizedException(AUTH_MESSAGES.ERROR.UNAUTHORIZED);
+      }
+
+      const [passwordHash, pinHash] = await Promise.all([
+        hashValue(dto.newPassword),
+        hashValue(dto.pin),
+      ]);
+
+      await Promise.all([
+        this.usersRepository.updateById(user._id, {
+          passwordHash,
+          pinHash,
+          mustChangePassword: false,
+        }),
+        this.authRepository.revokeAllUserRefreshTokens(user._id),
+      ]);
+
+      const accessToken = this.signAccessToken({
+        sub: user._id.toString(),
+        businessId,
+        userRole: user.userRole,
+        pinVerified: true,
+      });
+
+      return { accessToken };
+    } catch (error) {
+      this.logger.error(
+        `completeSetup: unexpected error: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }

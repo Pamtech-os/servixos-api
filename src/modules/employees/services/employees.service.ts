@@ -15,7 +15,7 @@ import { EMPLOYEES_MESSAGES } from 'src/common/constants/messages/employees.mess
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
-import { hashValue } from 'src/common/utils/hash.util';
+import { generateStrongPassword, hashValue } from 'src/common/utils/hash.util';
 import { EmployeeInvitationJobData } from 'src/modules/agenda/jobs/email.jobs';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
@@ -36,8 +36,6 @@ import { ClockRecordsRepository } from '../repositories/clock-records.repository
 import { EmployeesRepository } from '../repositories/employees.repository';
 import { ClockRecord } from '../schemas/clock-record.schema';
 import { Employee } from '../schemas/employee.schema';
-
-const EMPLOYEE_TEMP_PASSWORD = 'Servix@2024';
 
 export interface PaginatedEmployees {
   data: Employee[];
@@ -256,7 +254,8 @@ export class EmployeesService {
         return new ConflictException(EMPLOYEES_MESSAGES.ERROR.EMAIL_TAKEN);
       }
 
-      const passwordHash = await hashValue(EMPLOYEE_TEMP_PASSWORD);
+      const temporaryPassword = generateStrongPassword();
+      const passwordHash = await hashValue(temporaryPassword);
       const { firstName, lastName } = this.splitFullName(dto.fullName);
 
       const user = await this.usersRepository.create(
@@ -305,7 +304,7 @@ export class EmployeesService {
           to: dto.email,
           firstName,
           businessName: business.name,
-          temporaryPassword: EMPLOYEE_TEMP_PASSWORD,
+          temporaryPassword,
         })
         .catch((error: unknown) =>
           this.logger.error(

@@ -41,6 +41,7 @@ interface LoginPayload {
     lastName: string;
     email: string;
     businessId: string;
+    mustChangePassword?: boolean;
     subdomain?: string;
   };
 }
@@ -53,6 +54,7 @@ interface EmailJobData {
   to: string;
   firstName?: string;
   otp?: string;
+  temporaryPassword?: string;
 }
 
 // ─── Test constants ───────────────────────────────────────────────────────────
@@ -162,6 +164,18 @@ describe('Auth (integration)', () => {
     return signRequest(r, clientToken);
   }
 
+  function asUser(
+    r: request.Test,
+    accessToken: string,
+    businessId: string,
+  ): request.Test {
+    return authed(
+      r
+        .set('Authorization', `Bearer ${accessToken}`)
+        .set('x-business-id', businessId),
+    );
+  }
+
   function makeAccountPayload(email: string) {
     return {
       firstName: 'Test',
@@ -189,6 +203,19 @@ describe('Auth (integration)', () => {
       .find((c) => c[0] === JOBS.EMAIL_PASSWORD_RESET && c[1].to === email);
     if (!match?.[1].otp) throw new Error(`No reset OTP captured for ${email}`);
     return match[1].otp;
+  }
+
+  function captureEmployeeTemporaryPassword(email: string): string {
+    const calls = nowSpy.mock.calls as [string, EmailJobData][];
+    const match = [...calls]
+      .reverse()
+      .find(
+        (c) => c[0] === JOBS.EMAIL_EMPLOYEE_INVITATION && c[1].to === email,
+      );
+    if (!match?.[1].temporaryPassword) {
+      throw new Error(`No employee temporary password captured for ${email}`);
+    }
+    return match[1].temporaryPassword;
   }
 
   async function createAccountOnly(email: string): Promise<void> {
@@ -1664,6 +1691,139 @@ describe('Auth (integration)', () => {
         // Assert
         expect(res.status).toBe(401);
       });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // POST /api/auth/complete-setup
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('POST /api/auth/complete-setup', () => {
+    it('allows an invited employee to set a new password and PIN before accessing protected routes', async () => {
+      const owner = {
+        firstName: 'Employee',
+        lastName: 'SetupOwner',
+        email: `setup-owner-${Date.now()}@test.local`,
+        phone: '+12025550122',
+        password: 'OwnerPass123',
+        pin: '5566',
+      };
+
+      const ownerLogin = await fullOnboarding(owner);
+      const ownerBusinessId = ownerLogin.user.businessId;
+
+      const employeeRole = await roleModel
+        .findOne({
+          businessId: ownerBusinessId,
+          name: DefaultRole.EMPLOYEE,
+        })
+        .lean<Role>();
+
+      expect(employeeRole?._id).toBeDefined();
+
+      const employeeEmail = `setup-employee-${Date.now()}@test.local`;
+
+      const createEmployeeRes = await asUser(
+        req().post('/api/employees').send({
+          fullName: 'Setup Employee',
+          email: employeeEmail,
+          phone: '+12025550133',
+          roleId: employeeRole!._id.toString(),
+          weeklyHoursTarget: 40,
+          dateJoined: '2026-01-01',
+        }),
+        ownerLogin.accessToken,
+        ownerBusinessId,
+      );
+
+      expect(createEmployeeRes.status).toBe(201);
+
+      const temporaryPassword = captureEmployeeTemporaryPassword(employeeEmail);
+      const employeeLoginRes = await authed(
+        req().post('/api/auth/login').send({
+          email: employeeEmail,
+          password: temporaryPassword,
+        }),
+      );
+
+      expect(employeeLoginRes.status).toBe(200);
+      const employeeLogin = (employeeLoginRes.body as ApiBody<LoginPayload>)
+        .data!;
+      expect(employeeLogin.user.mustChangePassword).toBe(true);
+
+      const preSetupProtectedRes = await asUser(
+        req().get('/api/employees/online'),
+        employeeLogin.accessToken,
+        ownerBusinessId,
+      );
+
+      expect(preSetupProtectedRes.status).toBe(401);
+      expect((preSetupProtectedRes.body as ApiBody).message).toBe(
+        AUTH_MESSAGES.ERROR.PIN_NOT_VERIFIED,
+      );
+
+      const setupRes = await authed(
+        req()
+          .post('/api/auth/complete-setup')
+          .set('Authorization', `Bearer ${employeeLogin.accessToken}`)
+          .send({
+            newPassword: 'EmployeeNew123',
+            confirmPassword: 'EmployeeNew123',
+            pin: '7788',
+            confirmPin: '7788',
+          }),
+      );
+
+      expect(setupRes.status).toBe(200);
+      expect((setupRes.body as ApiBody).message).toBe(
+        AUTH_MESSAGES.SUCCESS.SETUP_COMPLETED,
+      );
+
+      const setupToken = (setupRes.body as ApiBody<TokenPayload>).data
+        ?.accessToken as string;
+      expect(setupToken).toBeDefined();
+
+      const employeeUser = await userModel
+        .findOne({ email: employeeEmail })
+        .lean<User>();
+      expect(employeeUser?.mustChangePassword).toBe(false);
+      expect(employeeUser?.pinHash).toBeDefined();
+      expect(employeeUser?.pinHash).not.toBe('7788');
+      expect(employeeUser?.pinHash!.startsWith('$2')).toBe(true);
+
+      const postSetupProtectedRes = await asUser(
+        req().get('/api/employees/online'),
+        setupToken,
+        ownerBusinessId,
+      );
+
+      expect(postSetupProtectedRes.status).toBe(200);
+
+      const reloginRes = await authed(
+        req().post('/api/auth/login').send({
+          email: employeeEmail,
+          password: 'EmployeeNew123',
+        }),
+      );
+      expect(reloginRes.status).toBe(200);
+      const relogin = (reloginRes.body as ApiBody<LoginPayload>).data!;
+
+      const verifiedRes = await authed(
+        req()
+          .post('/api/auth/verify-pin')
+          .set('Authorization', `Bearer ${relogin.accessToken}`)
+          .send({ pin: '7788' }),
+      );
+      expect(verifiedRes.status).toBe(200);
+      const verifiedToken = (verifiedRes.body as ApiBody<TokenPayload>).data
+        ?.accessToken as string;
+
+      const verifiedProtectedRes = await asUser(
+        req().get('/api/employees/online'),
+        verifiedToken,
+        ownerBusinessId,
+      );
+      expect(verifiedProtectedRes.status).toBe(200);
     });
   });
 
