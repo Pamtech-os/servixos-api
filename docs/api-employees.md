@@ -382,20 +382,19 @@ Start a break for a clocked-in employee. Sets `breakStartedAt` and updates statu
 
 ### POST /api/clock/break/end
 
-End an employee's break. Adds `breakDurationMinutes` to the record's `breakMinutes` total.
+End an employee's break. Backend computes elapsed minutes from `breakStartedAt` and adds it to `breakMinutes`.
 
 **Request body**
 ```json
 {
-  "employeeId": "64f1a2b3c4d5e6f7a8b9c0d1",
-  "breakDurationMinutes": 30
+  "employeeId": "64f1a2b3c4d5e6f7a8b9c0d1"
 }
 ```
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `employeeId` | ObjectId | yes | |
-| `breakDurationMinutes` | integer | yes | `1`–`480` minutes |
+| `breakDurationMinutes` | integer | no | Optional legacy field. Server ignores this value and computes duration itself. |
 
 **Response `201`**
 ```json

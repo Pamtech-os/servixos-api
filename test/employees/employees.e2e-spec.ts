@@ -326,11 +326,16 @@ describe('Employees + Clock (integration)', () => {
     expect(breakStartRes.status).toBe(201);
 
     const breakEndRes = await asOwner(
-      req()
-        .post('/api/clock/break/end')
-        .send({ employeeId, breakDurationMinutes: 30 }),
+      req().post('/api/clock/break/end').send({ employeeId }),
     );
     expect(breakEndRes.status).toBe(201);
+    expect((breakEndRes.body as ApiBody).message).toBe(
+      TIME_TRACKING_MESSAGES.SUCCESS.BREAK_ENDED,
+    );
+    expect(
+      (breakEndRes.body as ApiBody<{ breakMinutes: number }>).data
+        ?.breakMinutes ?? 0,
+    ).toBeGreaterThanOrEqual(1);
 
     const outRes = await asOwner(
       req().post('/api/clock/out').send({ employeeId }),

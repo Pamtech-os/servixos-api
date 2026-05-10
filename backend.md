@@ -4360,9 +4360,9 @@ async getOnlineEmployees(businessId: string): Promise<{ count: number; users: On
 
 #### `POST /clock/break/end`
 
-**Request Body:** `{ "employeeId": "...", "breakDurationMinutes": 30 }`
+**Request Body:** `{ "employeeId": "..." }`
 
-Adds to the `ClockRecord.breakMinutes` field.
+Computes elapsed minutes from `breakStartedAt` server-side and adds to `ClockRecord.breakMinutes`.
 
 ---
 

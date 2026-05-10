@@ -104,6 +104,10 @@ describe('ClockService', () => {
     );
   });
 
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   describe('clockIn', () => {
     it('creates clock record when employee is not currently clocked in', async () => {
       const result = await service.clockIn(ownerActor, BUSINESS_ID, {
@@ -158,6 +162,70 @@ describe('ClockService', () => {
       expect(result).toBeInstanceOf(NotFoundException);
       expect((result as NotFoundException).message).toBe(
         TIME_TRACKING_MESSAGES.ERROR.EMPLOYEE_NOT_FOUND,
+      );
+    });
+  });
+
+  describe('endBreak', () => {
+    it('computes break duration from breakStartedAt and ignores client duration', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-04-14T09:30:45.000Z'));
+
+      clockRecordsRepository.findActive.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        employeeId: baseEmployee._id,
+        businessId: baseEmployee.businessId,
+        clockInAt: new Date('2026-04-14T08:00:00.000Z'),
+        breakStartedAt: new Date('2026-04-14T09:00:00.000Z'),
+        breakMinutes: 0,
+        status: ClockStatus.ON_BREAK,
+        timezone: 'UTC',
+      });
+
+      clockRecordsRepository.endBreak.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        breakMinutes: 30,
+      });
+
+      const result = await service.endBreak(ownerActor, BUSINESS_ID, {
+        employeeId: EMPLOYEE_ID,
+        breakDurationMinutes: 1,
+      });
+
+      expect(clockRecordsRepository.endBreak).toHaveBeenCalledWith(
+        expect.any(Types.ObjectId),
+        baseEmployee._id,
+        30,
+      );
+      expect((result as { breakMinutes: number }).breakMinutes).toBe(30);
+    });
+
+    it('applies a safe minimum of 1 minute when elapsed time is non-positive', async () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-04-14T09:00:00.000Z'));
+
+      clockRecordsRepository.findActive.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        employeeId: baseEmployee._id,
+        businessId: baseEmployee.businessId,
+        clockInAt: new Date('2026-04-14T08:00:00.000Z'),
+        breakStartedAt: new Date('2026-04-14T09:05:00.000Z'),
+        breakMinutes: 0,
+        status: ClockStatus.ON_BREAK,
+        timezone: 'UTC',
+      });
+
+      clockRecordsRepository.endBreak.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        breakMinutes: 1,
+      });
+
+      await service.endBreak(ownerActor, BUSINESS_ID, {
+        employeeId: EMPLOYEE_ID,
+      });
+
+      expect(clockRecordsRepository.endBreak).toHaveBeenCalledWith(
+        expect.any(Types.ObjectId),
+        baseEmployee._id,
+        1,
       );
     });
   });

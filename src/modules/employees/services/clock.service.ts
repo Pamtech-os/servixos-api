@@ -277,10 +277,19 @@ export class ClockService {
         return new ConflictException(TIME_TRACKING_MESSAGES.ERROR.NOT_ON_BREAK);
       }
 
+      const breakEndedAt = toBusinessLocalTime(
+        new Date(),
+        active.timezone ?? 'UTC',
+      );
+      const breakDurationMinutes = this.calculateBreakDurationMinutes(
+        active.breakStartedAt,
+        breakEndedAt,
+      );
+
       const updated = await this.clockRecordsRepository.endBreak(
         bId,
         access._id,
-        dto.breakDurationMinutes,
+        breakDurationMinutes,
       );
 
       if (!updated) {
@@ -391,6 +400,15 @@ export class ClockService {
       (clockedOutAt.getTime() - active.clockInAt.getTime()) / 3_600_000;
     const breakHours = (active.breakMinutes ?? 0) / 60;
     return toTwoDecimal(Math.max(0, elapsedHours - breakHours));
+  }
+
+  private calculateBreakDurationMinutes(
+    breakStartedAt: Date,
+    breakEndedAt: Date,
+  ): number {
+    const elapsedMs = breakEndedAt.getTime() - breakStartedAt.getTime();
+    if (elapsedMs <= 0) return 1;
+    return Math.max(1, Math.floor(elapsedMs / 60_000));
   }
 
   private async resolveBusinessTimezone(businessId: string): Promise<string> {
