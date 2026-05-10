@@ -75,6 +75,7 @@ export class PaymentsRepository {
     const [data, total] = await Promise.all([
       this.paymentModel
         .find(query)
+        .populate('invoiceId', 'invoiceNumber')
         .sort({ paymentDate: -1, createdAt: -1 })
         .skip(pagination.skip)
         .limit(pagination.limit)
