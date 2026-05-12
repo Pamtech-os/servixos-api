@@ -21,8 +21,9 @@ export class CreateTaskDto {
   @Transform(({ value }: { value: string }) => value?.trim())
   description?: string;
 
+  @IsOptional()
   @IsMongoId({ message: TASKS_MESSAGES.VALIDATION.ASSIGNEE_ID_INVALID })
-  assigneeId: string;
+  assigneeId?: string;
 
   @IsOptional()
   @IsEnum(TaskPriority, {
