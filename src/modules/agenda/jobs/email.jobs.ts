@@ -58,6 +58,7 @@ export interface TaskUpdatedAssigneeJobData {
   assigneeName: string;
   taskTitle: string;
   actorName: string;
+  changes?: string[];
 }
 
 export interface TaskUpdatedActorJobData {
@@ -65,6 +66,7 @@ export interface TaskUpdatedActorJobData {
   actorName: string;
   taskTitle: string;
   assigneeName: string;
+  changes?: string[];
 }
 
 export interface TaskOverdueJobData {
@@ -165,26 +167,36 @@ export function defineEmailJobs(
   });
 
   agenda.define(JOBS.EMAIL_TASK_UPDATED_ASSIGNEE, async (job: Job) => {
-    const { to, assigneeName, taskTitle, actorName } = job.attrs
+    const { to, assigneeName, taskTitle, actorName, changes } = job.attrs
       .data as TaskUpdatedAssigneeJobData;
 
     await emailService.send({
       to,
       name: assigneeName,
       subject: 'Task updated — Servix OS',
-      html: taskUpdatedAssigneeTemplate(assigneeName, taskTitle, actorName),
+      html: taskUpdatedAssigneeTemplate(
+        assigneeName,
+        taskTitle,
+        actorName,
+        changes,
+      ),
     });
   });
 
   agenda.define(JOBS.EMAIL_TASK_UPDATED_ACTOR, async (job: Job) => {
-    const { to, actorName, taskTitle, assigneeName } = job.attrs
+    const { to, actorName, taskTitle, assigneeName, changes } = job.attrs
       .data as TaskUpdatedActorJobData;
 
     await emailService.send({
       to,
       name: actorName,
       subject: 'Task updated by assignee — Servix OS',
-      html: taskUpdatedActorTemplate(actorName, taskTitle, assigneeName),
+      html: taskUpdatedActorTemplate(
+        actorName,
+        taskTitle,
+        assigneeName,
+        changes,
+      ),
     });
   });
 
