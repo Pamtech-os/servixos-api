@@ -5,6 +5,11 @@ import { employeeInvitationTemplate } from '../../email/templates/employee-invit
 import { emailVerificationTemplate } from '../../email/templates/email-verification.template';
 import { passwordResetTemplate } from '../../email/templates/password-reset.template';
 import { welcomeTemplate } from '../../email/templates/welcome.template';
+import {
+  taskAssignedTemplate,
+  taskUpdatedActorTemplate,
+  taskUpdatedAssigneeTemplate,
+} from '../../email/templates/task-notification.template';
 import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
@@ -36,6 +41,29 @@ export interface EmployeeInvitationJobData {
   firstName: string;
   businessName: string;
   temporaryPassword: string;
+}
+
+export interface TaskAssignedJobData {
+  to: string;
+  assigneeName: string;
+  taskTitle: string;
+  actorName: string;
+  priority?: string;
+  dueDate?: string;
+}
+
+export interface TaskUpdatedAssigneeJobData {
+  to: string;
+  assigneeName: string;
+  taskTitle: string;
+  actorName: string;
+}
+
+export interface TaskUpdatedActorJobData {
+  to: string;
+  actorName: string;
+  taskTitle: string;
+  assigneeName: string;
 }
 
 export function defineEmailJobs(
@@ -107,6 +135,48 @@ export function defineEmailJobs(
         temporaryPassword,
         loginUrl,
       ),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_TASK_ASSIGNED, async (job: Job) => {
+    const { to, assigneeName, taskTitle, actorName, priority, dueDate } = job
+      .attrs.data as TaskAssignedJobData;
+
+    await emailService.send({
+      to,
+      name: assigneeName,
+      subject: 'New task assigned — Servix OS',
+      html: taskAssignedTemplate(
+        assigneeName,
+        taskTitle,
+        actorName,
+        priority,
+        dueDate,
+      ),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_TASK_UPDATED_ASSIGNEE, async (job: Job) => {
+    const { to, assigneeName, taskTitle, actorName } = job.attrs
+      .data as TaskUpdatedAssigneeJobData;
+
+    await emailService.send({
+      to,
+      name: assigneeName,
+      subject: 'Task updated — Servix OS',
+      html: taskUpdatedAssigneeTemplate(assigneeName, taskTitle, actorName),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_TASK_UPDATED_ACTOR, async (job: Job) => {
+    const { to, actorName, taskTitle, assigneeName } = job.attrs
+      .data as TaskUpdatedActorJobData;
+
+    await emailService.send({
+      to,
+      name: actorName,
+      subject: 'Task updated by assignee — Servix OS',
+      html: taskUpdatedActorTemplate(actorName, taskTitle, assigneeName),
     });
   });
 }

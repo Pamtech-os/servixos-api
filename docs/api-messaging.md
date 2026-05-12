@@ -1,17 +1,19 @@
 # Messaging API
 
-The messaging system has two layers:
+The messaging system enables real-time chat between the business team and their clients. It has two layers:
 
-1. **REST** — fetch conversations and messages, upload attachments.
-2. **WebSocket** (Socket.io) — real-time message sending, delivery receipts, typing indicators.
+1. **REST** — fetch conversations and messages, send messages, mark as read, upload attachments.
+2. **WebSocket** (Socket.io) — real-time message sending, delivery receipts, typing indicators, edit/delete.
+
+Both a **business-portal** side and a **client-portal** side exist. See the [Client Portal](#client-portal) section for the client-facing REST and WebSocket APIs.
 
 ---
 
-## REST Endpoints
+## Business Portal
 
 Base URL: `/api/messages`
 
-All REST endpoints require business-portal authentication.
+All REST endpoints require:
 
 **Required headers**
 
@@ -19,8 +21,9 @@ All REST endpoints require business-portal authentication.
 |---|---|
 | `Authorization` | `Bearer <accessToken>` |
 | `X-Business-Id` | MongoDB ObjectId of the business |
+| `x-client-token` | Ephemeral session token from `GET /api/auth/client-token` |
 | `x-timestamp` | Unix ms timestamp |
-| `x-signature` | HMAC-SHA256 request signature |
+| `x-signature` | HMAC-SHA256 request signature (see README) |
 
 ---
 
@@ -153,6 +156,54 @@ Messages are returned in reverse-chronological order (newest first).
 | `mimeType` | string? | e.g. `image/jpeg`, `application/pdf` |
 | `fileName` | string? | original file name |
 | `fileSize` | number? | bytes |
+
+---
+
+### POST /api/messages
+
+Send a message from the business to a client via REST. After saving, the server emits a `message_received` WebSocket event to the conversation room — so clients already connected via WebSocket will see it in real time without polling.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `clientId` | ObjectId | yes | |
+| `content` | string | no | Max 5000 characters. Required if no attachment. |
+| `attachmentUrl` | string | no | From `POST /api/messages/upload-attachment` |
+| `publicId` | string | no | Cloudinary public ID |
+| `mimeType` | string | no | e.g. `image/jpeg`, `application/pdf` |
+| `fileName` | string | no | Original file name |
+| `fileSize` | integer | no | Bytes, ≥ 0 |
+
+**Response `201`**
+```json
+{
+  "success": true,
+  "statusCode": 201,
+  "message": "Message sent",
+  "data": { ...MessagePayload }
+}
+```
+
+**Errors:** `400` if both `content` and `attachmentUrl` are absent; `404` if client not found.
+
+---
+
+### PATCH /api/messages/read
+
+Mark all messages in a conversation as read, up to and including a specific message. Emits a `message_read` WebSocket event to the conversation room.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `clientId` | ObjectId | yes | |
+| `upToMessageId` | ObjectId | yes | All messages ≤ this ID are marked read |
+
+**Response `200`**
+```json
+{ "success": true, "statusCode": 200, "message": "Messages marked as read", "data": null }
+```
 
 ---
 
@@ -354,7 +405,7 @@ Server broadcasts `message_deleted`:
 
 ---
 
-## Typical Message Flow
+## Typical Business-Side Message Flow
 
 ```
 1. Business opens conversation list  →  GET /api/messages/conversations
@@ -368,3 +419,210 @@ Server broadcasts `message_deleted`:
 ```
 
 For attachments, call `POST /api/messages/upload-attachment` first, then include the returned fields in the `send_message` event.
+
+---
+
+## Client Portal
+
+Base URL: `/api/client/api/messages`
+
+The client portal exposes a simplified REST + WebSocket interface. Clients see only their own conversations (they cannot enumerate other clients' conversations). The `providerId` parameter refers to the `businessId` of the service provider they are messaging.
+
+**Required headers**
+
+| Header | Value |
+|---|---|
+| `Authorization` | `Bearer <clientAccessToken>` |
+
+---
+
+### GET /api/client/api/messages/conversations
+
+List all conversations for the authenticated client.
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Conversations retrieved",
+  "data": [
+    {
+      "_id": "...",
+      "businessId": "...",
+      "clientId": "...",
+      "lastMessageContent": "Your appointment is confirmed.",
+      "lastMessageAt": "2024-03-15T14:00:00.000Z",
+      "lastMessageSender": "business",
+      "businessUnreadCount": 0,
+      "clientUnreadCount": 1,
+      "isActive": false
+    }
+  ],
+  "timestamp": "2024-03-15T14:05:00.000Z"
+}
+```
+
+---
+
+### GET /api/client/api/messages/conversations/:providerId
+
+List messages in a specific conversation. `providerId` is the `businessId`.
+
+**Path parameters**
+
+| Param | Type | Notes |
+|---|---|---|
+| `providerId` | ObjectId | `businessId` of the service provider |
+
+**Query parameters**
+
+| Param | Type | Required | Notes |
+|---|---|---|---|
+| `page` | integer | no | Default `1` |
+| `limit` | integer | no | Max `100` |
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Messages retrieved",
+  "data": [ ...messages ],
+  "meta": { "page": 1, "limit": 20, "total": 12, "totalPages": 1 },
+  "timestamp": "2024-03-15T14:05:00.000Z"
+}
+```
+
+---
+
+### PATCH /api/client/api/messages/conversations/:providerId/read
+
+Mark all messages in a conversation as read from the client's perspective. Emits a `message_read` WebSocket event to the conversation room.
+
+**Path parameters**
+
+| Param | Type | Notes |
+|---|---|---|
+| `providerId` | ObjectId | `businessId` |
+
+**Response `200`**
+```json
+{
+  "success": true,
+  "statusCode": 200,
+  "message": "Conversation marked as read",
+  "data": null,
+  "timestamp": "2024-03-15T14:05:00.000Z"
+}
+```
+
+---
+
+## Client Portal WebSocket
+
+**Namespace:** `/client-messages`
+
+### Connection
+
+```js
+const socket = io('https://<host>/client-messages', {
+  auth: { token: '<clientAccessToken>' }
+});
+```
+
+On successful connection the server emits `connected`:
+```json
+{ "clientId": "<clientId>", "message": "Connected" }
+```
+
+### Events
+
+#### Client → Server
+
+---
+
+**`join_conversation`** — Join a conversation room with a specific provider.
+
+```js
+socket.emit('join_conversation', { providerId: '<businessId>' });
+```
+
+---
+
+**`leave_conversation`** — Leave a conversation room.
+
+```js
+socket.emit('leave_conversation', { providerId: '<businessId>' });
+```
+
+---
+
+**`send_message`** — Send a text message to a provider.
+
+```js
+socket.emit('send_message', {
+  providerId: '<businessId>',
+  content: 'Hi, is my appointment still on?'
+});
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `providerId` | ObjectId | yes | `businessId` |
+| `content` | string | yes | Max 5000 characters |
+
+Server broadcasts `new_message` to all participants in the room (including the sender).
+
+---
+
+**`mark_read`** — Mark all messages in a conversation as read.
+
+```js
+socket.emit('mark_read', { providerId: '<businessId>' });
+```
+
+Server emits `message_read` and `conversation_updated` to the room.
+
+---
+
+**`typing_start`** / **`typing_stop`** — Broadcast typing status to the other party.
+
+```js
+socket.emit('typing_start', { providerId: '<businessId>' });
+socket.emit('typing_stop',  { providerId: '<businessId>' });
+```
+
+Server broadcasts `typing` to the other party's room:
+```json
+{ "clientId": "<clientId>", "isTyping": true }
+```
+
+---
+
+#### Server → Client
+
+| Event | Payload | Description |
+|---|---|---|
+| `connected` | `{ clientId, message }` | Emitted on successful connection |
+| `new_message` | message object | New message arrived in a conversation room |
+| `message_read` | `{ clientId, providerId }` | The other party read the conversation |
+| `conversation_updated` | conversation object | Unread counts or last-message updated |
+| `typing` | `{ clientId, isTyping }` | The other party's typing status changed |
+| `error` | `{ message }` | Error from a socket event handler |
+
+---
+
+## Typical Client-Side Message Flow
+
+```
+1. Client opens messaging               →  GET /api/client/api/messages/conversations
+2. Client opens a conversation          →  GET /api/client/api/messages/conversations/:providerId
+3. Connect socket                       →  socket.connect()
+4. Join conversation room               →  emit('join_conversation', { providerId })
+5. Client types                         →  emit('typing_start', { providerId })
+6. Client sends message                 →  emit('send_message', { providerId, content })
+7. Business replies                     →  on('new_message', ...)
+8. Client reads messages                →  emit('mark_read', { providerId })
+9. Leave conversation / close chat      →  emit('leave_conversation', { providerId })
+```

@@ -20,7 +20,7 @@ export async function createTestApp(overrideEnv: {
   process.env.REDIS_HOST = redisUrl.hostname;
   process.env.REDIS_PORT = redisUrl.port || '6379';
   process.env.JWT_SECRET = 'test-jwt-secret-integration-32chars!!';
-  process.env.JWT_EXPIRES_IN = '15m';
+  process.env.JWT_EXPIRES_IN = '30m';
   process.env.API_KEY = apiKey;
   process.env.ENCRYPTION_SECRET = 'a'.repeat(64);
   process.env.ENCRYPTION_IV = 'b'.repeat(24);
