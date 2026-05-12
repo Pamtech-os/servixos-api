@@ -10,6 +10,7 @@ import { Job as AgendaJob } from 'agenda';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
 import { JOBS } from 'src/common/constants/agenda.constants';
+import type { Employee } from 'src/modules/employees/schemas/employee.schema';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { TASKS_MESSAGES } from 'src/common/constants/messages/tasks.messages';
@@ -52,6 +53,7 @@ interface TaskStagesBootstrapJobData {
 interface ResolvedActor {
   actorId: Types.ObjectId;
   actorName: string;
+  actorEmail: string;
 }
 
 interface StageSeed {
@@ -82,7 +84,7 @@ export class TasksService implements OnModuleInit {
     private readonly agendaService: AgendaService,
   ) {}
 
-  onModuleInit(): void {
+  async onModuleInit(): Promise<void> {
     this.agendaService.define(
       JOBS.TASK_STAGES_BOOTSTRAP,
       async (job: AgendaJob): Promise<void> => {
@@ -103,6 +105,15 @@ export class TasksService implements OnModuleInit {
         await this.bootstrapDefaultStages(payload.businessId);
       },
     );
+
+    this.agendaService.define(
+      JOBS.TASK_OVERDUE_NOTIFICATION,
+      async (): Promise<void> => {
+        await this.checkAndNotifyOverdueTasks();
+      },
+    );
+
+    await this.agendaService.every('1 hour', JOBS.TASK_OVERDUE_NOTIFICATION);
   }
 
   async listTasks(
@@ -227,12 +238,14 @@ export class TasksService implements OnModuleInit {
     try {
       const bId = new Types.ObjectId(businessId);
       const [assignee, actor, timezone] = await Promise.all([
-        this.employeesRepository.findById(dto.assigneeId, bId),
+        dto.assigneeId
+          ? this.employeesRepository.findById(dto.assigneeId, bId)
+          : Promise.resolve(null),
         this.resolveActor(userId, businessId),
         this.resolveBusinessTimezone(businessId),
       ]);
 
-      if (!assignee) {
+      if (dto.assigneeId && !assignee) {
         return new NotFoundException(TASKS_MESSAGES.ERROR.ASSIGNEE_NOT_FOUND);
       }
 
@@ -250,7 +263,8 @@ export class TasksService implements OnModuleInit {
 
       const created = await this.tasksRepository.create({
         businessId: bId,
-        assigneeId: assignee._id,
+        createdById: actor.actorId,
+        assigneeId: assignee?._id,
         title: dto.title,
         description: dto.description,
         stage: dto.stage,
@@ -270,10 +284,21 @@ export class TasksService implements OnModuleInit {
         description: `Created task "${created.title}"`,
         metadata: {
           stage: created.stage,
-          assigneeId: created.assigneeId.toString(),
+          assigneeId: created.assigneeId?.toString(),
         },
         timezone,
       });
+
+      if (assignee) {
+        void this.agendaService.now(JOBS.EMAIL_TASK_ASSIGNED, {
+          to: assignee.email,
+          assigneeName: assignee.fullName,
+          taskTitle: created.title,
+          actorName: actor.actorName,
+          priority: created.priority,
+          dueDate: created.dueDate?.toISOString(),
+        });
+      }
 
       await this.invalidateTasksListCache(businessId);
       return created;
@@ -312,12 +337,13 @@ export class TasksService implements OnModuleInit {
         return actor;
       }
 
+      let newAssignee: Employee | null = null;
       if (dto.assigneeId) {
-        const assignee = await this.employeesRepository.findById(
+        newAssignee = await this.employeesRepository.findById(
           dto.assigneeId,
           bId,
         );
-        if (!assignee) {
+        if (!newAssignee) {
           return new NotFoundException(TASKS_MESSAGES.ERROR.ASSIGNEE_NOT_FOUND);
         }
       }
@@ -367,6 +393,16 @@ export class TasksService implements OnModuleInit {
           updatedFields: Object.keys(normalized),
         },
         timezone,
+      });
+
+      void this.dispatchTaskUpdateEmails({
+        userId,
+        existingAssigneeId: existing.assigneeId?.toString(),
+        createdById: existing.createdById?.toString(),
+        newAssignee,
+        bId,
+        actor,
+        taskTitle: updated.title,
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -484,24 +520,26 @@ export class TasksService implements OnModuleInit {
     dto: AddTaskSubtaskDto,
   ): Promise<Task | NotFoundException | InternalServerErrorException> {
     try {
-      const [actor, timezone] = await Promise.all([
+      const bId = new Types.ObjectId(businessId);
+      const [existing, actor, timezone] = await Promise.all([
+        this.tasksRepository.findById(id, bId, false),
         this.resolveActor(userId, businessId),
         this.resolveBusinessTimezone(businessId),
       ]);
+
+      if (!existing) {
+        return new NotFoundException(TASKS_MESSAGES.ERROR.NOT_FOUND);
+      }
 
       if (actor instanceof NotFoundException) {
         return actor;
       }
 
-      const updated = await this.tasksRepository.appendSubtask(
-        id,
-        new Types.ObjectId(businessId),
-        {
-          _id: new Types.ObjectId(),
-          title: dto.title,
-          completed: false,
-        },
-      );
+      const updated = await this.tasksRepository.appendSubtask(id, bId, {
+        _id: new Types.ObjectId(),
+        title: dto.title,
+        completed: false,
+      });
 
       if (!updated) {
         return new NotFoundException(TASKS_MESSAGES.ERROR.NOT_FOUND);
@@ -514,6 +552,16 @@ export class TasksService implements OnModuleInit {
         type: TaskActivityType.SUBTASK_ADDED,
         description: `Added subtask "${dto.title}"`,
         timezone,
+      });
+
+      void this.dispatchTaskUpdateEmails({
+        userId,
+        existingAssigneeId: existing.assigneeId?.toString(),
+        createdById: existing.createdById?.toString(),
+        newAssignee: null,
+        bId,
+        actor,
+        taskTitle: existing.title,
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -578,6 +626,16 @@ export class TasksService implements OnModuleInit {
           completed: dto.completed,
         },
         timezone,
+      });
+
+      void this.dispatchTaskUpdateEmails({
+        userId,
+        existingAssigneeId: existing.assigneeId?.toString(),
+        createdById: existing.createdById?.toString(),
+        newAssignee: null,
+        bId,
+        actor,
+        taskTitle: existing.title,
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -656,12 +714,138 @@ export class TasksService implements OnModuleInit {
       actorId: user._id,
       actorName:
         employee?.fullName ?? `${user.firstName} ${user.lastName}`.trim(),
+      actorEmail: user.email,
     };
   }
 
   private async resolveBusinessTimezone(businessId: string): Promise<string> {
     const business = await this.businessRepository.findById(businessId);
     return business?.timezone ?? 'UTC';
+  }
+
+  /**
+   * Runs every hour and emails assignees whose tasks are overdue in their
+   * business local timezone. Fires only for businesses where the local hour
+   * is currently 0 (midnight), and deduplicates via Redis so each assignee
+   * receives at most one overdue email per task per calendar day.
+   */
+  private async checkAndNotifyOverdueTasks(): Promise<void> {
+    const businesses = await this.businessRepository.findAllTimezones();
+    const now = new Date();
+
+    for (const business of businesses) {
+      const timezone = business.timezone ?? 'UTC';
+      const localNow = toBusinessLocalTime(now, timezone);
+
+      // Only run for businesses where the local clock just turned midnight
+      if (localNow.getUTCHours() !== 0) continue;
+
+      // Start of today in the business timezone (stored as fake UTC)
+      const todayStart = new Date(localNow);
+      todayStart.setUTCHours(0, 0, 0, 0);
+
+      // YYYY-MM-DD in the business local timezone, used for dedup key
+      const localDate = todayStart.toISOString().slice(0, 10);
+
+      const overdueTasks = await this.tasksRepository.findOverdueForBusiness(
+        business._id,
+        todayStart,
+      );
+
+      for (const task of overdueTasks) {
+        const assignee = task.assigneeId;
+        if (!assignee?.email) continue;
+
+        // Deduplicate: skip if we already notified this assignee about this task today
+        const dedupKey = `task_overdue_notified:${task._id.toString()}:${localDate}`;
+        const alreadySent = await this.redisService.get(dedupKey);
+        if (alreadySent) continue;
+
+        const dueDateDisplay = task.dueDate
+          ? new Date(task.dueDate).toLocaleDateString('en-US', {
+              month: 'long',
+              day: 'numeric',
+              year: 'numeric',
+            })
+          : 'N/A';
+
+        void this.agendaService.now(JOBS.EMAIL_TASK_OVERDUE, {
+          to: assignee.email,
+          assigneeName: assignee.fullName,
+          taskTitle: task.title,
+          dueDate: dueDateDisplay,
+        });
+
+        // TTL slightly over 24 h to survive DST transitions
+        await this.redisService.set(dedupKey, '1', 25 * 60 * 60);
+      }
+    }
+  }
+
+  /**
+   * Sends background email notifications after a task is created or updated.
+   *
+   * - New assignee set → notify them they were assigned.
+   * - Actor is the existing assignee → notify the task creator (they updated their own task).
+   * - Actor is not the assignee → notify the assignee (someone else changed their task).
+   */
+  private async dispatchTaskUpdateEmails(params: {
+    userId: string;
+    existingAssigneeId?: string;
+    createdById?: string;
+    newAssignee: Employee | null;
+    bId: Types.ObjectId;
+    actor: ResolvedActor;
+    taskTitle: string;
+  }): Promise<void> {
+    const {
+      userId,
+      existingAssigneeId,
+      createdById,
+      newAssignee,
+      bId,
+      actor,
+      taskTitle,
+    } = params;
+
+    if (newAssignee) {
+      void this.agendaService.now(JOBS.EMAIL_TASK_ASSIGNED, {
+        to: newAssignee.email,
+        assigneeName: newAssignee.fullName,
+        taskTitle,
+        actorName: actor.actorName,
+      });
+      return;
+    }
+
+    if (!existingAssigneeId) return;
+
+    const existingAssignee = await this.employeesRepository.findById(
+      existingAssigneeId,
+      bId,
+    );
+
+    const actorIsAssignee = existingAssignee?.userId?.toString() === userId;
+
+    if (actorIsAssignee) {
+      if (!createdById) return;
+      const creator = await this.usersRepository.findById(createdById);
+      if (!creator) return;
+
+      void this.agendaService.now(JOBS.EMAIL_TASK_UPDATED_ACTOR, {
+        to: creator.email,
+        actorName: `${creator.firstName} ${creator.lastName}`.trim(),
+        taskTitle,
+        assigneeName: actor.actorName,
+      });
+    } else if (existingAssignee) {
+      void this.agendaService.now(JOBS.EMAIL_TASK_UPDATED_ASSIGNEE, {
+        to: existingAssignee.email,
+        assigneeName: existingAssignee.fullName,
+        taskTitle,
+        actorName: actor.actorName,
+      });
+    }
   }
 
   /**

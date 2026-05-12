@@ -43,6 +43,13 @@ type PopulatedEmployee = {
   fullName: string;
 };
 
+type OverdueTask = {
+  _id: Types.ObjectId;
+  title: string;
+  dueDate?: Date;
+  assigneeId: { _id: Types.ObjectId; email: string; fullName: string } | null;
+};
+
 type TaskWithMetadata = Task & {
   createdAt?: Date;
   updatedAt?: Date;
@@ -150,6 +157,25 @@ export class TasksRepository {
   async create(data: Partial<Task>, session?: ClientSession): Promise<Task> {
     const [created] = await this.taskModel.create([data], { session });
     return this.sanitizeTask(created.toObject() as TaskWithMetadata) as Task;
+  }
+
+  async findOverdueForBusiness(
+    businessId: Types.ObjectId,
+    cutoff: Date,
+  ): Promise<OverdueTask[]> {
+    const docs = await this.taskModel
+      .find({
+        businessId,
+        dueDate: { $lt: cutoff },
+        stage: { $ne: TaskStage.COMPLETED },
+        assigneeId: { $exists: true, $ne: null },
+        deletedAt: null,
+      })
+      .populate({ path: 'assigneeId', select: 'email fullName' })
+      .lean()
+      .exec();
+
+    return docs as unknown as OverdueTask[];
   }
 
   async updateById(

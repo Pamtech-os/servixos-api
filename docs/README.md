@@ -73,7 +73,13 @@ Some list endpoints include a `statistics` top-level key with aggregate counts/t
 | [api-jobs.md](./api-jobs.md) | Job scheduling, start/complete, contracts |
 | [api-invoices.md](./api-invoices.md) | Invoice creation, PDF, send |
 | [api-payments.md](./api-payments.md) | Payment recording |
-| [api-messaging.md](./api-messaging.md) | REST + WebSocket chat (Socket.io) |
+| [api-messaging.md](./api-messaging.md) | REST + WebSocket chat — business ↔ client (both portals) |
+| [api-team-messaging.md](./api-team-messaging.md) | Internal team message feed |
+| [api-announcements.md](./api-announcements.md) | Business-wide staff announcements |
+| [api-contracts.md](./api-contracts.md) | Contract creation, PDF, send, sign (both portals) |
+| [api-files.md](./api-files.md) | Client file uploads and downloads (both portals) |
+| [api-schedules.md](./api-schedules.md) | Employee shift scheduling |
+| [api-tasks.md](./api-tasks.md) | Task management, subtasks, comments, activity log |
 | [api-activity-logs.md](./api-activity-logs.md) | Audit trail |
 | [api-roles-permissions.md](./api-roles-permissions.md) | Role CRUD + permission reference |
 | [api-employees.md](./api-employees.md) | Employee management + time tracking |

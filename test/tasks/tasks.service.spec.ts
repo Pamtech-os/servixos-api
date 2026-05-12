@@ -20,6 +20,7 @@ describe('TasksService', () => {
   const tasksRepository = {
     findAll: jest.fn(),
     findById: jest.fn(),
+    findOverdueForBusiness: jest.fn(),
     create: jest.fn(),
     updateById: jest.fn(),
     softDelete: jest.fn(),
@@ -39,6 +40,7 @@ describe('TasksService', () => {
 
   const businessRepository = {
     findById: jest.fn(),
+    findAllTimezones: jest.fn(),
   };
 
   const usersRepository = {
@@ -53,6 +55,8 @@ describe('TasksService', () => {
 
   const agendaService = {
     define: jest.fn(),
+    now: jest.fn().mockResolvedValue(undefined),
+    every: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(() => {
@@ -68,6 +72,7 @@ describe('TasksService', () => {
   });
 
   it('returns not found when creating task with unknown assignee', async () => {
+    // Arrange
     employeesRepository.findById.mockResolvedValue(null);
     employeesRepository.findByUserId.mockResolvedValue(null);
     usersRepository.findById.mockResolvedValue({
@@ -79,6 +84,7 @@ describe('TasksService', () => {
     });
     businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
 
+    // Act
     const result = await service.createTask(BUSINESS_ID, USER_ID, {
       title: 'Fix bathroom leak',
       description: 'Address leak under the sink',
@@ -88,7 +94,50 @@ describe('TasksService', () => {
       stage: TaskStage.TODO,
     });
 
+    // Assert
     expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  it('creates a task without an assignee', async () => {
+    // Arrange
+    const createdTask = {
+      _id: new Types.ObjectId(TASK_ID),
+      title: 'Unassigned task',
+      stage: TaskStage.TODO,
+    };
+    usersRepository.findById.mockResolvedValue({
+      _id: new Types.ObjectId(USER_ID),
+      businessId: new Types.ObjectId(BUSINESS_ID),
+      firstName: 'Task',
+      lastName: 'Owner',
+      email: 'owner@test.local',
+      deletedAt: null,
+    });
+    employeesRepository.findByUserId.mockResolvedValue(null);
+    businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
+    tasksRepository.findStageByKey.mockResolvedValue({ key: TaskStage.TODO });
+    tasksRepository.create.mockResolvedValue(createdTask);
+    tasksRepository.createActivity.mockResolvedValue({});
+    redisService.delByPattern.mockResolvedValue(0);
+
+    // Act
+    const result = await service.createTask(BUSINESS_ID, USER_ID, {
+      title: 'Unassigned task',
+      stage: TaskStage.TODO,
+    });
+
+    // Assert
+    expect(result).toEqual(createdTask);
+    expect(tasksRepository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Unassigned task',
+        assigneeId: undefined,
+      }),
+    );
+    expect(agendaService.now).not.toHaveBeenCalledWith(
+      'email:task:assigned',
+      expect.anything(),
+    );
   });
 
   it('allows non-employee business user to comment on a task', async () => {
@@ -179,5 +228,96 @@ describe('TasksService', () => {
     );
 
     expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  describe('overdue task notifications', () => {
+    // Fix system time to 2026-05-01T00:00:00Z (midnight UTC).
+    // UTC timezone → local hour = 0 → should process.
+    // America/New_York (UTC-4 in May) → local hour = 20 → should skip.
+    beforeEach(() => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-05-01T00:00:00Z'));
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('sends overdue emails for businesses at local midnight and skips others', async () => {
+      // Arrange
+      const bizUtc = { _id: new Types.ObjectId(), timezone: 'UTC' };
+      const bizNy = { _id: new Types.ObjectId(), timezone: 'America/New_York' };
+      const overdueTask = {
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix the leak',
+        dueDate: new Date('2026-04-30T00:00:00Z'),
+        assigneeId: {
+          _id: new Types.ObjectId(EMPLOYEE_ID),
+          email: 'worker@test.local',
+          fullName: 'Jane Worker',
+        },
+      };
+
+      businessRepository.findAllTimezones.mockResolvedValue([bizUtc, bizNy]);
+      tasksRepository.findOverdueForBusiness.mockResolvedValue([overdueTask]);
+      redisService.get.mockResolvedValue(null);
+      redisService.set.mockResolvedValue('OK');
+
+      // Act
+      await (
+        service as unknown as {
+          checkAndNotifyOverdueTasks(): Promise<void>;
+        }
+      ).checkAndNotifyOverdueTasks();
+
+      // Assert — only UTC business reached the overdue query
+      expect(tasksRepository.findOverdueForBusiness).toHaveBeenCalledTimes(1);
+      expect(tasksRepository.findOverdueForBusiness).toHaveBeenCalledWith(
+        bizUtc._id,
+        expect.any(Date),
+      );
+      expect(agendaService.now).toHaveBeenCalledWith(
+        'email:task:overdue',
+        expect.objectContaining({
+          to: 'worker@test.local',
+          assigneeName: 'Jane Worker',
+          taskTitle: 'Fix the leak',
+        }),
+      );
+      expect(redisService.set).toHaveBeenCalledWith(
+        expect.stringContaining(TASK_ID),
+        '1',
+        25 * 60 * 60,
+      );
+    });
+
+    it('skips overdue email if Redis dedup key already exists', async () => {
+      // Arrange
+      const biz = { _id: new Types.ObjectId(), timezone: 'UTC' };
+      businessRepository.findAllTimezones.mockResolvedValue([biz]);
+      tasksRepository.findOverdueForBusiness.mockResolvedValue([
+        {
+          _id: new Types.ObjectId(TASK_ID),
+          title: 'Already notified task',
+          dueDate: new Date('2026-04-30T00:00:00Z'),
+          assigneeId: {
+            _id: new Types.ObjectId(EMPLOYEE_ID),
+            email: 'worker@test.local',
+            fullName: 'Jane Worker',
+          },
+        },
+      ]);
+      redisService.get.mockResolvedValue('1'); // already sent today
+
+      // Act
+      await (
+        service as unknown as {
+          checkAndNotifyOverdueTasks(): Promise<void>;
+        }
+      ).checkAndNotifyOverdueTasks();
+
+      // Assert
+      expect(agendaService.now).not.toHaveBeenCalled();
+      expect(redisService.set).not.toHaveBeenCalled();
+    });
   });
 });

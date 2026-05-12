@@ -11,6 +11,11 @@ export const JOBS = {
   INVOICE_AUTO_CREATE_PAYMENT: 'invoice:auto-create-payment',
   ACTIVITY_LOG_WRITE: 'activity-log:write',
   TASK_STAGES_BOOTSTRAP: 'tasks:stages:bootstrap',
+  EMAIL_TASK_ASSIGNED: 'email:task:assigned',
+  EMAIL_TASK_UPDATED_ASSIGNEE: 'email:task:updated:assignee',
+  EMAIL_TASK_UPDATED_ACTOR: 'email:task:updated:actor',
+  EMAIL_TASK_OVERDUE: 'email:task:overdue',
+  TASK_OVERDUE_NOTIFICATION: 'task:overdue:notification',
   CLIENT_REQUESTS_CLEANUP: 'client:requests:cleanup',
 } as const;
 

@@ -8,7 +8,6 @@ export function employeeInvitationTemplate(
 ): string {
   const body = `
       <div style="background:linear-gradient(135deg,hsl(217,91%,60%) 0%,hsl(270,70%,60%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
-        <p style="font-size:34px;margin:0 0 10px;line-height:1;">Team Access</p>
         <h1 style="color:#ffffff;font-size:20px;font-weight:700;margin:0 0 8px;letter-spacing:-0.02em;">
           Your employee account is ready
         </h1>

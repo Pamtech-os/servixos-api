@@ -51,8 +51,11 @@ export class Task {
   @prop({ ref: 'Business', type: Types.ObjectId, required: true })
   businessId: Types.ObjectId;
 
-  @prop({ ref: 'Employee', type: Types.ObjectId, required: true })
-  assigneeId: Types.ObjectId;
+  @prop({ ref: 'User', type: Types.ObjectId })
+  createdById?: Types.ObjectId;
+
+  @prop({ ref: 'Employee', type: Types.ObjectId })
+  assigneeId?: Types.ObjectId;
 
   @prop({ required: true, trim: true })
   title: string;

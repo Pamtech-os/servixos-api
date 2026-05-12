@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
-import { ClientSession, Connection } from 'mongoose';
+import { ClientSession, Connection, Types } from 'mongoose';
 import { Business } from '../schemas/business.schema';
 
 @Injectable()
@@ -30,6 +30,15 @@ export class BusinessRepository {
     return this.businessModel
       .findOne({ subdomain, deletedAt: null })
       .lean<Business>()
+      .exec();
+  }
+
+  async findAllTimezones(): Promise<
+    Array<{ _id: Types.ObjectId; timezone: string }>
+  > {
+    return this.businessModel
+      .find({ deletedAt: null }, { _id: 1, timezone: 1 })
+      .lean<Array<{ _id: Types.ObjectId; timezone: string }>>()
       .exec();
   }
 
