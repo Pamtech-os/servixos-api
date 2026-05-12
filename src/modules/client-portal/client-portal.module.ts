@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AuthRepository } from '../auth/repositories/auth.repository';
 import { BusinessModule } from '../business/business.module';
 import { ClientsModule } from '../clients/clients.module';
+import { ContractsModule } from '../contracts/contracts.module';
 import { InvoicesModule } from '../invoices/invoices.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { MessagingModule } from '../messaging/messaging.module';
@@ -45,6 +46,7 @@ import { ClientProfileService } from './services/client-profile.service';
     }),
     UsersModule,
     ClientsModule,
+    ContractsModule,
     BusinessModule,
     InvoicesModule,
     JobsModule,

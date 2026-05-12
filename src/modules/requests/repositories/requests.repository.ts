@@ -194,6 +194,16 @@ export class RequestsRepository {
     return this.sanitizeRequest(request);
   }
 
+  async softDeleteByClientEmail(
+    clientEmail: string,
+    businessId: Types.ObjectId,
+  ): Promise<void> {
+    await this.requestModel.updateMany(
+      { clientEmail, businessId, deletedAt: null },
+      { $set: { deletedAt: new Date() } },
+    );
+  }
+
   private sanitizeRequests(
     requests: ServiceRequestWithMetadata[],
   ): ServiceRequest[] {

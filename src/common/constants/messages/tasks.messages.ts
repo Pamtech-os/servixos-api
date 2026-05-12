@@ -1,8 +1,25 @@
 export const TASKS_MESSAGES = {
+  VALIDATION: {
+    ID_INVALID: 'Task ID must be a valid Mongo ID',
+    ASSIGNEE_ID_INVALID: 'Assignee ID must be a valid Mongo ID',
+    SUBTASK_ID_INVALID: 'Subtask ID must be a valid Mongo ID',
+    TITLE_REQUIRED: 'Task title is required',
+    TITLE_INVALID: 'Task title must be a valid string',
+    DESCRIPTION_INVALID: 'Task description must be a valid string',
+    STAGE_INVALID: 'stage must be one of todo, in_progress, completed',
+    PRIORITY_INVALID: 'priority must be one of low, medium, high, urgent',
+    DUE_DATE_INVALID: 'dueDate must be a valid ISO 8601 date string',
+    COMMENT_CONTENT_REQUIRED: 'Comment content is required',
+    COMMENT_CONTENT_INVALID: 'Comment content must be a valid string',
+    SUBTASK_TITLE_REQUIRED: 'Subtask title is required',
+    SUBTASK_TITLE_INVALID: 'Subtask title must be a valid string',
+    SUBTASK_COMPLETED_INVALID: 'completed must be a boolean value',
+  },
   SUCCESS: {
     CREATED: 'Task created successfully',
     RETRIEVED: 'Tasks retrieved successfully',
     FOUND: 'Task retrieved successfully',
+    ACTIVITIES_RETRIEVED: 'Task activities retrieved successfully',
     UPDATED: 'Task updated successfully',
     DELETED: 'Task deleted successfully',
     COMMENT_ADDED: 'Comment added successfully',
@@ -13,5 +30,8 @@ export const TASKS_MESSAGES = {
     NOT_FOUND: 'Task not found',
     SUBTASK_NOT_FOUND: 'Subtask not found',
     ASSIGNEE_NOT_FOUND: 'Assigned employee not found',
+    STAGE_NOT_FOUND: 'Task stage is not configured for this business',
+    USER_NOT_IN_BUSINESS:
+      'Authenticated user does not belong to the selected business',
   },
 } as const;

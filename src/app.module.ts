@@ -52,6 +52,10 @@ import { ActivityLogsModule } from './modules/activity-logs/activity-logs.module
 import { ExportsModule } from './modules/exports/exports.module';
 import { InvoicesModule } from './modules/invoices/invoices.module';
 import { PaymentsModule } from './modules/payments/payments.module';
+import { FilesModule } from './modules/files/files.module';
+import { ContractsModule } from './modules/contracts/contracts.module';
+import { SchedulesModule } from './modules/schedules/schedules.module';
+import { TasksModule } from './modules/tasks/tasks.module';
 
 @Module({
   imports: [
@@ -99,6 +103,10 @@ import { PaymentsModule } from './modules/payments/payments.module';
     ExportsModule,
     InvoicesModule,
     PaymentsModule,
+    FilesModule,
+    ContractsModule,
+    SchedulesModule,
+    TasksModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
