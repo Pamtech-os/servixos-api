@@ -395,6 +395,8 @@ export class TasksService implements OnModuleInit {
         timezone,
       });
 
+      const changes = this.buildTaskChangeSummary(dto, timezone);
+
       void this.dispatchTaskUpdateEmails({
         userId,
         existingAssigneeId: existing.assigneeId?.toString(),
@@ -403,6 +405,7 @@ export class TasksService implements OnModuleInit {
         bId,
         actor,
         taskTitle: updated.title,
+        changes,
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -562,6 +565,7 @@ export class TasksService implements OnModuleInit {
         bId,
         actor,
         taskTitle: existing.title,
+        changes: [`Added subtask "${dto.title}"`],
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -628,6 +632,10 @@ export class TasksService implements OnModuleInit {
         timezone,
       });
 
+      const subtaskTitle =
+        existing.subtasks.find((s) => s._id.toString() === subtaskId)?.title ??
+        'Subtask';
+
       void this.dispatchTaskUpdateEmails({
         userId,
         existingAssigneeId: existing.assigneeId?.toString(),
@@ -636,6 +644,9 @@ export class TasksService implements OnModuleInit {
         bId,
         actor,
         taskTitle: existing.title,
+        changes: [
+          `"${subtaskTitle}" marked as ${dto.completed ? 'completed' : 'incomplete'}`,
+        ],
       });
 
       await this.invalidateTasksListCache(businessId);
@@ -797,6 +808,7 @@ export class TasksService implements OnModuleInit {
     bId: Types.ObjectId;
     actor: ResolvedActor;
     taskTitle: string;
+    changes: string[];
   }): Promise<void> {
     const {
       userId,
@@ -806,6 +818,7 @@ export class TasksService implements OnModuleInit {
       bId,
       actor,
       taskTitle,
+      changes,
     } = params;
 
     if (newAssignee) {
@@ -837,6 +850,7 @@ export class TasksService implements OnModuleInit {
         actorName: `${creator.firstName} ${creator.lastName}`.trim(),
         taskTitle,
         assigneeName: actor.actorName,
+        changes,
       });
     } else if (existingAssignee) {
       void this.agendaService.now(JOBS.EMAIL_TASK_UPDATED_ASSIGNEE, {
@@ -844,6 +858,7 @@ export class TasksService implements OnModuleInit {
         assigneeName: existingAssignee.fullName,
         taskTitle,
         actorName: actor.actorName,
+        changes,
       });
     }
   }
@@ -875,6 +890,49 @@ export class TasksService implements OnModuleInit {
       metadata: params.metadata,
       createdAt: toBusinessLocalTime(new Date(), params.timezone),
     });
+  }
+
+  /** Builds a human-readable list of what changed for task update emails. */
+  private buildTaskChangeSummary(
+    dto: UpdateTaskDto,
+    timezone: string,
+  ): string[] {
+    const changes: string[] = [];
+
+    if (dto.title !== undefined) {
+      changes.push(`Title changed to "${dto.title}"`);
+    }
+    if (dto.description !== undefined) {
+      changes.push('Description updated');
+    }
+    if (dto.priority !== undefined) {
+      const label =
+        dto.priority.charAt(0).toUpperCase() + dto.priority.slice(1);
+      changes.push(`Priority set to ${label}`);
+    }
+    if (dto.stage !== undefined) {
+      const label = dto.stage
+        .replace(/_/g, ' ')
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+      changes.push(`Stage moved to ${label}`);
+    }
+    if (dto.dueDate !== undefined) {
+      if (dto.dueDate) {
+        const display = toBusinessLocalTime(
+          new Date(dto.dueDate),
+          timezone,
+        ).toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        });
+        changes.push(`Due date set to ${display}`);
+      } else {
+        changes.push('Due date removed');
+      }
+    }
+
+    return changes;
   }
 
   private async invalidateTasksListCache(businessId: string): Promise<void> {

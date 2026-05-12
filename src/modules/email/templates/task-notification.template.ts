@@ -62,7 +62,27 @@ export function taskUpdatedAssigneeTemplate(
   assigneeName: string,
   taskTitle: string,
   actorName: string,
+  changes?: string[],
 ): string {
+  const changesRows =
+    changes && changes.length > 0
+      ? changes
+          .map(
+            (change) =>
+              `<li style="font-size:12px;color:hsl(220,25%,10%);padding:3px 0;line-height:1.5;">${change}</li>`,
+          )
+          .join('')
+      : '';
+
+  const changesSection = changesRows
+    ? `<div style="margin:12px 0 0;">
+          <p style="margin:0 0 6px;font-size:11px;font-weight:600;color:hsl(220,10%,50%);letter-spacing:1px;text-transform:uppercase;">
+            What changed
+          </p>
+          <ul style="margin:0;padding-left:16px;">${changesRows}</ul>
+        </div>`
+    : '';
+
   const body = `
       <div style="background:linear-gradient(135deg,hsl(217,91%,60%) 0%,hsl(270,70%,60%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
         <p style="font-size:34px;margin:0 0 10px;line-height:1;">🔄</p>
@@ -85,6 +105,7 @@ export function taskUpdatedAssigneeTemplate(
             Task
           </p>
           <p style="margin:0;font-size:16px;font-weight:700;color:hsl(220,25%,10%);line-height:1.4;">${taskTitle}</p>
+          ${changesSection}
         </div>
 
         <p style="margin:0;font-size:11px;color:hsl(220,10%,55%);line-height:1.7;">
@@ -99,7 +120,27 @@ export function taskUpdatedActorTemplate(
   actorName: string,
   taskTitle: string,
   assigneeName: string,
+  changes?: string[],
 ): string {
+  const changesRows =
+    changes && changes.length > 0
+      ? changes
+          .map(
+            (change) =>
+              `<li style="font-size:12px;color:hsl(220,25%,10%);padding:3px 0;line-height:1.5;">${change}</li>`,
+          )
+          .join('')
+      : '';
+
+  const changesSection = changesRows
+    ? `<div style="margin:12px 0 0;">
+          <p style="margin:0 0 6px;font-size:11px;font-weight:600;color:hsl(220,10%,50%);letter-spacing:1px;text-transform:uppercase;">
+            What changed
+          </p>
+          <ul style="margin:0;padding-left:16px;">${changesRows}</ul>
+        </div>`
+    : '';
+
   const body = `
       <div style="background:linear-gradient(135deg,hsl(217,91%,60%) 0%,hsl(270,70%,60%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
         <p style="font-size:34px;margin:0 0 10px;line-height:1;">✅</p>
@@ -122,6 +163,7 @@ export function taskUpdatedActorTemplate(
             Task
           </p>
           <p style="margin:0;font-size:16px;font-weight:700;color:hsl(220,25%,10%);line-height:1.4;">${taskTitle}</p>
+          ${changesSection}
         </div>
 
         <p style="margin:0;font-size:11px;color:hsl(220,10%,55%);line-height:1.7;">

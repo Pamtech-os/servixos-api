@@ -6,7 +6,7 @@ import { EmployeesRepository } from 'src/modules/employees/repositories/employee
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { TasksRepository } from 'src/modules/tasks/repositories/tasks.repository';
 import { TasksService } from 'src/modules/tasks/services/tasks.service';
-import { TaskStage } from 'src/modules/tasks/schemas/task.schema';
+import { TaskPriority, TaskStage } from 'src/modules/tasks/schemas/task.schema';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
 
 const BUSINESS_ID = new Types.ObjectId().toString();
@@ -228,6 +228,248 @@ describe('TasksService', () => {
     );
 
     expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  describe('updateTask email notifications', () => {
+    const ASSIGNEE_USER_ID = new Types.ObjectId().toString();
+    const CREATOR_USER_ID = new Types.ObjectId().toString();
+
+    const baseUser = (id: string) => ({
+      _id: new Types.ObjectId(id),
+      businessId: new Types.ObjectId(BUSINESS_ID),
+      firstName: 'Task',
+      lastName: 'Owner',
+      email: 'owner@test.local',
+      deletedAt: null,
+    });
+
+    const existingTask = {
+      _id: new Types.ObjectId(TASK_ID),
+      title: 'Fix the pipe',
+      stage: TaskStage.TODO,
+      priority: 'low',
+      assigneeId: new Types.ObjectId(EMPLOYEE_ID),
+      createdById: new Types.ObjectId(CREATOR_USER_ID),
+      subtasks: [],
+    };
+
+    const assigneeEmployee = {
+      _id: new Types.ObjectId(EMPLOYEE_ID),
+      userId: new Types.ObjectId(ASSIGNEE_USER_ID),
+      fullName: 'Jane Worker',
+      email: 'jane@test.local',
+    };
+
+    beforeEach(() => {
+      businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
+      tasksRepository.createActivity.mockResolvedValue({});
+      redisService.delByPattern.mockResolvedValue(0);
+    });
+
+    it('sends EMAIL_TASK_UPDATED_ASSIGNEE with changes when actor is not the assignee', async () => {
+      // Arrange
+      const actorUser = baseUser(USER_ID);
+      usersRepository.findById.mockResolvedValue(actorUser);
+      employeesRepository.findByUserId.mockResolvedValue(null);
+      tasksRepository.findById.mockResolvedValue(existingTask);
+      tasksRepository.updateById.mockResolvedValue({
+        ...existingTask,
+        priority: 'high',
+        stage: TaskStage.IN_PROGRESS,
+      });
+      employeesRepository.findById.mockResolvedValue(assigneeEmployee);
+      tasksRepository.findStageByKey.mockResolvedValue({
+        key: TaskStage.IN_PROGRESS,
+      });
+
+      // Act
+      await service.updateTask(TASK_ID, BUSINESS_ID, USER_ID, {
+        priority: TaskPriority.HIGH,
+        stage: TaskStage.IN_PROGRESS,
+      });
+
+      // Assert
+      const jobPayload = agendaService.now.mock.calls[0] as [
+        string,
+        { changes: string[] },
+      ];
+      expect(jobPayload[0]).toBe('email:task:updated:assignee');
+      expect(jobPayload[1]).toMatchObject({
+        to: 'jane@test.local',
+        assigneeName: 'Jane Worker',
+        actorName: 'Task Owner',
+      });
+      expect(jobPayload[1].changes).toEqual(
+        expect.arrayContaining([
+          'Priority set to High',
+          'Stage moved to In Progress',
+        ]),
+      );
+    });
+
+    it('sends EMAIL_TASK_UPDATED_ACTOR with changes when the assignee updates their own task', async () => {
+      // Arrange
+      const assigneeUser = {
+        ...baseUser(ASSIGNEE_USER_ID),
+        email: 'jane@test.local',
+        firstName: 'Jane',
+        lastName: 'Worker',
+      };
+      const creatorUser = {
+        ...baseUser(CREATOR_USER_ID),
+        email: 'creator@test.local',
+        firstName: 'Bob',
+        lastName: 'Creator',
+      };
+      usersRepository.findById
+        .mockResolvedValueOnce(assigneeUser) // resolveActor
+        .mockResolvedValueOnce(creatorUser); // creator lookup
+      employeesRepository.findByUserId.mockResolvedValue(assigneeEmployee);
+      tasksRepository.findById.mockResolvedValue(existingTask);
+      tasksRepository.updateById.mockResolvedValue({
+        ...existingTask,
+        title: 'Fix the pipe (urgent)',
+      });
+      employeesRepository.findById.mockResolvedValue(assigneeEmployee);
+      tasksRepository.findStageByKey.mockResolvedValue({ key: TaskStage.TODO });
+
+      // Act
+      await service.updateTask(TASK_ID, BUSINESS_ID, ASSIGNEE_USER_ID, {
+        title: 'Fix the pipe (urgent)',
+      });
+
+      // Assert
+      expect(agendaService.now).toHaveBeenCalledWith(
+        'email:task:updated:actor',
+        expect.objectContaining({
+          to: 'creator@test.local',
+          actorName: 'Bob Creator',
+          assigneeName: 'Jane Worker',
+          changes: ['Title changed to "Fix the pipe (urgent)"'],
+        }),
+      );
+    });
+  });
+
+  describe('addSubtask email notifications', () => {
+    it('sends EMAIL_TASK_UPDATED_ASSIGNEE with subtask change description', async () => {
+      // Arrange
+      const existingTask = {
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix the pipe',
+        assigneeId: new Types.ObjectId(EMPLOYEE_ID),
+        createdById: new Types.ObjectId(),
+        subtasks: [],
+      };
+      const assigneeEmployee = {
+        _id: new Types.ObjectId(EMPLOYEE_ID),
+        userId: new Types.ObjectId(),
+        fullName: 'Jane Worker',
+        email: 'jane@test.local',
+      };
+      usersRepository.findById.mockResolvedValue({
+        _id: new Types.ObjectId(USER_ID),
+        businessId: new Types.ObjectId(BUSINESS_ID),
+        firstName: 'Task',
+        lastName: 'Owner',
+        email: 'owner@test.local',
+        deletedAt: null,
+      });
+      employeesRepository.findByUserId.mockResolvedValue(null);
+      businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
+      tasksRepository.findById.mockResolvedValue(existingTask);
+      tasksRepository.appendSubtask.mockResolvedValue({
+        ...existingTask,
+        subtasks: [
+          {
+            _id: new Types.ObjectId(),
+            title: 'Check the valve',
+            completed: false,
+          },
+        ],
+      });
+      tasksRepository.createActivity.mockResolvedValue({});
+      employeesRepository.findById.mockResolvedValue(assigneeEmployee);
+      redisService.delByPattern.mockResolvedValue(0);
+
+      // Act
+      await service.addSubtask(TASK_ID, BUSINESS_ID, USER_ID, {
+        title: 'Check the valve',
+      });
+
+      // Assert
+      expect(agendaService.now).toHaveBeenCalledWith(
+        'email:task:updated:assignee',
+        expect.objectContaining({
+          to: 'jane@test.local',
+          changes: ['Added subtask "Check the valve"'],
+        }),
+      );
+    });
+  });
+
+  describe('updateSubtask email notifications', () => {
+    it('sends EMAIL_TASK_UPDATED_ASSIGNEE with subtask completion change', async () => {
+      // Arrange
+      const subtaskId = new Types.ObjectId().toString();
+      const existingTask = {
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix the pipe',
+        assigneeId: new Types.ObjectId(EMPLOYEE_ID),
+        createdById: new Types.ObjectId(),
+        subtasks: [
+          {
+            _id: new Types.ObjectId(subtaskId),
+            title: 'Check the valve',
+            completed: false,
+          },
+        ],
+      };
+      const assigneeEmployee = {
+        _id: new Types.ObjectId(EMPLOYEE_ID),
+        userId: new Types.ObjectId(),
+        fullName: 'Jane Worker',
+        email: 'jane@test.local',
+      };
+      usersRepository.findById.mockResolvedValue({
+        _id: new Types.ObjectId(USER_ID),
+        businessId: new Types.ObjectId(BUSINESS_ID),
+        firstName: 'Task',
+        lastName: 'Owner',
+        email: 'owner@test.local',
+        deletedAt: null,
+      });
+      employeesRepository.findByUserId.mockResolvedValue(null);
+      businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
+      tasksRepository.findById.mockResolvedValue(existingTask);
+      tasksRepository.updateSubtaskCompletion.mockResolvedValue({
+        ...existingTask,
+        subtasks: [
+          {
+            _id: new Types.ObjectId(subtaskId),
+            title: 'Check the valve',
+            completed: true,
+          },
+        ],
+      });
+      tasksRepository.createActivity.mockResolvedValue({});
+      employeesRepository.findById.mockResolvedValue(assigneeEmployee);
+      redisService.delByPattern.mockResolvedValue(0);
+
+      // Act
+      await service.updateSubtask(TASK_ID, subtaskId, BUSINESS_ID, USER_ID, {
+        completed: true,
+      });
+
+      // Assert
+      expect(agendaService.now).toHaveBeenCalledWith(
+        'email:task:updated:assignee',
+        expect.objectContaining({
+          to: 'jane@test.local',
+          changes: ['"Check the valve" marked as completed'],
+        }),
+      );
+    });
   });
 
   describe('overdue task notifications', () => {
