@@ -7,9 +7,9 @@ import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
-import { ContractsRepository } from 'src/modules/jobs/repositories/contracts.repository';
+import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
-import { ContractStatus } from 'src/modules/jobs/schemas/contract.schema';
+import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { ClientContractsService } from 'src/modules/client-portal/services/client-contracts.service';
 import {

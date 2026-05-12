@@ -13,7 +13,7 @@ import { ClientsRepository } from 'src/modules/clients/repositories/clients.repo
 import { EmailService } from 'src/modules/email/services/email.service';
 import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
 import { RedisService } from 'src/modules/redis/services/redis.service';
-import { ContractsRepository } from 'src/modules/jobs/repositories/contracts.repository';
+import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { JobsService } from 'src/modules/jobs/services/jobs.service';
 import { Job, JobStatus } from 'src/modules/jobs/schemas/job.schema';

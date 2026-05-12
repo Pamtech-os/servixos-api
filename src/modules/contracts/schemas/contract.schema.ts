@@ -10,6 +10,7 @@ export enum ContractStatus {
 
 @index({ businessId: 1, jobId: 1 }, { unique: true })
 @index({ businessId: 1, clientId: 1, createdAt: -1 })
+@index({ businessId: 1, status: 1, createdAt: -1 })
 @modelOptions({ schemaOptions: { collection: 'contracts', timestamps: true } })
 export class Contract {
   _id: Types.ObjectId;
@@ -26,14 +27,20 @@ export class Contract {
   @prop({ required: true, trim: true })
   title: string;
 
-  @prop({ required: true })
+  @prop()
   html: string;
 
-  @prop({ required: true, trim: true })
+  @prop({ trim: true })
   pdfUrl: string;
 
   @prop({ trim: true })
   cloudinaryPublicId?: string;
+
+  @prop({ min: 0, default: 0 })
+  amount: number;
+
+  @prop()
+  expiresAt?: Date;
 
   @prop({ enum: ContractStatus, default: ContractStatus.DRAFT })
   status: ContractStatus;

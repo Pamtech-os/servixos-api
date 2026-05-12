@@ -25,7 +25,7 @@ import { contractClientTemplate } from '../../email/templates/contract-client.te
 import { EmailService } from '../../email/services/email.service';
 import { InvoicesService } from '../../invoices/services/invoices.service';
 import { RedisService } from '../../redis/services/redis.service';
-import { ContractsRepository } from '../repositories/contracts.repository';
+import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
 import { CreateJobDto } from '../dto/create-job.dto';
 import { ListJobsDto } from '../dto/list-jobs.dto';
 import { UpdateJobDto } from '../dto/update-job.dto';
@@ -34,7 +34,10 @@ import {
   AcceptedRequestJobCreationData,
   ContractSendJobData,
 } from '../types/jobs.types';
-import { Contract, ContractStatus } from '../schemas/contract.schema';
+import {
+  Contract,
+  ContractStatus,
+} from '../../contracts/schemas/contract.schema';
 import { Job, JobStatus } from '../schemas/job.schema';
 
 interface JobClientPreview {

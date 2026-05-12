@@ -16,6 +16,7 @@ import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { ClientCredentialsJobData } from '../../agenda/jobs/email.jobs';
+import type { ClientRequestsCleanupJobData } from '../../requests/services/requests.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { RedisService } from '../../redis/services/redis.service';
 import { UserRole } from '../../users/schemas/user.schema';
@@ -320,6 +321,17 @@ export class ClientsService {
       await this.redisService
         .del(clientDetailCacheKey(businessId, id))
         .catch(() => undefined);
+
+      void this.agendaService
+        .now<ClientRequestsCleanupJobData>(JOBS.CLIENT_REQUESTS_CLEANUP, {
+          businessId,
+          clientEmail: deleted.email,
+        })
+        .catch((err: unknown) =>
+          this.logger.error(
+            `deleteClient: failed to queue requests cleanup [businessId=${businessId}, clientEmail=${deleted.email}]: ${err instanceof Error ? err.stack : String(err)}`,
+          ),
+        );
 
       return null;
     } catch (error) {

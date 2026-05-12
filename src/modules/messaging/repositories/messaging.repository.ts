@@ -2,24 +2,60 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { Connection, Types } from 'mongoose';
+import { PaginationParams } from 'src/common/utils/pagination.util';
+import { Announcement } from '../schemas/announcement.schema';
+import { Conversation } from '../schemas/conversation.schema';
 import {
   Message,
   MessageSender,
   MessageStatus,
 } from '../schemas/message.schema';
-import { Conversation } from '../schemas/conversation.schema';
-import { PaginationParams } from 'src/common/utils/pagination.util';
+import { TeamMessage } from '../schemas/team-message.schema';
+
+type TeamMessageRow = TeamMessage & {
+  createdAt?: Date;
+  updatedAt?: Date;
+  __v?: number;
+};
+
+type AnnouncementRow = Announcement & {
+  createdAt?: Date;
+  updatedAt?: Date;
+  __v?: number;
+};
+
+export interface ConversationThread {
+  conversationId: Types.ObjectId;
+  client: {
+    id: Types.ObjectId;
+    fullName: string;
+    email: string;
+  };
+  lastMessageContent: string;
+  lastMessageAt?: Date;
+  lastMessageSender: MessageSender;
+  businessUnreadCount: number;
+  clientUnreadCount: number;
+}
 
 @Injectable()
 export class MessagingRepository {
   private readonly messageModel: ReturnModelType<typeof Message>;
   private readonly conversationModel: ReturnModelType<typeof Conversation>;
+  private readonly teamMessageModel: ReturnModelType<typeof TeamMessage>;
+  private readonly announcementModel: ReturnModelType<typeof Announcement>;
 
   constructor(@InjectConnection() connection: Connection) {
     this.messageModel = getModelForClass(Message, {
       existingConnection: connection,
     });
     this.conversationModel = getModelForClass(Conversation, {
+      existingConnection: connection,
+    });
+    this.teamMessageModel = getModelForClass(TeamMessage, {
+      existingConnection: connection,
+    });
+    this.announcementModel = getModelForClass(Announcement, {
       existingConnection: connection,
     });
   }
@@ -51,6 +87,7 @@ export class MessagingRepository {
     mimeType?: string;
     fileName?: string;
     fileSize?: number;
+    createdAt?: Date;
   }): Promise<Message> {
     const [message] = await this.messageModel.create([data]);
     return message.toObject() as Message;
@@ -60,6 +97,7 @@ export class MessagingRepository {
     conversationId: Types.ObjectId,
     content: string | undefined,
     sender: MessageSender,
+    occurredAt = new Date(),
   ): Promise<void> {
     const unreadField =
       sender === MessageSender.BUSINESS
@@ -70,8 +108,8 @@ export class MessagingRepository {
       { _id: conversationId },
       {
         $set: {
-          lastMessageContent: content ?? '📎 Attachment',
-          lastMessageAt: new Date(),
+          lastMessageContent: content ?? 'Attachment',
+          lastMessageAt: occurredAt,
           lastMessageSender: sender,
         },
         $inc: { [unreadField]: 1 },
@@ -90,10 +128,13 @@ export class MessagingRepository {
     );
   }
 
-  async markMessageDelivered(messageId: Types.ObjectId): Promise<void> {
+  async markMessageDelivered(
+    messageId: Types.ObjectId,
+    deliveredAt = new Date(),
+  ): Promise<void> {
     await this.messageModel.updateOne(
       { _id: messageId, status: MessageStatus.SENT },
-      { $set: { status: MessageStatus.DELIVERED, deliveredAt: new Date() } },
+      { $set: { status: MessageStatus.DELIVERED, deliveredAt } },
     );
   }
 
@@ -134,8 +175,9 @@ export class MessagingRepository {
     clientId: Types.ObjectId,
     upToMessageId: string,
     readerSender: MessageSender,
+    readAt = new Date(),
   ): Promise<void> {
-    // Mark messages sent by the OTHER side as read
+    // Mark messages sent by the OTHER side as read.
     const otherSide =
       readerSender === MessageSender.BUSINESS
         ? MessageSender.CLIENT
@@ -150,7 +192,7 @@ export class MessagingRepository {
         status: { $ne: MessageStatus.READ },
         deletedAt: null,
       },
-      { $set: { status: MessageStatus.READ, readAt: new Date() } },
+      { $set: { status: MessageStatus.READ, readAt } },
     );
   }
 
@@ -216,6 +258,55 @@ export class MessagingRepository {
         .exec(),
       this.conversationModel.countDocuments(query).exec(),
     ]);
+    return { data, total };
+  }
+
+  async findConversationThreads(
+    businessId: Types.ObjectId,
+    pagination: PaginationParams,
+  ): Promise<{ data: ConversationThread[]; total: number }> {
+    const [data, total] = await Promise.all([
+      this.conversationModel
+        .aggregate<ConversationThread>([
+          { $match: { businessId } },
+          { $sort: { lastMessageAt: -1, updatedAt: -1 } },
+          { $skip: pagination.skip },
+          { $limit: pagination.limit },
+          {
+            $lookup: {
+              from: 'clients',
+              localField: 'clientId',
+              foreignField: '_id',
+              as: 'client',
+            },
+          },
+          {
+            $unwind: {
+              path: '$client',
+              preserveNullAndEmptyArrays: false,
+            },
+          },
+          {
+            $project: {
+              _id: 0,
+              conversationId: '$_id',
+              client: {
+                id: '$client._id',
+                fullName: '$client.name',
+                email: '$client.email',
+              },
+              lastMessageContent: 1,
+              lastMessageAt: 1,
+              lastMessageSender: 1,
+              businessUnreadCount: 1,
+              clientUnreadCount: 1,
+            },
+          },
+        ])
+        .exec(),
+      this.conversationModel.countDocuments({ businessId }).exec(),
+    ]);
+
     return { data, total };
   }
 
@@ -315,5 +406,82 @@ export class MessagingRepository {
       })
       .lean<Message>()
       .exec();
+  }
+
+  async findTeamMessages(
+    businessId: Types.ObjectId,
+    pagination: PaginationParams,
+  ): Promise<{ data: TeamMessage[]; total: number }> {
+    const query = { businessId };
+    const [data, total] = await Promise.all([
+      this.teamMessageModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<TeamMessageRow[]>()
+        .exec(),
+      this.teamMessageModel.countDocuments(query).exec(),
+    ]);
+
+    return {
+      data: data.map((message) => this.sanitizeTeamMessage(message)),
+      total,
+    };
+  }
+
+  async createTeamMessage(data: {
+    businessId: Types.ObjectId;
+    senderId: Types.ObjectId;
+    senderName: string;
+    content: string;
+    createdAt?: Date;
+  }): Promise<TeamMessage> {
+    const [created] = await this.teamMessageModel.create([data]);
+    return this.sanitizeTeamMessage(created.toObject() as TeamMessageRow);
+  }
+
+  async findAnnouncements(
+    businessId: Types.ObjectId,
+    pagination: PaginationParams,
+  ): Promise<{ data: Announcement[]; total: number }> {
+    const query = { businessId };
+    const [data, total] = await Promise.all([
+      this.announcementModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<AnnouncementRow[]>()
+        .exec(),
+      this.announcementModel.countDocuments(query).exec(),
+    ]);
+
+    return {
+      data: data.map((announcement) => this.sanitizeAnnouncement(announcement)),
+      total,
+    };
+  }
+
+  async createAnnouncement(data: {
+    businessId: Types.ObjectId;
+    authorId: Types.ObjectId;
+    authorName: string;
+    title: string;
+    description: string;
+    createdAt?: Date;
+  }): Promise<Announcement> {
+    const [created] = await this.announcementModel.create([data]);
+    return this.sanitizeAnnouncement(created.toObject() as AnnouncementRow);
+  }
+
+  private sanitizeTeamMessage(message: TeamMessageRow): TeamMessage {
+    const { __v: _version, updatedAt: _updatedAt, ...safe } = message;
+    return safe as TeamMessage;
+  }
+
+  private sanitizeAnnouncement(announcement: AnnouncementRow): Announcement {
+    const { __v: _version, updatedAt: _updatedAt, ...safe } = announcement;
+    return safe as Announcement;
   }
 }

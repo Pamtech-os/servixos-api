@@ -10,6 +10,8 @@ export const JOBS = {
   INVOICE_SEND: 'invoice:send',
   INVOICE_AUTO_CREATE_PAYMENT: 'invoice:auto-create-payment',
   ACTIVITY_LOG_WRITE: 'activity-log:write',
+  TASK_STAGES_BOOTSTRAP: 'tasks:stages:bootstrap',
+  CLIENT_REQUESTS_CLEANUP: 'client:requests:cleanup',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Job } from 'agenda';
 import { Types } from 'mongoose';
 import { AI_MESSAGES } from 'src/common/constants/messages/ai.messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
@@ -16,6 +17,7 @@ import { RedisService } from 'src/modules/redis/services/redis.service';
 import { RequestsRepository } from 'src/modules/requests/repositories/requests.repository';
 import {
   ClientProvisioningJobData,
+  ClientRequestsCleanupJobData,
   RequestsService,
 } from 'src/modules/requests/services/requests.service';
 import {
@@ -29,6 +31,7 @@ describe('RequestsService', () => {
   let requestsRepository: {
     findById: jest.Mock;
     updateById: jest.Mock;
+    softDeleteByClientEmail: jest.Mock;
   };
   let clientsRepository: {
     findByEmail: jest.Mock;
@@ -73,6 +76,7 @@ describe('RequestsService', () => {
     requestsRepository = {
       findById: jest.fn(),
       updateById: jest.fn(),
+      softDeleteByClientEmail: jest.fn().mockResolvedValue(undefined),
     };
     clientsRepository = {
       findByEmail: jest.fn(),
@@ -392,6 +396,83 @@ describe('RequestsService', () => {
       expect((result as InternalServerErrorException).message).toBe(
         COMMON_MESSAGES.ERROR.INTERNAL,
       );
+    });
+  });
+
+  // ─── CLIENT_REQUESTS_CLEANUP job handler ────────────────────────────────────
+
+  describe('CLIENT_REQUESTS_CLEANUP job handler', () => {
+    const cleanupPayload: ClientRequestsCleanupJobData = {
+      businessId: payload.businessId,
+      clientEmail: payload.clientEmail,
+    };
+
+    /** Extract the handler registered for a given job name via agendaService.define */
+    function captureHandler(jobName: string): (job: Job) => Promise<void> {
+      service.onModuleInit();
+      const calls = agendaService.define.mock.calls as Array<
+        [string, (job: Job) => Promise<void>]
+      >;
+      const entry = calls.find(([name]) => name === jobName);
+      if (!entry) throw new Error(`Handler for "${jobName}" not registered`);
+      return entry[1];
+    }
+
+    function makeJob(data: unknown): Job {
+      return { attrs: { data } } as unknown as Job;
+    }
+
+    it('soft-deletes all requests for the client email and invalidates the cache', async () => {
+      // Arrange
+      const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
+
+      // Act
+      await handler(makeJob(cleanupPayload));
+
+      // Assert
+      expect(requestsRepository.softDeleteByClientEmail).toHaveBeenCalledWith(
+        cleanupPayload.clientEmail,
+        expect.objectContaining({ toString: expect.any(Function) as unknown }),
+      );
+      expect(redisService.incr).toHaveBeenCalled();
+    });
+
+    it('warns and skips when job payload is missing', async () => {
+      // Arrange
+      const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
+
+      // Act
+      await handler(makeJob(undefined));
+
+      // Assert
+      expect(requestsRepository.softDeleteByClientEmail).not.toHaveBeenCalled();
+      expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('warns and skips when clientEmail is empty', async () => {
+      // Arrange
+      const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
+
+      // Act
+      await handler(makeJob({ ...cleanupPayload, clientEmail: '' }));
+
+      // Assert
+      expect(requestsRepository.softDeleteByClientEmail).not.toHaveBeenCalled();
+      expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs error and continues when repository throws', async () => {
+      // Arrange
+      const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
+      requestsRepository.softDeleteByClientEmail.mockRejectedValue(
+        new Error('db error'),
+      );
+
+      // Act
+      await handler(makeJob(cleanupPayload));
+
+      // Assert
+      expect(loggerErrorSpy).toHaveBeenCalledTimes(1);
     });
   });
 });

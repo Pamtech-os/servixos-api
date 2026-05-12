@@ -334,10 +334,13 @@ describe('ClientsService', () => {
 
   describe('deleteClient', () => {
     it('should soft-delete client and invalidate caches', async () => {
+      // Arrange
       clientsRepository.softDelete.mockResolvedValue(baseClient);
 
+      // Act
       const result = await service.deleteClient(CLIENT_ID, BUSINESS_ID);
 
+      // Assert
       expect(clientsRepository.softDelete).toHaveBeenCalledWith(
         CLIENT_ID,
         expect.any(Types.ObjectId),
@@ -347,19 +350,50 @@ describe('ClientsService', () => {
       expect(result).toBeNull();
     });
 
-    it('should return NotFoundException when client does not exist', async () => {
+    it('should queue CLIENT_REQUESTS_CLEANUP job with the deleted client email', async () => {
+      // Arrange
+      clientsRepository.softDelete.mockResolvedValue(baseClient);
+
+      // Act
+      await service.deleteClient(CLIENT_ID, BUSINESS_ID);
+
+      // Assert — fire-and-forget job queued with correct identifiers
+      expect(agendaService.now).toHaveBeenCalledWith(
+        'client:requests:cleanup',
+        { businessId: BUSINESS_ID, clientEmail: baseClient.email },
+      );
+    });
+
+    it('should not queue cleanup job when client is not found', async () => {
+      // Arrange
       clientsRepository.softDelete.mockResolvedValue(null);
 
+      // Act
+      await service.deleteClient(CLIENT_ID, BUSINESS_ID);
+
+      // Assert
+      expect(agendaService.now).not.toHaveBeenCalled();
+    });
+
+    it('should return NotFoundException when client does not exist', async () => {
+      // Arrange
+      clientsRepository.softDelete.mockResolvedValue(null);
+
+      // Act
       const result = await service.deleteClient(CLIENT_ID, BUSINESS_ID);
 
+      // Assert
       expect(result).toBeInstanceOf(NotFoundException);
     });
 
     it('should return InternalServerErrorException on unexpected error', async () => {
+      // Arrange
       clientsRepository.softDelete.mockRejectedValue(new Error('db error'));
 
+      // Act
       const result = await service.deleteClient(CLIENT_ID, BUSINESS_ID);
 
+      // Assert
       expect(result).toBeInstanceOf(InternalServerErrorException);
     });
   });

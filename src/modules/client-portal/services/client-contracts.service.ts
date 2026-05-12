@@ -17,8 +17,11 @@ import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { JobsRepository } from '../../jobs/repositories/jobs.repository';
-import { Contract, ContractStatus } from '../../jobs/schemas/contract.schema';
-import { ContractsRepository } from '../../jobs/repositories/contracts.repository';
+import {
+  Contract,
+  ContractStatus,
+} from '../../contracts/schemas/contract.schema';
+import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
 import { RedisService } from '../../redis/services/redis.service';
 import {
   ClientContractDetail,

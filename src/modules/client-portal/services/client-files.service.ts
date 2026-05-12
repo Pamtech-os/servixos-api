@@ -11,7 +11,7 @@ import { CLIENT_MESSAGES } from 'src/client/constants/messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { InvoicesRepository } from '../../invoices/repositories/invoices.repository';
-import { ContractsRepository } from '../../jobs/repositories/contracts.repository';
+import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
 import { MessagingService } from '../../messaging/services/messaging.service';
 import { Message } from '../../messaging/schemas/message.schema';
 import { ClientFileListItem } from '../types/client-portal.types';

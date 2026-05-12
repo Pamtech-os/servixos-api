@@ -5,6 +5,7 @@ import { MessagingRepository } from './repositories/messaging.repository';
 import { MessagingService } from './services/messaging.service';
 import { MessagingGateway } from './messaging.gateway';
 import { MessagingController } from './controllers/messaging.controller';
+import { TeamMessagingController } from './controllers/team-messaging.controller';
 import { WsAuthGuard } from 'src/common/guards/ws-auth.guard';
 import { BusinessModule } from '../business/business.module';
 import { ClientsModule } from '../clients/clients.module';
@@ -22,7 +23,7 @@ import { EmployeesModule } from '../employees/employees.module';
       }),
     }),
   ],
-  controllers: [MessagingController],
+  controllers: [MessagingController, TeamMessagingController],
   providers: [
     MessagingRepository,
     MessagingService,

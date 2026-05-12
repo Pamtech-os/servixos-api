@@ -14,7 +14,10 @@ import { signRequest } from '../helpers/sign-request';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { MessagingService } from 'src/modules/messaging/services/messaging.service';
-import { MessageSender } from 'src/modules/messaging/schemas/message.schema';
+import {
+  MessageSender,
+  MessageStatus,
+} from 'src/modules/messaging/schemas/message.schema';
 import { Message } from 'src/modules/messaging/schemas/message.schema';
 import { Conversation } from 'src/modules/messaging/schemas/conversation.schema';
 import { Client } from 'src/modules/clients/schemas/client.schema';
@@ -324,11 +327,16 @@ describe('Messaging (integration)', () => {
 
       // Assert
       expect(res.status).toBe(200);
-      const body = res.body as ApiBody<{ businessId: string }[]>;
+      const body = res.body as ApiBody<
+        {
+          conversationId: string;
+          client: { id: string; fullName: string; email: string };
+        }[]
+      >;
       expect(body.data!.length).toBeGreaterThanOrEqual(1);
-      expect(
-        body.data!.every((c) => c.businessId === seededUser.businessId),
-      ).toBe(true);
+      expect(body.data![0].conversationId).toBeDefined();
+      expect(body.data![0].client.fullName).toBe('Test Client');
+      expect(body.data![0].client.email).toBe(clientEmail.toLowerCase());
     });
 
     it('should not return conversations from another business', async () => {
@@ -344,9 +352,11 @@ describe('Messaging (integration)', () => {
       const res = await asSeeded(req().get(`${BASE}/conversations`));
 
       // Assert
-      const body = res.body as ApiBody<{ businessId: string }[]>;
+      const body = res.body as ApiBody<
+        { client: { id: string; email: string } }[]
+      >;
       const otherBizConvs = body.data!.filter(
-        (c) => c.businessId === otherUser.businessId,
+        (c) => c.client.id === otherClient._id.toString(),
       );
       expect(otherBizConvs).toHaveLength(0);
     });
@@ -517,6 +527,218 @@ describe('Messaging (integration)', () => {
         totalPages: 2,
       });
       expect(body.data!.length).toBe(3);
+    });
+
+    it('should reset business unread count when conversation is fetched by business', async () => {
+      // Arrange
+      const email = `reset-unread-${Date.now()}@test.local`;
+      const client = await seedClient(seededUser.businessId, email);
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
+      await seedMessage(
+        seededUser.businessId,
+        client._id,
+        conversation._id,
+        'Unread message',
+        MessageSender.CLIENT,
+      );
+      await conversationModel.updateOne(
+        { _id: conversation._id },
+        { $set: { businessUnreadCount: 3 } },
+      );
+
+      // Act
+      const res = await asSeeded(req().get(`${BASE}/${client._id.toString()}`));
+
+      // Assert
+      expect(res.status).toBe(200);
+      const refreshed = await conversationModel
+        .findById(conversation._id)
+        .lean<Conversation>()
+        .exec();
+      expect(refreshed?.businessUnreadCount).toBe(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // POST /api/messages
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('POST /api/messages', () => {
+    it('should return 400 for empty content and no attachment', async () => {
+      // Arrange
+      const client = await seedClient(
+        seededUser.businessId,
+        `empty-message-${Date.now()}@test.local`,
+      );
+
+      // Act
+      const res = await asSeeded(
+        req().post(BASE).send({
+          clientId: client._id.toString(),
+          content: '   ',
+        }),
+      );
+
+      // Assert
+      expect(res.status).toBe(400);
+    });
+
+    it('should persist a business message and return payload', async () => {
+      // Arrange
+      const client = await seedClient(
+        seededUser.businessId,
+        `rest-send-${Date.now()}@test.local`,
+      );
+
+      // Act
+      const res = await asSeeded(
+        req().post(BASE).send({
+          clientId: client._id.toString(),
+          content: 'Your invoice is ready for review.',
+        }),
+      );
+
+      // Assert
+      expect(res.status).toBe(201);
+      const body = res.body as ApiBody<{ content?: string; clientId: string }>;
+      expect(body.message).toBe(MESSAGING_MESSAGES.SUCCESS.MESSAGE_SENT);
+      expect(body.data?.content).toBe('Your invoice is ready for review.');
+      expect(body.data?.clientId).toBe(client._id.toString());
+
+      const dbMessage = await messageModel
+        .findOne({
+          businessId: new Types.ObjectId(seededUser.businessId),
+          clientId: client._id,
+          content: 'Your invoice is ready for review.',
+        })
+        .lean<Message>()
+        .exec();
+      expect(dbMessage).toBeTruthy();
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // PATCH /api/messages/read
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('PATCH /api/messages/read', () => {
+    it('should mark messages as read up to the provided message id', async () => {
+      // Arrange
+      const client = await seedClient(
+        seededUser.businessId,
+        `mark-read-${Date.now()}@test.local`,
+      );
+      const conversation = await seedConversation(
+        seededUser.businessId,
+        client._id,
+      );
+      const first = await seedMessage(
+        seededUser.businessId,
+        client._id,
+        conversation._id,
+        'Client msg 1',
+        MessageSender.CLIENT,
+      );
+      const second = await seedMessage(
+        seededUser.businessId,
+        client._id,
+        conversation._id,
+        'Client msg 2',
+        MessageSender.CLIENT,
+      );
+      await conversationModel.updateOne(
+        { _id: conversation._id },
+        { $set: { businessUnreadCount: 2 } },
+      );
+
+      // Act
+      const res = await asSeeded(
+        req().patch(`${BASE}/read`).send({
+          clientId: client._id.toString(),
+          upToMessageId: second._id.toString(),
+        }),
+      );
+
+      // Assert
+      expect(res.status).toBe(200);
+      const updated = await messageModel
+        .find({
+          _id: { $in: [first._id, second._id] },
+        })
+        .lean<Message[]>()
+        .exec();
+      expect(updated.every((row) => row.status === MessageStatus.READ)).toBe(
+        true,
+      );
+
+      const refreshed = await conversationModel
+        .findById(conversation._id)
+        .lean<Conversation>()
+        .exec();
+      expect(refreshed?.businessUnreadCount).toBe(0);
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Team endpoints
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('Team messaging endpoints', () => {
+    it('should create and list team messages', async () => {
+      // Act - create
+      const createRes = await asSeeded(
+        req().post('/api/team/messages').send({
+          content: 'Team meeting at 3pm today',
+        }),
+      );
+
+      // Assert - create
+      expect(createRes.status).toBe(201);
+      const createdBody = createRes.body as ApiBody<{ content: string }>;
+      expect(createdBody.data?.content).toBe('Team meeting at 3pm today');
+
+      // Act - list
+      const listRes = await asSeeded(req().get('/api/team/messages'));
+
+      // Assert - list
+      expect(listRes.status).toBe(200);
+      const listBody = listRes.body as ApiBody<{ content: string }[]>;
+      expect(listBody.data!.length).toBeGreaterThan(0);
+      expect(
+        listBody.data!.some(
+          (row) => row.content === 'Team meeting at 3pm today',
+        ),
+      ).toBe(true);
+    });
+
+    it('should create and list announcements', async () => {
+      // Act - create
+      const createRes = await asSeeded(
+        req().post('/api/team/announcements').send({
+          title: 'Q2 Performance Review',
+          description:
+            'All employees must complete self-assessments by April 30.',
+        }),
+      );
+
+      // Assert - create
+      expect(createRes.status).toBe(201);
+      const createdBody = createRes.body as ApiBody<{ title: string }>;
+      expect(createdBody.data?.title).toBe('Q2 Performance Review');
+
+      // Act - list
+      const listRes = await asSeeded(req().get('/api/team/announcements'));
+
+      // Assert - list
+      expect(listRes.status).toBe(200);
+      const listBody = listRes.body as ApiBody<{ title: string }[]>;
+      expect(listBody.data!.length).toBeGreaterThan(0);
+      expect(
+        listBody.data!.some((row) => row.title === 'Q2 Performance Review'),
+      ).toBe(true);
     });
   });
 

@@ -27,7 +27,7 @@ import {
 import {
   Contract,
   ContractStatus,
-} from 'src/modules/jobs/schemas/contract.schema';
+} from 'src/modules/contracts/schemas/contract.schema';
 import { Conversation } from 'src/modules/messaging/schemas/conversation.schema';
 import {
   Message,

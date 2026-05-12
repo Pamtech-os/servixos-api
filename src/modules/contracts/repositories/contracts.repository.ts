@@ -15,6 +15,11 @@ interface ClientContractsFilters {
   sentBefore?: Date;
 }
 
+export interface ListContractsFilters {
+  clientId?: string;
+  status?: ContractStatus;
+}
+
 interface ContractsAggregateResult {
   data: Array<ContractWithMetadata & { job?: unknown; __jobPrice?: number }>;
   total: number;
@@ -40,6 +45,41 @@ export class ContractsRepository {
       .exec();
 
     return this.sanitizeContract(contract);
+  }
+
+  async findAll(
+    businessId: Types.ObjectId,
+    filters: ListContractsFilters,
+    pagination: { skip: number; limit: number },
+  ): Promise<{ data: Contract[]; total: number }> {
+    const query: Record<string, unknown> = {
+      businessId,
+      deletedAt: null,
+    };
+
+    if (filters.clientId) {
+      query['clientId'] = new Types.ObjectId(filters.clientId);
+    }
+
+    if (filters.status) {
+      query['status'] = filters.status;
+    }
+
+    const [data, total] = await Promise.all([
+      this.contractModel
+        .find(query)
+        .sort({ createdAt: -1 })
+        .skip(pagination.skip)
+        .limit(pagination.limit)
+        .lean<ContractWithMetadata[]>()
+        .exec(),
+      this.contractModel.countDocuments(query).exec(),
+    ]);
+
+    return {
+      data: data.map((row) => this.sanitizeContract(row)!),
+      total,
+    };
   }
 
   async findByJobId(
@@ -92,6 +132,33 @@ export class ContractsRepository {
       .exec();
 
     return this.sanitizeContract(updated);
+  }
+
+  async create(
+    data: Partial<Contract>,
+    session?: ClientSession,
+  ): Promise<Contract> {
+    const [created] = await this.contractModel.create([data], { session });
+    return this.sanitizeContract(
+      created.toObject() as ContractWithMetadata,
+    ) as Contract;
+  }
+
+  async softDelete(
+    id: string,
+    businessId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<Contract | null> {
+    const deleted = await this.contractModel
+      .findOneAndUpdate(
+        { _id: id, businessId, deletedAt: null },
+        { $set: { deletedAt: new Date() } },
+        { returnDocument: 'after', session },
+      )
+      .lean<ContractWithMetadata>()
+      .exec();
+
+    return this.sanitizeContract(deleted);
   }
 
   async findByIdForClient(

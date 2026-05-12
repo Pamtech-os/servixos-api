@@ -1,4 +1,12 @@
-import { IsMongoId, IsOptional, IsString, MaxLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  IsInt,
+  IsMongoId,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class SendMessageDto {
   @IsMongoId()
@@ -26,5 +34,8 @@ export class SendMessageDto {
   fileName?: string;
 
   @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
   fileSize?: number;
 }

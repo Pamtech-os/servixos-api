@@ -72,6 +72,11 @@ interface ClientProvisioningPayload {
   clientPhone?: string;
 }
 
+export interface ClientRequestsCleanupJobData {
+  businessId: string;
+  clientEmail: string;
+}
+
 export interface ClientProvisioningJobData extends ClientProvisioningPayload {
   attempt?: number;
 }
@@ -136,6 +141,34 @@ export class RequestsService implements OnModuleInit {
         }
 
         await this.handleClientProvisioningJob(payload);
+      },
+    );
+
+    this.agendaService.define(
+      JOBS.CLIENT_REQUESTS_CLEANUP,
+      async (job: Job): Promise<void> => {
+        const payload = job.attrs.data as
+          | ClientRequestsCleanupJobData
+          | undefined;
+        if (!payload?.businessId || !payload?.clientEmail) {
+          this.logger.warn(
+            `${JOBS.CLIENT_REQUESTS_CLEANUP}: missing job payload`,
+          );
+          return;
+        }
+
+        await this.requestsRepository
+          .softDeleteByClientEmail(
+            payload.clientEmail,
+            new Types.ObjectId(payload.businessId),
+          )
+          .catch((error: unknown) =>
+            this.logger.error(
+              `${JOBS.CLIENT_REQUESTS_CLEANUP}: failed [businessId=${payload.businessId}, clientEmail=${payload.clientEmail}]: ${error instanceof Error ? error.stack : String(error)}`,
+            ),
+          );
+
+        void this.invalidateRequestsListCache(payload.businessId);
       },
     );
   }

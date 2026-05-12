@@ -706,6 +706,16 @@ export class AuthService {
           ),
         );
 
+      void this.agendaService
+        .now<TaskStagesBootstrapJobData>(JOBS.TASK_STAGES_BOOTSTRAP, {
+          businessId: businessId.toString(),
+        })
+        .catch((err: unknown) =>
+          this.logger.error(
+            `Job "${JOBS.TASK_STAGES_BOOTSTRAP}" failed to enqueue: ${err instanceof Error ? err.stack : String(err)}`,
+          ),
+        );
+
       return {
         accessToken,
         refreshToken,
@@ -867,4 +877,8 @@ export class AuthService {
   private signAccessToken(payload: JwtUser): string {
     return this.jwtService.sign(payload);
   }
+}
+
+interface TaskStagesBootstrapJobData {
+  businessId: string;
 }

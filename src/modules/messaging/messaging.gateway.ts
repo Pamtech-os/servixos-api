@@ -67,6 +67,30 @@ export class MessagingGateway
     private readonly employeesRepository: EmployeesRepository,
   ) {}
 
+  emitMessageReceivedToConversation(
+    businessId: string,
+    clientId: string,
+    message: MessagePayload,
+  ): void {
+    this.server
+      .to(`${businessId}:${clientId}`)
+      .emit(WsEvent.MESSAGE_RECEIVED, { message });
+  }
+
+  emitMessageReadToConversation(
+    businessId: string,
+    clientId: string,
+    upToMessageId: string,
+    readAt: string,
+    readBy: string,
+  ): void {
+    this.server.to(`${businessId}:${clientId}`).emit(WsEvent.MESSAGE_READ, {
+      upToMessageId,
+      readAt,
+      readBy,
+    });
+  }
+
   async handleConnection(socket: Socket): Promise<void> {
     try {
       await this.wsAuthGuard.authenticate(socket);
@@ -223,9 +247,11 @@ export class MessagingGateway
     );
 
     // Broadcast to all sockets in the room (including sender)
-    this.server
-      .to(room)
-      .emit(WsEvent.MESSAGE_RECEIVED, { message: messagePayload });
+    this.emitMessageReceivedToConversation(
+      businessId,
+      payload.clientId,
+      messagePayload,
+    );
 
     // Mark as delivered and notify sender
     await this.messagingService.markDelivered(message._id);
@@ -296,20 +322,20 @@ export class MessagingGateway
       throw new WsException(WEBSOCKET_MESSAGES.ERROR.INTERNAL);
     }
 
-    await this.messagingService.markRead({
+    const readAt = await this.messagingService.markRead({
       businessId,
       clientId: payload.clientId,
       upToMessageId: payload.upToMessageId,
       readerSender: MessageSender.BUSINESS,
     });
 
-    this.server
-      .to(`${businessId}:${payload.clientId}`)
-      .emit(WsEvent.MESSAGE_READ, {
-        upToMessageId: payload.upToMessageId,
-        readAt: new Date().toISOString(),
-        readBy: userId,
-      });
+    this.emitMessageReadToConversation(
+      businessId,
+      payload.clientId,
+      payload.upToMessageId,
+      readAt.toISOString(),
+      userId,
+    );
   }
 
   // ─── edit_message ────────────────────────────────────────────────────────────
