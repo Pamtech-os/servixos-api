@@ -12,6 +12,7 @@ import { TIME_TRACKING_MESSAGES } from 'src/common/constants/messages/time-track
 import { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
+import { isInternalStaffRole } from 'src/common/utils/user-role.util';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { UserRole } from 'src/modules/users/schemas/user.schema';
@@ -379,7 +380,7 @@ export class ClockService {
       );
     }
 
-    if (actor.userRole === UserRole.EMPLOYEE) {
+    if (isInternalStaffRole(actor.userRole)) {
       const currentEmployee = await this.employeesRepository.findByUserId(
         actor.sub,
         businessId,

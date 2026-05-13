@@ -54,6 +54,7 @@ import { RedisService } from '../../redis/services/redis.service';
 import { UserRole } from '../../users/schemas/user.schema';
 import { LogCategory } from '../../activity-logs/schemas/activity-log.schema';
 import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
+import { isInternalStaffRole } from 'src/common/utils/user-role.util';
 
 const PIN_MAX_ATTEMPTS = 3;
 const REFRESH_TOKEN_TTL_DAYS = 7;
@@ -270,10 +271,7 @@ export class AuthService {
         );
       }
 
-      if (user.userRole !== UserRole.EMPLOYEE || !user.mustChangePassword) {
-        this.logger.warn(
-          `completeSetup: setup not required [userId=${payload.sub}]`,
-        );
+      if (!isInternalStaffRole(user.userRole) || !user.mustChangePassword) {
         return new BadRequestException(AUTH_MESSAGES.ERROR.SETUP_NOT_REQUIRED);
       }
 

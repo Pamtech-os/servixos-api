@@ -2,7 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { ClientSession, Connection, Types } from 'mongoose';
-import { User } from '../schemas/user.schema';
+import { User, UserRole } from '../schemas/user.schema';
+
+export interface StaffEmailRecipient {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
 
 @Injectable()
 export class UsersRepository {
@@ -79,5 +85,26 @@ export class UsersRepository {
     if (session) query.session(session);
 
     return query.exec();
+  }
+
+  async findActiveStaffEmailRecipients(
+    businessId: Types.ObjectId,
+  ): Promise<StaffEmailRecipient[]> {
+    return this.userModel
+      .find(
+        {
+          businessId,
+          deletedAt: null,
+          isActive: true,
+          userRole: { $ne: UserRole.CLIENT },
+        },
+        {
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+        },
+      )
+      .lean<StaffEmailRecipient[]>()
+      .exec();
   }
 }

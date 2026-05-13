@@ -85,6 +85,77 @@ export class EmployeesService {
     private readonly redisService: RedisService,
   ) {}
 
+  /**
+   * Transitional alias for staff naming.
+   * Keeps `/staff` and `/employees` behavior identical.
+   */
+  async listStaff(
+    businessId: string,
+    dto: QueryEmployeesDto,
+  ): Promise<PaginatedEmployees | InternalServerErrorException> {
+    return this.listEmployees(businessId, dto);
+  }
+
+  async getStaff(
+    id: string,
+    businessId: string,
+  ): Promise<
+    EmployeeDetails | NotFoundException | InternalServerErrorException
+  > {
+    return this.getEmployee(id, businessId);
+  }
+
+  async createStaff(
+    businessId: string,
+    dto: CreateEmployeeDto,
+  ): Promise<
+    | Employee
+    | ConflictException
+    | NotFoundException
+    | InternalServerErrorException
+  > {
+    return this.createEmployee(businessId, dto);
+  }
+
+  async updateStaff(
+    id: string,
+    businessId: string,
+    dto: UpdateEmployeeDto,
+  ): Promise<
+    | Employee
+    | NotFoundException
+    | ConflictException
+    | InternalServerErrorException
+  > {
+    return this.updateEmployee(id, businessId, dto);
+  }
+
+  async deleteStaff(
+    id: string,
+    businessId: string,
+  ): Promise<null | NotFoundException | InternalServerErrorException> {
+    return this.deleteEmployee(id, businessId);
+  }
+
+  async getOnlineStaff(
+    businessId: string,
+  ): Promise<{ count: number; users: OnlineUser[] }> {
+    return this.getOnlineEmployees(businessId);
+  }
+
+  async getStaffClockHistory(
+    id: string,
+    businessId: string,
+    dto: QueryClockHistoryDto,
+  ): Promise<
+    | PaginatedClockHistory
+    | BadRequestException
+    | NotFoundException
+    | InternalServerErrorException
+  > {
+    return this.getClockHistory(id, businessId, dto);
+  }
+
   async listEmployees(
     businessId: string,
     dto: QueryEmployeesDto,

@@ -15,11 +15,15 @@ import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { CreateAnnouncementDto } from '../dto/create-announcement.dto';
 import { CreateTeamMessageDto } from '../dto/create-team-message.dto';
 import { ListMessagesDto } from '../dto/list-messages.dto';
+import { MessagingGateway } from '../messaging.gateway';
 import { MessagingService } from '../services/messaging.service';
 
 @Controller('team')
 export class TeamMessagingController {
-  constructor(private readonly messagingService: MessagingService) {}
+  constructor(
+    private readonly messagingService: MessagingService,
+    private readonly messagingGateway: MessagingGateway,
+  ) {}
 
   @Get('messages')
   @HttpCode(HttpStatus.OK)
@@ -53,6 +57,8 @@ export class TeamMessagingController {
       content: dto.content,
     });
     if (result instanceof HttpException) throw result;
+
+    this.messagingGateway.emitTeamMessage(user.businessId, result);
 
     return {
       message: MESSAGING_MESSAGES.SUCCESS.TEAM_MESSAGE_SENT,
@@ -93,6 +99,8 @@ export class TeamMessagingController {
       description: dto.description,
     });
     if (result instanceof HttpException) throw result;
+
+    this.messagingGateway.emitAnnouncement(user.businessId, result);
 
     return {
       message: MESSAGING_MESSAGES.SUCCESS.ANNOUNCEMENT_CREATED,

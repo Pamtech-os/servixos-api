@@ -9,7 +9,7 @@ export enum WsEvent {
   EDIT_MESSAGE = 'edit_message',
   DELETE_MESSAGE = 'delete_message',
 
-  // Server → Client
+  // Server → Client (client–business conversation)
   CONNECTED = 'connected',
   CONNECTION_ERROR = 'connection_error',
   MESSAGE_RECEIVED = 'message_received',
@@ -23,7 +23,14 @@ export enum WsEvent {
   MESSAGE_EDITED = 'message_edited',
   MESSAGE_DELETED = 'message_deleted',
   ERROR = 'error',
+
+  // Server → Client (team channel)
+  TEAM_MESSAGE_SENT = 'team_message_sent',
+  ANNOUNCEMENT_CREATED = 'announcement_created',
 }
+
+/** Business-wide Socket.io room key for team messaging. */
+export const teamRoom = (businessId: string): string => `team:${businessId}`;
 
 export interface MessagePayload {
   id: string;

@@ -1,11 +1,14 @@
 import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmployeesRepository } from 'src/modules/employees/repositories/employees.repository';
 import { MessagingRepository } from 'src/modules/messaging/repositories/messaging.repository';
 import { MessagingService } from 'src/modules/messaging/services/messaging.service';
+import { UsersRepository } from 'src/modules/users/repositories/users.repository';
 import {
   MessageSender,
   MessageStatus,
@@ -43,8 +46,14 @@ describe('MessagingService', () => {
   let employeesRepository: {
     findByUserId: jest.Mock;
   };
+  let usersRepository: {
+    findActiveStaffEmailRecipients: jest.Mock;
+  };
   let businessRepository: {
     findById: jest.Mock;
+  };
+  let agendaService: {
+    now: jest.Mock;
   };
 
   const businessId = new Types.ObjectId().toString();
@@ -97,7 +106,9 @@ describe('MessagingService', () => {
     };
     clientsRepository = { findById: jest.fn() };
     employeesRepository = { findByUserId: jest.fn() };
+    usersRepository = { findActiveStaffEmailRecipients: jest.fn() };
     businessRepository = { findById: jest.fn() };
+    agendaService = { now: jest.fn().mockResolvedValue(undefined) };
     businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
 
     service = new MessagingService(
@@ -105,6 +116,8 @@ describe('MessagingService', () => {
       asMock<ClientsRepository>(clientsRepository),
       asMock<EmployeesRepository>(employeesRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<AgendaService>(agendaService),
     );
 
     loggerWarnSpy = jest
@@ -616,6 +629,248 @@ describe('MessagingService', () => {
       expect(messagingRepository.findConversationThreads).toHaveBeenCalledWith(
         expect.any(Types.ObjectId),
         { page: 1, limit: 20, skip: 0 },
+      );
+    });
+  });
+
+  // ─── createAnnouncement ────────────────────────────────────────────────────
+
+  describe('createAnnouncement', () => {
+    it('should enqueue staff announcement email jobs in the background', async () => {
+      const actorId = new Types.ObjectId();
+      const announcementId = new Types.ObjectId();
+
+      employeesRepository.findByUserId.mockResolvedValue({
+        _id: actorId,
+        fullName: 'Alice Admin',
+      });
+      businessRepository.findById.mockResolvedValue({
+        timezone: 'UTC',
+        name: 'Acme Services',
+      });
+      usersRepository.findActiveStaffEmailRecipients.mockResolvedValue([
+        {
+          firstName: 'Jane',
+          lastName: 'Smith',
+          email: 'jane@example.com',
+        },
+        {
+          firstName: 'Sam',
+          lastName: '',
+          email: 'sam@example.com',
+        },
+      ]);
+      messagingRepository.createAnnouncement.mockResolvedValue({
+        _id: announcementId,
+        businessId: new Types.ObjectId(businessId),
+        authorId: actorId,
+        authorName: 'Alice Admin',
+        title: 'Q2 Performance Review',
+        description: 'Complete your self-assessment by April 30.',
+        createdAt: new Date('2026-04-30T17:00:00.000Z'),
+      });
+
+      const result = await service.createAnnouncement({
+        businessId,
+        userId: actorId.toString(),
+        title: 'Q2 Performance Review',
+        description: 'Complete your self-assessment by April 30.',
+      });
+
+      expect(result).not.toBeInstanceOf(Error);
+      expect(messagingRepository.createAnnouncement).toHaveBeenCalledTimes(1);
+
+      // Allow fire-and-forget enqueue to settle.
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(
+        usersRepository.findActiveStaffEmailRecipients,
+      ).toHaveBeenCalledWith(expect.any(Types.ObjectId));
+      expect(agendaService.now).toHaveBeenCalledTimes(2);
+      expect(agendaService.now).toHaveBeenCalledWith(
+        JOBS.EMAIL_TEAM_ANNOUNCEMENT,
+        expect.objectContaining({
+          to: 'jane@example.com',
+          recipientName: 'Jane Smith',
+          businessName: 'Acme Services',
+          title: 'Q2 Performance Review',
+          description: 'Complete your self-assessment by April 30.',
+          authorName: 'Alice Admin',
+        }),
+      );
+    });
+
+    it('should not enqueue jobs when no staff recipients exist', async () => {
+      const actorId = new Types.ObjectId();
+      const createdAt = new Date('2026-04-30T17:00:00.000Z');
+
+      employeesRepository.findByUserId.mockResolvedValue({
+        _id: actorId,
+        fullName: 'Alice Admin',
+      });
+      businessRepository.findById.mockResolvedValue({
+        timezone: 'UTC',
+        name: 'Acme Services',
+      });
+      usersRepository.findActiveStaffEmailRecipients.mockResolvedValue([]);
+      messagingRepository.createAnnouncement.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        businessId: new Types.ObjectId(businessId),
+        authorId: actorId,
+        authorName: 'Alice Admin',
+        title: 'Downtime notice',
+        description: 'System maintenance starts at 8 PM.',
+        createdAt,
+      });
+
+      await service.createAnnouncement({
+        businessId,
+        userId: actorId.toString(),
+        title: 'Downtime notice',
+        description: 'System maintenance starts at 8 PM.',
+      });
+
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(agendaService.now).not.toHaveBeenCalled();
+    });
+
+    it('should process a large staff list across sequential batches', async () => {
+      // Arrange
+      const actorId = new Types.ObjectId();
+      employeesRepository.findByUserId.mockResolvedValue({
+        _id: actorId,
+        fullName: 'Alice Admin',
+      });
+      businessRepository.findById.mockResolvedValue({
+        timezone: 'UTC',
+        name: 'Acme Services',
+      });
+
+      // 110 recipients spans three batches: 50 + 50 + 10
+      const recipients = Array.from({ length: 110 }, (_, i) => ({
+        firstName: 'Staff',
+        lastName: String(i),
+        email: `staff${i}@example.com`,
+      }));
+      usersRepository.findActiveStaffEmailRecipients.mockResolvedValue(
+        recipients,
+      );
+      messagingRepository.createAnnouncement.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        businessId: new Types.ObjectId(businessId),
+        authorId: actorId,
+        authorName: 'Alice Admin',
+        title: 'All-hands',
+        description: 'Meeting at noon.',
+        createdAt: new Date(),
+      });
+
+      // Act
+      await service.createAnnouncement({
+        businessId,
+        userId: actorId.toString(),
+        title: 'All-hands',
+        description: 'Meeting at noon.',
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      // Assert — every recipient receives exactly one enqueue call
+      expect(agendaService.now).toHaveBeenCalledTimes(110);
+    });
+  });
+
+  // ─── enqueue retry behavior ────────────────────────────────────────────────
+
+  describe('enqueue retry behavior', () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it('should succeed on a retry after a transient enqueue failure', async () => {
+      // Arrange
+      const actorId = new Types.ObjectId();
+      employeesRepository.findByUserId.mockResolvedValue({
+        _id: actorId,
+        fullName: 'Alice Admin',
+      });
+      businessRepository.findById.mockResolvedValue({
+        timezone: 'UTC',
+        name: 'Acme Services',
+      });
+      usersRepository.findActiveStaffEmailRecipients.mockResolvedValue([
+        { firstName: 'Jane', lastName: 'Doe', email: 'jane@example.com' },
+      ]);
+      messagingRepository.createAnnouncement.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        businessId: new Types.ObjectId(businessId),
+        authorId: actorId,
+        authorName: 'Alice Admin',
+        title: 'Retry test',
+        description: 'Body.',
+        createdAt: new Date(),
+      });
+      // Fail once, then succeed on the first retry
+      agendaService.now
+        .mockRejectedValueOnce(new Error('Transient write error'))
+        .mockResolvedValue(undefined);
+
+      // Act
+      await service.createAnnouncement({
+        businessId,
+        userId: actorId.toString(),
+        title: 'Retry test',
+        description: 'Body.',
+      });
+      await jest.runAllTimersAsync();
+
+      // Assert — 1 failed attempt + 1 successful retry = 2 calls; no warning logged
+      expect(agendaService.now).toHaveBeenCalledTimes(2);
+      expect(loggerWarnSpy).not.toHaveBeenCalled();
+    });
+
+    it('should exhaust all retries and log a warning when enqueue permanently fails', async () => {
+      // Arrange
+      const actorId = new Types.ObjectId();
+      employeesRepository.findByUserId.mockResolvedValue({
+        _id: actorId,
+        fullName: 'Alice Admin',
+      });
+      businessRepository.findById.mockResolvedValue({
+        timezone: 'UTC',
+        name: 'Acme Services',
+      });
+      usersRepository.findActiveStaffEmailRecipients.mockResolvedValue([
+        { firstName: 'Jane', lastName: 'Doe', email: 'jane@example.com' },
+      ]);
+      messagingRepository.createAnnouncement.mockResolvedValue({
+        _id: new Types.ObjectId(),
+        businessId: new Types.ObjectId(businessId),
+        authorId: actorId,
+        authorName: 'Alice Admin',
+        title: 'Retry exhaust test',
+        description: 'Body.',
+        createdAt: new Date(),
+      });
+      // Always fail — exhausts all 3 retries (4 total attempts)
+      agendaService.now.mockRejectedValue(new Error('Persistent write error'));
+
+      // Act
+      await service.createAnnouncement({
+        businessId,
+        userId: actorId.toString(),
+        title: 'Retry exhaust test',
+        description: 'Body.',
+      });
+      await jest.runAllTimersAsync();
+
+      // Assert — 1 initial + 3 retries = 4 calls; partial failure warning logged
+      expect(agendaService.now).toHaveBeenCalledTimes(4);
+      expect(loggerWarnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('failed=1'),
       );
     });
   });

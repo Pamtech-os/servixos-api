@@ -901,7 +901,7 @@ describe('Auth (integration)', () => {
         ['businessName', { businessName: undefined }],
         ['businessCategory', { businessCategory: undefined }],
         ['businessDescription', { businessDescription: undefined }],
-        ['timezone', { timezone: undefined }],
+        ['timezone', { timezone: null }],
       ])('returns 400 when %s is missing', async (_field, override) => {
         // Arrange
         const email = nextEmail();
@@ -1724,7 +1724,7 @@ describe('Auth (integration)', () => {
       const employeeEmail = `setup-employee-${Date.now()}@test.local`;
 
       const createEmployeeRes = await asUser(
-        req().post('/api/employees').send({
+        req().post('/api/staff').send({
           fullName: 'Setup Employee',
           email: employeeEmail,
           phone: '+12025550133',
@@ -1752,7 +1752,7 @@ describe('Auth (integration)', () => {
       expect(employeeLogin.user.mustChangePassword).toBe(true);
 
       const preSetupProtectedRes = await asUser(
-        req().get('/api/employees/online'),
+        req().get('/api/staff/online'),
         employeeLogin.accessToken,
         ownerBusinessId,
       );
@@ -1792,7 +1792,7 @@ describe('Auth (integration)', () => {
       expect(employeeUser?.pinHash!.startsWith('$2')).toBe(true);
 
       const postSetupProtectedRes = await asUser(
-        req().get('/api/employees/online'),
+        req().get('/api/staff/online'),
         setupToken,
         ownerBusinessId,
       );
@@ -1819,11 +1819,105 @@ describe('Auth (integration)', () => {
         ?.accessToken as string;
 
       const verifiedProtectedRes = await asUser(
-        req().get('/api/employees/online'),
+        req().get('/api/staff/online'),
         verifiedToken,
         ownerBusinessId,
       );
       expect(verifiedProtectedRes.status).toBe(200);
+    });
+
+    it('uses the same temporary-credential flow for custom staff roles invited via /staff', async () => {
+      const owner = {
+        firstName: 'Custom',
+        lastName: 'StaffOwner',
+        email: `staff-owner-${Date.now()}@test.local`,
+        phone: '+12025550144',
+        password: 'OwnerPass123',
+        pin: '3344',
+      };
+
+      const ownerLogin = await fullOnboarding(owner);
+      const ownerBusinessId = ownerLogin.user.businessId;
+
+      const roleName = `Dispatcher ${Date.now()}`;
+      const createRoleRes = await asUser(
+        req()
+          .post('/api/roles')
+          .send({
+            name: roleName,
+            permissions: [
+              'dashboard.view',
+              'jobs.view',
+              'jobs.edit',
+              'clients.view',
+            ],
+          }),
+        ownerLogin.accessToken,
+        ownerBusinessId,
+      );
+      expect(createRoleRes.status).toBe(201);
+
+      const dispatcherRoleId = (createRoleRes.body as ApiBody<{ _id: string }>)
+        .data?._id;
+      expect(dispatcherRoleId).toBeDefined();
+
+      const staffEmail = `dispatcher-${Date.now()}@test.local`;
+      const inviteRes = await asUser(
+        req().post('/api/staff').send({
+          fullName: 'Dispatch Rider',
+          email: staffEmail,
+          phone: '+12025550155',
+          roleId: dispatcherRoleId,
+          weeklyHoursTarget: 40,
+          dateJoined: '2026-01-01',
+        }),
+        ownerLogin.accessToken,
+        ownerBusinessId,
+      );
+      expect(inviteRes.status).toBe(201);
+
+      const temporaryPassword = captureEmployeeTemporaryPassword(staffEmail);
+      const loginRes = await authed(
+        req().post('/api/auth/login').send({
+          email: staffEmail,
+          password: temporaryPassword,
+        }),
+      );
+      expect(loginRes.status).toBe(200);
+
+      const loginData = (loginRes.body as ApiBody<LoginPayload>).data!;
+      expect(loginData.user.mustChangePassword).toBe(true);
+
+      const invitedUser = await userModel
+        .findOne({ email: staffEmail })
+        .lean<User>();
+      expect(invitedUser?.userRole).toBe('employee');
+      expect(invitedUser?.roleId?.toString()).toBe(dispatcherRoleId);
+
+      const setupRes = await authed(
+        req()
+          .post('/api/auth/complete-setup')
+          .set('Authorization', `Bearer ${loginData.accessToken}`)
+          .send({
+            newPassword: 'DispatcherNew123',
+            confirmPassword: 'DispatcherNew123',
+            pin: '8899',
+            confirmPin: '8899',
+          }),
+      );
+      expect(setupRes.status).toBe(200);
+      expect((setupRes.body as ApiBody).message).toBe(
+        AUTH_MESSAGES.SUCCESS.SETUP_COMPLETED,
+      );
+
+      const setupToken = (setupRes.body as ApiBody<TokenPayload>).data
+        ?.accessToken as string;
+      const postSetupProtectedRes = await asUser(
+        req().get('/api/staff/online'),
+        setupToken,
+        ownerBusinessId,
+      );
+      expect(postSetupProtectedRes.status).toBe(200);
     });
   });
 

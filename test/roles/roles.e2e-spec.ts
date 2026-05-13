@@ -18,6 +18,8 @@ import { RedisService } from 'src/modules/redis/services/redis.service';
 import { ROLES_MESSAGES } from 'src/common/constants/messages/roles.messages';
 import { DefaultRole, Role } from 'src/modules/roles/schemas/role.schema';
 import { User, UserRole } from 'src/modules/users/schemas/user.schema';
+import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
+import { hashValue } from 'src/common/utils/hash.util';
 
 interface ApiBody<T = unknown> {
   success: boolean;
@@ -126,6 +128,18 @@ describe('Roles (integration)', () => {
       r
         .set('Authorization', `Bearer ${ownerAccessToken}`)
         .set('x-business-id', ownerBusinessId),
+    );
+  }
+
+  function asUser(
+    r: request.Test,
+    accessToken: string,
+    businessId: string,
+  ): request.Test {
+    return authed(
+      r
+        .set('Authorization', `Bearer ${accessToken}`)
+        .set('x-business-id', businessId),
     );
   }
 
@@ -404,5 +418,89 @@ describe('Roles (integration)', () => {
 
     const cached = await redisService.get('permissions:all');
     expect(cached).not.toBeNull();
+  });
+
+  it('enforces permission decorators for roles, staff, tasks, and schedules endpoints', async () => {
+    const limitedRoleRes = await asOwner(
+      req()
+        .post('/api/roles')
+        .send({
+          name: `Limited Access ${Date.now()}`,
+          permissions: ['clients.view'],
+        }),
+    );
+    expect(limitedRoleRes.status).toBe(201);
+
+    const limitedRoleId = (limitedRoleRes.body as ApiBody<{ _id: string }>).data
+      ?._id;
+    expect(limitedRoleId).toBeDefined();
+
+    const limitedUserEmail = `limited-access-${Date.now()}@test.local`;
+    const passwordHash = await hashValue('Password123');
+
+    await userModel.create({
+      firstName: 'Limited',
+      lastName: 'User',
+      email: limitedUserEmail,
+      passwordHash,
+      userRole: UserRole.OWNER,
+      businessId: new Types.ObjectId(ownerBusinessId),
+      roleId: new Types.ObjectId(limitedRoleId),
+      isActive: true,
+      isEmailVerified: true,
+      mustChangePassword: false,
+    });
+
+    const loginRes = await authed(
+      req().post('/api/auth/login').send({
+        email: limitedUserEmail,
+        password: 'Password123',
+      }),
+    );
+    expect(loginRes.status).toBe(200);
+
+    const limitedAccessToken = (loginRes.body as ApiBody<LoginPayload>).data
+      ?.accessToken as string;
+    expect(limitedAccessToken).toBeDefined();
+
+    const rolesRes = await asUser(
+      req().get('/api/roles'),
+      limitedAccessToken,
+      ownerBusinessId,
+    );
+    expect(rolesRes.status).toBe(403);
+    expect((rolesRes.body as ApiBody).message).toBe(
+      AUTH_MESSAGES.ERROR.FORBIDDEN,
+    );
+
+    const staffRes = await asUser(
+      req().get('/api/staff'),
+      limitedAccessToken,
+      ownerBusinessId,
+    );
+    expect(staffRes.status).toBe(403);
+    expect((staffRes.body as ApiBody).message).toBe(
+      AUTH_MESSAGES.ERROR.FORBIDDEN,
+    );
+
+    const tasksRes = await asUser(
+      req().get('/api/tasks'),
+      limitedAccessToken,
+      ownerBusinessId,
+    );
+    expect(tasksRes.status).toBe(403);
+    expect((tasksRes.body as ApiBody).message).toBe(
+      AUTH_MESSAGES.ERROR.FORBIDDEN,
+    );
+
+    const schedulesRes = await asUser(
+      req().get('/api/schedules'),
+      limitedAccessToken,
+      ownerBusinessId,
+    );
+    expect(schedulesRes.status).toBe(403);
+    expect((schedulesRes.body as ApiBody).message).toBe(
+      AUTH_MESSAGES.ERROR.FORBIDDEN,
+    );
   });
 });

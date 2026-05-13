@@ -14,7 +14,7 @@ import { signRequest } from '../helpers/sign-request';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
-import { EMPLOYEES_MESSAGES } from 'src/common/constants/messages/employees.messages';
+import { STAFF_MESSAGES } from 'src/common/constants/messages/staff.messages';
 import { TIME_TRACKING_MESSAGES } from 'src/common/constants/messages/time-tracking.messages';
 import { ClockStatus } from 'src/modules/employees/schemas/clock-record.schema';
 import { RedisService } from 'src/modules/redis/services/redis.service';
@@ -60,7 +60,7 @@ const OWNER = {
   pin: '1234',
 };
 
-describe('Employees + Clock (integration)', () => {
+describe('Staff + Clock (integration)', () => {
   let app: INestApplication;
   let dbConnection: Connection;
   let redisService: RedisService;
@@ -213,7 +213,7 @@ describe('Employees + Clock (integration)', () => {
   it('supports employee CRUD and detail aggregation endpoints', async () => {
     const createRes = await asOwner(
       req()
-        .post('/api/employees')
+        .post('/api/staff')
         .send({
           fullName: 'Sarah Connor',
           email: `employee-${Date.now()}@test.local`,
@@ -226,7 +226,7 @@ describe('Employees + Clock (integration)', () => {
 
     expect(createRes.status).toBe(201);
     expect((createRes.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.CREATED,
+      STAFF_MESSAGES.SUCCESS.CREATED,
     );
 
     const employeeId =
@@ -234,24 +234,22 @@ describe('Employees + Clock (integration)', () => {
     expect(employeeId).toBeTruthy();
 
     const listRes = await asOwner(
-      req().get('/api/employees').query({ page: 1, limit: 10 }),
+      req().get('/api/staff').query({ page: 1, limit: 10 }),
     );
 
     expect(listRes.status).toBe(200);
     expect((listRes.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.RETRIEVED,
+      STAFF_MESSAGES.SUCCESS.RETRIEVED,
     );
     expect((listRes.body as ApiBody).meta).toMatchObject({
       page: 1,
       limit: 10,
     });
 
-    const getRes = await asOwner(req().get(`/api/employees/${employeeId}`));
+    const getRes = await asOwner(req().get(`/api/staff/${employeeId}`));
 
     expect(getRes.status).toBe(200);
-    expect((getRes.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.FOUND,
-    );
+    expect((getRes.body as ApiBody).message).toBe(STAFF_MESSAGES.SUCCESS.FOUND);
 
     const detail = (
       getRes.body as ApiBody<{
@@ -263,7 +261,7 @@ describe('Employees + Clock (integration)', () => {
     expect(Array.isArray(detail?.recentClockEntries)).toBe(true);
 
     const patchRes = await asOwner(
-      req().patch(`/api/employees/${employeeId}`).send({
+      req().patch(`/api/staff/${employeeId}`).send({
         fullName: 'Sarah Connor Updated',
         weeklyHoursTarget: 45,
       }),
@@ -271,23 +269,21 @@ describe('Employees + Clock (integration)', () => {
 
     expect(patchRes.status).toBe(200);
     expect((patchRes.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.UPDATED,
+      STAFF_MESSAGES.SUCCESS.UPDATED,
     );
 
-    const deleteRes = await asOwner(
-      req().delete(`/api/employees/${employeeId}`),
-    );
+    const deleteRes = await asOwner(req().delete(`/api/staff/${employeeId}`));
 
     expect(deleteRes.status).toBe(200);
     expect((deleteRes.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.DELETED,
+      STAFF_MESSAGES.SUCCESS.DELETED,
     );
   });
 
   it('supports end-to-end clock lifecycle and status endpoint', async () => {
     const createRes = await asOwner(
       req()
-        .post('/api/employees')
+        .post('/api/staff')
         .send({
           fullName: 'James Okafor',
           email: `clock-employee-${Date.now()}@test.local`,
@@ -371,11 +367,11 @@ describe('Employees + Clock (integration)', () => {
       JSON.stringify(onlineUser),
     );
 
-    const res = await asOwner(req().get('/api/employees/online'));
+    const res = await asOwner(req().get('/api/staff/online'));
 
     expect(res.status).toBe(200);
     expect((res.body as ApiBody).message).toBe(
-      EMPLOYEES_MESSAGES.SUCCESS.ONLINE_LIST,
+      STAFF_MESSAGES.SUCCESS.ONLINE_LIST,
     );
     expect(
       (res.body as ApiBody<{ count: number }>).data?.count,

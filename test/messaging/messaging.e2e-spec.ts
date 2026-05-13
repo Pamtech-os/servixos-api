@@ -12,6 +12,7 @@ import request from 'supertest';
 import { createTestApp } from '../helpers/create-test-app';
 import { signRequest } from '../helpers/sign-request';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { BusinessCategory } from 'src/modules/business-categories/schemas/business-category.schema';
 import { MessagingService } from 'src/modules/messaging/services/messaging.service';
 import {
@@ -55,6 +56,7 @@ interface LoginPayload {
 interface EmailJobArgs {
   to: string;
   otp?: string;
+  title?: string;
 }
 
 // ─── Test constants ───────────────────────────────────────────────────────────
@@ -715,6 +717,8 @@ describe('Messaging (integration)', () => {
     });
 
     it('should create and list announcements', async () => {
+      const callsBefore = nowSpy.mock.calls.length;
+
       // Act - create
       const createRes = await asSeeded(
         req().post('/api/team/announcements').send({
@@ -728,6 +732,28 @@ describe('Messaging (integration)', () => {
       expect(createRes.status).toBe(201);
       const createdBody = createRes.body as ApiBody<{ title: string }>;
       expect(createdBody.data?.title).toBe('Q2 Performance Review');
+
+      // Allow the fire-and-forget enqueue background task to settle before
+      // asserting on nowSpy — the batch loop adds an extra async hop.
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+
+      const announcementEmailCalls = (
+        nowSpy.mock.calls as [string, EmailJobArgs][]
+      )
+        .slice(callsBefore)
+        .filter(([jobName]) => jobName === JOBS.EMAIL_TEAM_ANNOUNCEMENT);
+
+      expect(announcementEmailCalls.length).toBeGreaterThan(0);
+      expect(
+        announcementEmailCalls.some(
+          ([, payload]) => payload.to === SEEDED_USER.email,
+        ),
+      ).toBe(true);
+      expect(
+        announcementEmailCalls.every(
+          ([, payload]) => payload.title === 'Q2 Performance Review',
+        ),
+      ).toBe(true);
 
       // Act - list
       const listRes = await asSeeded(req().get('/api/team/announcements'));

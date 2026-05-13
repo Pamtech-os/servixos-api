@@ -11,8 +11,10 @@ import {
   Post,
 } from '@nestjs/common';
 import { ROLES_MESSAGES } from 'src/common/constants/messages/roles.messages';
+import { PERMISSIONS } from 'src/common/constants/permissions.constants';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { Permissions } from 'src/common/decorators/permissions.decorator';
 import { CreateRoleDto } from '../dto/create-role.dto';
 import { RoleIdParamDto } from '../dto/role-id-param.dto';
 import { UpdateRoleDto } from '../dto/update-role.dto';
@@ -23,6 +25,7 @@ export class RolesController {
   constructor(private readonly rolesService: RolesService) {}
 
   @Get()
+  @Permissions(PERMISSIONS.ROLES_VIEW)
   @HttpCode(HttpStatus.OK)
   async listRoles(@CurrentUser() user: JwtUser) {
     const result = await this.rolesService.listRoles(user.businessId);
@@ -35,6 +38,7 @@ export class RolesController {
   }
 
   @Get(':id')
+  @Permissions(PERMISSIONS.ROLES_VIEW)
   @HttpCode(HttpStatus.OK)
   async getRole(@CurrentUser() user: JwtUser, @Param() params: RoleIdParamDto) {
     const result = await this.rolesService.getRole(params.id, user.businessId);
@@ -47,6 +51,7 @@ export class RolesController {
   }
 
   @Post()
+  @Permissions(PERMISSIONS.ROLES_CREATE)
   @HttpCode(HttpStatus.CREATED)
   async createRole(@CurrentUser() user: JwtUser, @Body() dto: CreateRoleDto) {
     const result = await this.rolesService.createRole(user.businessId, dto);
@@ -59,6 +64,7 @@ export class RolesController {
   }
 
   @Patch(':id')
+  @Permissions(PERMISSIONS.ROLES_EDIT)
   @HttpCode(HttpStatus.OK)
   async updateRole(
     @CurrentUser() user: JwtUser,
@@ -79,6 +85,7 @@ export class RolesController {
   }
 
   @Delete(':id')
+  @Permissions(PERMISSIONS.ROLES_DELETE)
   @HttpCode(HttpStatus.OK)
   async deleteRole(
     @CurrentUser() user: JwtUser,

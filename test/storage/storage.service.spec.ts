@@ -1,6 +1,5 @@
 import { InternalServerErrorException } from '@nestjs/common';
 import type { UploadResult } from 'src/modules/storage/interfaces/storage-provider.interface';
-import type { IStorageProvider } from 'src/modules/storage/interfaces/storage-provider.interface';
 import { StorageService } from 'src/modules/storage/storage.service';
 
 const FAKE_RESULT: UploadResult = {
@@ -10,7 +9,11 @@ const FAKE_RESULT: UploadResult = {
 
 describe('StorageService', () => {
   let service: StorageService;
-  let provider: jest.Mocked<IStorageProvider>;
+  let provider: {
+    uploadStream: jest.Mock;
+    uploadBuffer: jest.Mock;
+    delete: jest.Mock;
+  };
 
   beforeEach(() => {
     provider = {

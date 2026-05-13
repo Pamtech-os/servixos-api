@@ -9,7 +9,7 @@ import { Request } from 'express';
 import { AUTH_MESSAGES } from '../constants/messages/auth.messages';
 import { JwtUser } from '../decorators/current-user.decorator';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
-import { UserRole } from 'src/modules/users/schemas/user.schema';
+import { isInternalStaffRole } from '../utils/user-role.util';
 
 @Injectable()
 export class PinVerifiedGuard implements CanActivate {
@@ -28,7 +28,7 @@ export class PinVerifiedGuard implements CanActivate {
     const user = req.user;
 
     if (!user) return true;
-    if (user.userRole !== UserRole.EMPLOYEE) return true;
+    if (!isInternalStaffRole(user.userRole)) return true;
     if (user.pinVerified) return true;
 
     throw new UnauthorizedException(AUTH_MESSAGES.ERROR.PIN_NOT_VERIFIED);

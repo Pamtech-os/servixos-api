@@ -28,6 +28,8 @@ import { HmacGuard } from './common/guards/hmac.guard';
 // import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { PinVerifiedGuard } from './common/guards/pin-verified.guard';
+import { PermissionsContextGuard } from './common/guards/permissions-context.guard';
+import { PermissionsGuard } from './common/guards/permissions.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
 import { AuthModule } from './modules/auth/auth.module';
@@ -119,6 +121,8 @@ import { StorageModule } from './modules/storage/storage.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PinVerifiedGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
+    { provide: APP_GUARD, useClass: PermissionsContextGuard },
+    { provide: APP_GUARD, useClass: PermissionsGuard },
   ],
 })
 export class AppModule implements NestModule, OnModuleInit {
