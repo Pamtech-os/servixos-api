@@ -8,6 +8,7 @@ export function teamAnnouncementTemplate(
   businessName: string,
   createdAtLabel: string,
 ): string {
+  console.log(createdAtLabel);
   const body = `
       <div style="background:linear-gradient(135deg,hsl(217,91%,60%) 0%,hsl(270,70%,60%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
         <p style="font-size:34px;margin:0 0 10px;line-height:1;">📣</p>
@@ -39,10 +40,6 @@ export function teamAnnouncementTemplate(
               <tr>
                 <td style="font-size:12px;color:hsl(220,10%,50%);padding:4px 0;">Posted by</td>
                 <td style="font-size:12px;color:hsl(220,25%,10%);font-weight:600;padding:4px 0;">${authorName}</td>
-              </tr>
-              <tr>
-                <td style="font-size:12px;color:hsl(220,10%,50%);padding:4px 0;">Date</td>
-                <td style="font-size:12px;color:hsl(220,25%,10%);font-weight:600;padding:4px 0;">${createdAtLabel}</td>
               </tr>
             </tbody>
           </table>

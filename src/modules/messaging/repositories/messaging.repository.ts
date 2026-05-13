@@ -416,7 +416,7 @@ export class MessagingRepository {
     const [data, total] = await Promise.all([
       this.teamMessageModel
         .find(query)
-        .sort({ createdAt: -1 })
+        .sort({ createdAt: 1 })
         .skip(pagination.skip)
         .limit(pagination.limit)
         .lean<TeamMessageRow[]>()
