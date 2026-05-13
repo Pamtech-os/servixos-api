@@ -1,5 +1,6 @@
 import {
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -7,6 +8,8 @@ import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { ExportsService } from 'src/modules/exports/services/exports.service';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';
@@ -33,15 +36,13 @@ describe('ExportsService', () => {
     };
 
     service = new ExportsService(
-      clientsRepository as unknown as ClientsRepository,
-      jobsRepository as unknown as JobsRepository,
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<JobsRepository>(jobsRepository),
+      {} as StorageService,
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 

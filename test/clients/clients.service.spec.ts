@@ -1,6 +1,7 @@
 import {
   ConflictException,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -13,6 +14,7 @@ import { ClientsService } from 'src/modules/clients/services/clients.service';
 import { Client } from 'src/modules/clients/schemas/client.schema';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';
@@ -107,18 +109,15 @@ describe('ClientsService', () => {
 
     service = new ClientsService(
       mockConnection as never,
-      clientsRepository as unknown as ClientsRepository,
-      usersRepository as unknown as UsersRepository,
-      businessRepository as unknown as BusinessRepository,
-      agendaService as unknown as AgendaService,
-      redisService as unknown as RedisService,
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<AgendaService>(agendaService),
+      asMock<RedisService>(redisService),
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
@@ -17,6 +18,7 @@ import {
   PaymentMode,
   PaymentStatus,
 } from 'src/modules/payments/schemas/payment.schema';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const INVOICE_ID = '664abc000000000000000001';
@@ -100,17 +102,14 @@ describe('PaymentsService', () => {
 
     service = new PaymentsService(
       connection as never,
-      paymentsRepository as unknown as PaymentsRepository,
-      invoicesRepository as unknown as InvoicesRepository,
-      businessRepository as unknown as BusinessRepository,
-      agendaService as unknown as AgendaService,
+      asMock<PaymentsRepository>(paymentsRepository),
+      asMock<InvoicesRepository>(invoicesRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<AgendaService>(agendaService),
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 

@@ -42,6 +42,32 @@ class TaskComment {
   createdAt: Date;
 }
 
+class TaskAttachment {
+  @prop({ required: true })
+  _id: Types.ObjectId;
+
+  @prop({ required: true })
+  url: string;
+
+  @prop({ required: true })
+  publicId: string;
+
+  @prop({ required: true })
+  filename: string;
+
+  @prop({ required: true })
+  mimeType: string;
+
+  @prop({ required: true })
+  filesizeBytes: number;
+
+  @prop({ ref: 'User', type: Types.ObjectId })
+  uploadedBy?: Types.ObjectId;
+
+  @prop({ default: Date.now })
+  uploadedAt: Date;
+}
+
 @index({ businessId: 1, stage: 1 })
 @index({ assigneeId: 1, stage: 1 })
 @modelOptions({ schemaOptions: { collection: 'tasks', timestamps: true } })
@@ -77,6 +103,9 @@ export class Task {
 
   @prop({ type: () => [TaskComment], default: [] }, PropType.ARRAY)
   comments: TaskComment[];
+
+  @prop({ type: () => [TaskAttachment], default: [] }, PropType.ARRAY)
+  attachments: TaskAttachment[];
 
   @prop()
   deletedAt?: Date;

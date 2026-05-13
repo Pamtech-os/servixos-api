@@ -6,10 +6,9 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
-import { v2 as cloudinary } from 'cloudinary';
-import { Readable } from 'stream';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { FILES_MESSAGES } from 'src/common/constants/messages/files.messages';
+import { StorageService } from 'src/modules/storage/storage.service';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { FilesRepository } from '../repositories/files.repository';
 import { ClientFile, FileFormat } from '../schemas/client-file.schema';
@@ -26,9 +25,12 @@ const MIME_TO_FORMAT: Record<string, FileFormat> = {
   'image/jpg': FileFormat.JPG,
 };
 
-interface CloudinaryUploadResult {
-  secureUrl: string;
+export interface AttachFileInput {
+  url: string;
   publicId: string;
+  filename: string;
+  mimeType: string;
+  filesizeBytes: number;
 }
 
 type PublicClientFile = Omit<ClientFile, 'cloudinaryPublicId'>;
@@ -40,6 +42,7 @@ export class FilesService {
   constructor(
     private readonly filesRepository: FilesRepository,
     private readonly clientsRepository: ClientsRepository,
+    private readonly storageService: StorageService,
   ) {}
 
   async listClientFiles(
@@ -66,21 +69,20 @@ export class FilesService {
   }
 
   /**
-   * Uploads a client file to Cloudinary and stores only metadata in MongoDB.
-   *
-   * Example:
-   * - Multipart file arrives at POST /clients/:clientId/files
-   * - Binary data streams directly to Cloudinary
-   * - Saved DB row points to secure URL + publicId for future retrieval/deletion
+   * Uploads a user-submitted file directly from multipart form data and saves
+   * its metadata to the client's file list. Used by the generic upload flow.
    */
-  async uploadClientFile(
+  async uploadFile(
     businessId: string,
-    clientId: string,
-    userId: string,
     file?: Express.Multer.File,
   ): Promise<
-    | PublicClientFile
-    | NotFoundException
+    | {
+        url: string;
+        publicId: string;
+        filename: string;
+        mimeType: string;
+        filesizeBytes: number;
+      }
     | BadRequestException
     | InternalServerErrorException
   > {
@@ -98,25 +100,62 @@ export class FilesService {
         return new BadRequestException(FILES_MESSAGES.ERROR.INVALID_TYPE);
       }
 
+      const { url, publicId } = await this.storageService.uploadStream(
+        file,
+        `servixos/uploads/${businessId}`,
+      );
+
+      return {
+        url,
+        publicId,
+        filename: file.originalname,
+        mimeType: file.mimetype,
+        filesizeBytes: file.size,
+      };
+    } catch (error) {
+      this.logger.error(
+        `uploadFile: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  /**
+   * Records a pre-uploaded file as a client attachment. The file must have
+   * been uploaded via POST /files/upload first; this call only saves the
+   * metadata and associates the asset with the client.
+   */
+  async attachClientFile(
+    businessId: string,
+    clientId: string,
+    userId: string,
+    input: AttachFileInput,
+  ): Promise<
+    | PublicClientFile
+    | NotFoundException
+    | BadRequestException
+    | InternalServerErrorException
+  > {
+    try {
+      const format = MIME_TO_FORMAT[input.mimeType];
+      if (!format) {
+        return new BadRequestException(FILES_MESSAGES.ERROR.INVALID_TYPE);
+      }
+
       const bId = new Types.ObjectId(businessId);
       const client = await this.clientsRepository.findById(clientId, bId);
       if (!client) {
         return new NotFoundException(FILES_MESSAGES.ERROR.NOT_FOUND);
       }
 
-      const uploaded = await this.uploadToCloudinary(
-        file,
-        businessId,
-        clientId,
-      );
       const created = await this.filesRepository.create({
         businessId: bId,
         clientId: client._id,
-        filename: file.originalname,
-        cloudinaryPublicId: uploaded.publicId,
-        url: uploaded.secureUrl,
+        filename: input.filename,
+        cloudinaryPublicId: input.publicId,
+        url: input.url,
         format,
-        filesizeBytes: file.size,
+        filesizeBytes: input.filesizeBytes,
         uploadedBy: Types.ObjectId.isValid(userId)
           ? new Types.ObjectId(userId)
           : undefined,
@@ -125,7 +164,7 @@ export class FilesService {
       return this.sanitizeFile(created);
     } catch (error) {
       this.logger.error(
-        `uploadClientFile: failed [businessId=${businessId}, clientId=${clientId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `attachClientFile: failed [businessId=${businessId}, clientId=${clientId}] ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -169,52 +208,15 @@ export class FilesService {
         return new NotFoundException(FILES_MESSAGES.ERROR.NOT_FOUND);
       }
 
-      void this.destroyCloudinaryAsset(deleted.cloudinaryPublicId);
+      void this.storageService
+        .delete(deleted.cloudinaryPublicId)
+        .catch(() => undefined);
       return null;
     } catch (error) {
       this.logger.error(
         `deleteFile: failed [fileId=${fileId}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
-    }
-  }
-
-  private async uploadToCloudinary(
-    file: Express.Multer.File,
-    businessId: string,
-    clientId: string,
-  ): Promise<CloudinaryUploadResult> {
-    return new Promise<CloudinaryUploadResult>((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        {
-          folder: `servixos/client-files/${businessId}/${clientId}`,
-          resource_type: 'auto',
-          use_filename: true,
-          unique_filename: true,
-        },
-        (error, result) => {
-          if (error || !result) {
-            return reject(
-              new Error(error?.message ?? FILES_MESSAGES.ERROR.UPLOAD_FAILED),
-            );
-          }
-
-          resolve({
-            secureUrl: result.secure_url,
-            publicId: result.public_id,
-          });
-        },
-      );
-
-      Readable.from(file.buffer).pipe(uploadStream);
-    });
-  }
-
-  private async destroyCloudinaryAsset(publicId: string): Promise<void> {
-    try {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
-    } catch {
-      await cloudinary.uploader.destroy(publicId, { resource_type: 'image' });
     }
   }
 

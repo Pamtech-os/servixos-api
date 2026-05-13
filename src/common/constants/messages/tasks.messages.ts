@@ -14,6 +14,7 @@ export const TASKS_MESSAGES = {
     SUBTASK_TITLE_REQUIRED: 'Subtask title is required',
     SUBTASK_TITLE_INVALID: 'Subtask title must be a valid string',
     SUBTASK_COMPLETED_INVALID: 'completed must be a boolean value',
+    MIME_TYPE_INVALID: 'mimeType must be a valid string',
   },
   SUCCESS: {
     CREATED: 'Task created successfully',
@@ -25,6 +26,7 @@ export const TASKS_MESSAGES = {
     COMMENT_ADDED: 'Comment added successfully',
     SUBTASK_ADDED: 'Subtask added successfully',
     SUBTASK_UPDATED: 'Subtask updated successfully',
+    ATTACHMENT_UPLOADED: 'Attachment uploaded successfully',
   },
   ERROR: {
     NOT_FOUND: 'Task not found',

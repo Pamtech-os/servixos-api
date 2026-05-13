@@ -2,6 +2,7 @@ export const FILES_MESSAGES = {
   VALIDATION: {
     ID_INVALID: 'File ID must be a valid Mongo ID',
     CLIENT_ID_INVALID: 'Client ID must be a valid Mongo ID',
+    MIME_TYPE_INVALID: 'mimeType must be a valid string',
   },
   SUCCESS: {
     UPLOADED: 'File uploaded successfully',

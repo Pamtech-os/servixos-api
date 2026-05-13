@@ -32,6 +32,17 @@ interface SubtaskInput {
   completed: boolean;
 }
 
+interface TaskAttachmentInput {
+  _id: Types.ObjectId;
+  url: string;
+  publicId: string;
+  filename: string;
+  mimeType: string;
+  filesizeBytes: number;
+  uploadedBy?: Types.ObjectId;
+  uploadedAt: Date;
+}
+
 interface TaskStageSeedInput {
   key: TaskStage;
   name: string;
@@ -241,6 +252,24 @@ export class TasksRepository {
       .findOneAndUpdate(
         { _id: id, businessId, deletedAt: null },
         { $push: { subtasks: subtask } },
+        { returnDocument: 'after', session },
+      )
+      .lean<TaskWithMetadata>()
+      .exec();
+
+    return this.sanitizeTask(updated);
+  }
+
+  async appendAttachment(
+    id: string,
+    businessId: Types.ObjectId,
+    attachment: TaskAttachmentInput,
+    session?: ClientSession,
+  ): Promise<Task | null> {
+    const updated = await this.taskModel
+      .findOneAndUpdate(
+        { _id: id, businessId, deletedAt: null },
+        { $push: { attachments: attachment } },
         { returnDocument: 'after', session },
       )
       .lean<TaskWithMetadata>()

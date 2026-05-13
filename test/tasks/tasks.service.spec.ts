@@ -8,6 +8,8 @@ import { TasksRepository } from 'src/modules/tasks/repositories/tasks.repository
 import { TasksService } from 'src/modules/tasks/services/tasks.service';
 import { TaskPriority, TaskStage } from 'src/modules/tasks/schemas/task.schema';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = new Types.ObjectId().toString();
 const EMPLOYEE_ID = new Types.ObjectId().toString();
@@ -26,6 +28,7 @@ describe('TasksService', () => {
     softDelete: jest.fn(),
     appendComment: jest.fn(),
     appendSubtask: jest.fn(),
+    appendAttachment: jest.fn(),
     updateSubtaskCompletion: jest.fn(),
     findStageByKey: jest.fn(),
     upsertDefaultStages: jest.fn(),
@@ -62,12 +65,13 @@ describe('TasksService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new TasksService(
-      tasksRepository as unknown as TasksRepository,
-      employeesRepository as unknown as EmployeesRepository,
-      usersRepository as unknown as UsersRepository,
-      businessRepository as unknown as BusinessRepository,
-      redisService as unknown as RedisService,
-      agendaService as unknown as AgendaService,
+      asMock<TasksRepository>(tasksRepository),
+      asMock<EmployeesRepository>(employeesRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<RedisService>(redisService),
+      asMock<AgendaService>(agendaService),
+      {} as StorageService,
     );
   });
 
@@ -505,11 +509,7 @@ describe('TasksService', () => {
       redisService.set.mockResolvedValue('OK');
 
       // Act
-      await (
-        service as unknown as {
-          checkAndNotifyOverdueTasks(): Promise<void>;
-        }
-      ).checkAndNotifyOverdueTasks();
+      await (service as any).checkAndNotifyOverdueTasks();
 
       // Assert — only UTC business reached the overdue query
       expect(tasksRepository.findOverdueForBusiness).toHaveBeenCalledTimes(1);
@@ -551,15 +551,139 @@ describe('TasksService', () => {
       redisService.get.mockResolvedValue('1'); // already sent today
 
       // Act
-      await (
-        service as unknown as {
-          checkAndNotifyOverdueTasks(): Promise<void>;
-        }
-      ).checkAndNotifyOverdueTasks();
+      await (service as any).checkAndNotifyOverdueTasks();
 
       // Assert
       expect(agendaService.now).not.toHaveBeenCalled();
       expect(redisService.set).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── addTaskAttachment ───────────────────────────────────────────────────────
+
+  describe('addTaskAttachment', () => {
+    const actor = {
+      _id: new Types.ObjectId(USER_ID),
+      businessId: new Types.ObjectId(BUSINESS_ID),
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane@test.local',
+      deletedAt: null,
+    };
+
+    const input = {
+      url: 'https://cdn.example.com/file.pdf',
+      publicId: 'servixos/task-attachments/biz/task/file',
+      filename: 'report.pdf',
+      mimeType: 'application/pdf',
+      filesizeBytes: 4096,
+    };
+
+    beforeEach(() => {
+      usersRepository.findById.mockResolvedValue(actor);
+      employeesRepository.findByUserId.mockResolvedValue(null);
+      businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
+    });
+
+    it('returns NotFoundException when the task does not exist', async () => {
+      // Arrange
+      tasksRepository.findById.mockResolvedValue(null);
+
+      // Act
+      const result = await service.addTaskAttachment(
+        TASK_ID,
+        BUSINESS_ID,
+        USER_ID,
+        input,
+      );
+
+      // Assert
+      expect(result).toBeInstanceOf(NotFoundException);
+    });
+
+    it('returns NotFoundException when the actor is not in the business', async () => {
+      // Arrange
+      tasksRepository.findById.mockResolvedValue({
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix sink',
+      });
+      usersRepository.findById.mockResolvedValue({
+        ...actor,
+        businessId: new Types.ObjectId(), // different business
+      });
+
+      // Act
+      const result = await service.addTaskAttachment(
+        TASK_ID,
+        BUSINESS_ID,
+        USER_ID,
+        input,
+      );
+
+      // Assert
+      expect(result).toBeInstanceOf(NotFoundException);
+    });
+
+    it('appends attachment metadata and logs activity on success', async () => {
+      // Arrange
+      const existingTask = {
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix sink',
+        attachments: [],
+      };
+      const updatedTask = {
+        ...existingTask,
+        attachments: [{ ...input, _id: new Types.ObjectId() }],
+      };
+      tasksRepository.findById.mockResolvedValue(existingTask);
+      tasksRepository.appendAttachment.mockResolvedValue(updatedTask);
+      tasksRepository.createActivity.mockResolvedValue({});
+      redisService.delByPattern.mockResolvedValue(0);
+
+      // Act
+      const result = await service.addTaskAttachment(
+        TASK_ID,
+        BUSINESS_ID,
+        USER_ID,
+        input,
+      );
+
+      // Assert
+      expect(tasksRepository.appendAttachment).toHaveBeenCalledWith(
+        TASK_ID,
+        expect.any(Types.ObjectId),
+        expect.objectContaining({
+          url: input.url,
+          publicId: input.publicId,
+          filename: input.filename,
+          mimeType: input.mimeType,
+          filesizeBytes: input.filesizeBytes,
+        }),
+      );
+      expect(tasksRepository.createActivity).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'attachment_added' }),
+      );
+      expect(result).toEqual(updatedTask);
+    });
+
+    it('returns NotFoundException when appendAttachment returns null', async () => {
+      // Arrange
+      tasksRepository.findById.mockResolvedValue({
+        _id: new Types.ObjectId(TASK_ID),
+        title: 'Fix sink',
+      });
+      tasksRepository.appendAttachment.mockResolvedValue(null);
+
+      // Act
+      const result = await service.addTaskAttachment(
+        TASK_ID,
+        BUSINESS_ID,
+        USER_ID,
+        input,
+      );
+
+      // Assert
+      expect(result).toBeInstanceOf(NotFoundException);
     });
   });
 });

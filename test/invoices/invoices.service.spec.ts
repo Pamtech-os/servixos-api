@@ -1,8 +1,8 @@
 import {
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { JOBS } from 'src/common/constants/agenda.constants';
@@ -16,6 +16,8 @@ import {
   Invoice,
   InvoiceStatus,
 } from 'src/modules/invoices/schemas/invoice.schema';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';
@@ -100,21 +102,17 @@ describe('InvoicesService', () => {
       now: jest.fn().mockResolvedValue(undefined),
     };
 
-    const config = { get: jest.fn().mockReturnValue(undefined) };
     service = new InvoicesService(
-      config as unknown as ConfigService,
-      invoicesRepository as unknown as InvoicesRepository,
-      clientsRepository as unknown as ClientsRepository,
-      businessRepository as unknown as BusinessRepository,
-      agendaService as unknown as AgendaService,
+      asMock<InvoicesRepository>(invoicesRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<AgendaService>(agendaService),
       {} as EmailService,
+      {} as StorageService,
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 

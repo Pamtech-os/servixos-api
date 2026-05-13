@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -6,13 +7,11 @@ import {
   HttpStatus,
   Param,
   Post,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { FILES_MESSAGES } from 'src/common/constants/messages/files.messages';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { AttachFileDto } from '../dto/attach-file.dto';
 import { ClientFilesParamDto } from '../dto/client-files-param.dto';
 import { FilesService } from '../services/files.service';
 
@@ -40,17 +39,16 @@ export class ClientFilesController {
 
   @Post()
   @HttpCode(HttpStatus.CREATED)
-  @UseInterceptors(FileInterceptor('file'))
-  async uploadClientFile(
+  async attachClientFile(
     @CurrentUser() user: JwtUser,
     @Param() params: ClientFilesParamDto,
-    @UploadedFile() file?: Express.Multer.File,
+    @Body() dto: AttachFileDto,
   ) {
-    const result = await this.filesService.uploadClientFile(
+    const result = await this.filesService.attachClientFile(
       user.businessId,
       params.clientId,
       user.sub,
-      file,
+      dto,
     );
     if (result instanceof HttpException) throw result;
 

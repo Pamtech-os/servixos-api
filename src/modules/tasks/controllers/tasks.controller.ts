@@ -14,6 +14,7 @@ import {
 import { TASKS_MESSAGES } from 'src/common/constants/messages/tasks.messages';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { AddTaskAttachmentDto } from '../dto/add-task-attachment.dto';
 import { AddTaskCommentDto } from '../dto/add-task-comment.dto';
 import { AddTaskSubtaskDto } from '../dto/add-task-subtask.dto';
 import { CreateTaskDto } from '../dto/create-task.dto';
@@ -148,6 +149,27 @@ export class TasksController {
 
     return {
       message: TASKS_MESSAGES.SUCCESS.COMMENT_ADDED,
+      data: result,
+    };
+  }
+
+  @Post(':id/attachments')
+  @HttpCode(HttpStatus.CREATED)
+  async addAttachment(
+    @CurrentUser() user: JwtUser,
+    @Param() params: TaskIdParamDto,
+    @Body() dto: AddTaskAttachmentDto,
+  ) {
+    const result = await this.tasksService.addTaskAttachment(
+      params.id,
+      user.businessId,
+      user.sub,
+      dto,
+    );
+    if (result instanceof HttpException) throw result;
+
+    return {
+      message: TASKS_MESSAGES.SUCCESS.ATTACHMENT_UPLOADED,
       data: result,
     };
   }

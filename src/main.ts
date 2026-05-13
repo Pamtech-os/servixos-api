@@ -40,6 +40,7 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     AI_WEBSITE_MODEL: 'xxxxxxxxxxxxxxxxxx',
     MAILTRAP_TOKEN: 'xxxxxxxxxxxxxxxxxx',
     MAIL_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
+    STORAGE_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
   };
 
   const missing = Object.entries(required)

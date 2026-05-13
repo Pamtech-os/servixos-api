@@ -16,6 +16,7 @@ import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { TASKS_MESSAGES } from 'src/common/constants/messages/tasks.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
+import { StorageService } from 'src/modules/storage/storage.service';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { EmployeesRepository } from 'src/modules/employees/repositories/employees.repository';
@@ -82,6 +83,7 @@ export class TasksService implements OnModuleInit {
     private readonly businessRepository: BusinessRepository,
     private readonly redisService: RedisService,
     private readonly agendaService: AgendaService,
+    private readonly storageService: StorageService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -654,6 +656,75 @@ export class TasksService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `updateSubtask: failed [id=${id}, subtaskId=${subtaskId}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  /**
+   * Records a pre-uploaded file as a task attachment. The file must have been
+   * uploaded via POST /files/upload first; this call only appends the metadata.
+   */
+  async addTaskAttachment(
+    id: string,
+    businessId: string,
+    userId: string,
+    input: {
+      url: string;
+      publicId: string;
+      filename: string;
+      mimeType: string;
+      filesizeBytes: number;
+    },
+  ): Promise<Task | NotFoundException | InternalServerErrorException> {
+    try {
+      const bId = new Types.ObjectId(businessId);
+      const [existing, actor, timezone] = await Promise.all([
+        this.tasksRepository.findById(id, bId, false),
+        this.resolveActor(userId, businessId),
+        this.resolveBusinessTimezone(businessId),
+      ]);
+
+      if (!existing) {
+        return new NotFoundException(TASKS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      if (actor instanceof NotFoundException) {
+        return actor;
+      }
+
+      const updated = await this.tasksRepository.appendAttachment(id, bId, {
+        _id: new Types.ObjectId(),
+        url: input.url,
+        publicId: input.publicId,
+        filename: input.filename,
+        mimeType: input.mimeType,
+        filesizeBytes: input.filesizeBytes,
+        uploadedBy: Types.ObjectId.isValid(userId)
+          ? new Types.ObjectId(userId)
+          : undefined,
+        uploadedAt: toBusinessLocalTime(new Date(), timezone),
+      });
+
+      if (!updated) {
+        return new NotFoundException(TASKS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      await this.appendTaskActivity({
+        businessId,
+        taskId: id,
+        actor,
+        type: TaskActivityType.ATTACHMENT_ADDED,
+        description: `Attached file "${input.filename}"`,
+        metadata: { filename: input.filename },
+        timezone,
+      });
+
+      await this.invalidateTasksListCache(businessId);
+      return updated;
+    } catch (error) {
+      this.logger.error(
+        `addTaskAttachment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }

@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -17,6 +18,8 @@ import { ContractsRepository } from 'src/modules/contracts/repositories/contract
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { JobsService } from 'src/modules/jobs/services/jobs.service';
 import { Job, JobStatus } from 'src/modules/jobs/schemas/job.schema';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const JOB_ID = '664abc000000000000000001';
@@ -72,22 +75,20 @@ describe('JobsService (start/complete)', () => {
     const agendaService = { define: jest.fn() };
 
     service = new JobsService(
-      config as unknown as ConfigService,
-      jobsRepository as unknown as JobsRepository,
+      asMock<ConfigService>(config),
+      asMock<JobsRepository>(jobsRepository),
       {} as ContractsRepository,
       {} as ClientsRepository,
       {} as BusinessRepository,
-      agendaService as unknown as AgendaService,
-      redisService as unknown as RedisService,
+      asMock<AgendaService>(agendaService),
+      asMock<RedisService>(redisService),
       {} as EmailService,
-      invoicesService as unknown as InvoicesService,
+      asMock<InvoicesService>(invoicesService),
+      {} as StorageService,
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 
@@ -225,7 +226,7 @@ describe('JobsService (start/complete)', () => {
       const maliciousPayload = {
         notes: 'safe note',
         status: JobStatus.COMPLETED,
-      } as unknown as {
+      } as {
         title?: string;
         description?: string;
         scheduledDate?: string;

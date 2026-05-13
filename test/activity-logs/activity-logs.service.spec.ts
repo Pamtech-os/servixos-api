@@ -1,4 +1,5 @@
-import { InternalServerErrorException } from '@nestjs/common';
+import { InternalServerErrorException, Logger } from '@nestjs/common';
+import { asMock } from 'test/helpers/mock';
 import { Types } from 'mongoose';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
@@ -70,21 +71,18 @@ describe('ActivityLogsService', () => {
       set: jest.fn().mockResolvedValue(undefined),
     };
 
-    const agendaService = { define: jest.fn() } as unknown as AgendaService;
+    const agendaService = asMock<AgendaService>({ define: jest.fn() });
 
     service = new ActivityLogsService(
-      activityLogsRepository as unknown as ActivityLogsRepository,
-      usersRepository as unknown as UsersRepository,
-      businessRepository as unknown as BusinessRepository,
-      redisService as unknown as RedisService,
+      asMock<ActivityLogsRepository>(activityLogsRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<RedisService>(redisService),
       agendaService,
     );
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 
@@ -140,7 +138,7 @@ describe('ActivityLogsService', () => {
     it('should skip IP geo lookup for loopback addresses', async () => {
       const fetchSpy = jest
         .spyOn(globalThis, 'fetch')
-        .mockResolvedValue({ json: jest.fn() } as unknown as Response);
+        .mockResolvedValue(new Response());
 
       await service.log({ ...baseParams, ipAddress: '127.0.0.1' });
 

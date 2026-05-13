@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   InternalServerErrorException,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -25,6 +26,7 @@ import {
   ServiceRequest,
 } from 'src/modules/requests/schemas/service-request.schema';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { asMock } from 'test/helpers/mock';
 
 describe('RequestsService', () => {
   let service: RequestsService;
@@ -99,35 +101,27 @@ describe('RequestsService', () => {
     };
 
     service = new RequestsService(
-      config as unknown as ConfigService,
-      requestsRepository as unknown as RequestsRepository,
-      clientsRepository as unknown as ClientsRepository,
-      businessRepository as unknown as BusinessRepository,
+      asMock<ConfigService>(config),
+      asMock<RequestsRepository>(requestsRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<BusinessRepository>(businessRepository),
       {} as UsersRepository,
-      agendaService as unknown as AgendaService,
-      redisService as unknown as RedisService,
+      asMock<AgendaService>(agendaService),
+      asMock<RedisService>(redisService),
       {} as never,
     );
 
+    const logger = Reflect.get(service, 'logger') as Logger;
     loggerWarnSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { warn: () => void } }).logger,
-        'warn',
-      )
+      .spyOn(logger, 'warn')
       .mockImplementation(() => undefined);
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(logger, 'error')
       .mockImplementation(() => undefined);
   });
 
   const provisionClientSpy = () =>
-    jest.spyOn(
-      service as unknown as { provisionClient: () => Promise<void> },
-      'provisionClient',
-    );
+    jest.spyOn(service as any, 'provisionClient');
 
   describe('handleClientProvisioningJob', () => {
     it('does not schedule a retry when provisioning succeeds', async () => {
@@ -295,12 +289,8 @@ describe('RequestsService', () => {
         aiPriceEstimate: cachedEstimate,
         hasAiPriceEstimate: true,
       });
-      const generateSpy = jest.spyOn(
-        service as unknown as {
-          generateAiPriceEstimate: () => Promise<unknown>;
-        },
-        'generateAiPriceEstimate',
-      );
+
+      const generateSpy = jest.spyOn(service as any, 'generateAiPriceEstimate');
 
       const result = await service.estimateRequestPrice(
         baseRequest._id.toString(),
@@ -332,13 +322,9 @@ describe('RequestsService', () => {
         name: payload.businessName,
         categoryName: 'Cleaning',
       });
+
       jest
-        .spyOn(
-          service as unknown as {
-            generateAiPriceEstimate: () => Promise<null>;
-          },
-          'generateAiPriceEstimate',
-        )
+        .spyOn(service as any, 'generateAiPriceEstimate')
         .mockResolvedValue(null);
 
       const result = await service.estimateRequestPrice(
@@ -367,13 +353,9 @@ describe('RequestsService', () => {
         name: payload.businessName,
         categoryName: 'Cleaning',
       });
+
       jest
-        .spyOn(
-          service as unknown as {
-            generateAiPriceEstimate: () => Promise<typeof estimate>;
-          },
-          'generateAiPriceEstimate',
-        )
+        .spyOn(service as any, 'generateAiPriceEstimate')
         .mockResolvedValue(estimate);
 
       const result = await service.estimateRequestPrice(
@@ -419,7 +401,7 @@ describe('RequestsService', () => {
     }
 
     function makeJob(data: unknown): Job {
-      return { attrs: { data } } as unknown as Job;
+      return { attrs: { data } } as Job;
     }
 
     it('soft-deletes all requests for the client email and invalidates the cache', async () => {

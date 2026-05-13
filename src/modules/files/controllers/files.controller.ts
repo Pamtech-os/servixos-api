@@ -6,7 +6,11 @@ import {
   HttpException,
   HttpStatus,
   Param,
+  Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { FILES_MESSAGES } from 'src/common/constants/messages/files.messages';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
@@ -16,6 +20,29 @@ import { FilesService } from '../services/files.service';
 @Controller('files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
+
+  /**
+   * Generic upload endpoint — accepts any file and returns the storage URL +
+   * publicId. Callers use the returned values when creating task attachments,
+   * client files, or message attachments via their respective JSON endpoints.
+   */
+  @Post('upload')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  @HttpCode(HttpStatus.CREATED)
+  async uploadFile(
+    @CurrentUser() user: JwtUser,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const result = await this.filesService.uploadFile(user.businessId, file);
+    if (result instanceof HttpException) throw result;
+
+    return {
+      message: FILES_MESSAGES.SUCCESS.UPLOADED,
+      data: result,
+    };
+  }
 
   @Get(':fileId')
   @HttpCode(HttpStatus.OK)
