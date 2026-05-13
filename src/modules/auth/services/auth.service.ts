@@ -41,6 +41,10 @@ import { CompleteSetupDto } from '../dto/complete-setup.dto';
 import { CreateBusinessDto } from '../dto/create-business.dto';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { BusinessRepository } from '../../business/repositories/business.repository';
+import {
+  ALL_PERMISSIONS,
+  Permission,
+} from 'src/common/constants/permissions.constants';
 import { RolesRepository } from '../../roles/repositories/roles.repository';
 import { WebsiteConfigRepository } from '../../website/repositories/website-config.repository';
 import { BusinessCategoriesRepository } from '../../business-categories/repositories/business-categories.repository';
@@ -116,6 +120,7 @@ export class AuthService {
         businessId,
         user.userRole,
         timezone,
+        user.roleId,
       );
 
       void this.agendaService.now(JOBS.ACTIVITY_LOG_WRITE, {
@@ -219,11 +224,16 @@ export class AuthService {
 
       await this.redisService.del(attemptsKey);
 
+      const permissions = await this.resolvePermissions(
+        user.userRole,
+        user.roleId,
+      );
       const accessToken = this.signAccessToken({
         sub: payload.sub,
         businessId: payload.businessId,
         userRole: payload.userRole,
         pinVerified: true,
+        permissions,
       });
 
       return { accessToken };
@@ -297,11 +307,16 @@ export class AuthService {
         this.authRepository.revokeAllUserRefreshTokens(user._id),
       ]);
 
+      const permissions = await this.resolvePermissions(
+        user.userRole,
+        user.roleId,
+      );
       const accessToken = this.signAccessToken({
         sub: user._id.toString(),
         businessId,
         userRole: user.userRole,
         pinVerified: true,
+        permissions,
       });
 
       return { accessToken };
@@ -337,11 +352,16 @@ export class AuthService {
         );
       }
 
+      const permissions = await this.resolvePermissions(
+        user.userRole,
+        user.roleId,
+      );
       const accessToken = this.signAccessToken({
         sub: stored.userId.toString(),
         businessId: stored.businessId.toString(),
         userRole: user.userRole,
         pinVerified: false,
+        permissions,
       });
 
       return { accessToken };
@@ -694,6 +714,7 @@ export class AuthService {
         businessId,
         user.userRole,
         dto.timezone ?? 'UTC',
+        user.roleId,
       );
 
       await this.agendaService
@@ -836,12 +857,15 @@ export class AuthService {
     businessId: Types.ObjectId,
     userRole: UserRole,
     timezone = 'UTC',
+    roleId?: Types.ObjectId,
   ): Promise<{ accessToken: string; refreshToken: string }> {
+    const permissions = await this.resolvePermissions(userRole, roleId);
     const accessToken = this.signAccessToken({
       sub: userId.toString(),
       businessId: businessId.toString(),
       userRole,
       pinVerified: false,
+      permissions,
     });
 
     const rawRefreshToken = generateSecureToken(32);
@@ -870,6 +894,18 @@ export class AuthService {
     const ttl = CACHE_TTL.CLIENT_TOKEN;
     await this.redisService.set(CLIENT_TOKEN_KEY(token), '1', ttl);
     return { token, expiresAt: Date.now() + ttl * 1_000 };
+  }
+
+  private async resolvePermissions(
+    userRole: UserRole,
+    roleId?: Types.ObjectId,
+  ): Promise<Permission[]> {
+    if (roleId) {
+      const role = await this.rolesRepository.findById(roleId.toString());
+      if (role?.permissions.length) return role.permissions;
+    }
+    if (userRole === UserRole.OWNER) return [...ALL_PERMISSIONS];
+    return [];
   }
 
   private signAccessToken(payload: JwtUser): string {
