@@ -829,7 +829,8 @@ export class MessagingService {
           businessName,
           title: params.title,
           description: params.description,
-          authorName: params.authorName,
+          authorName:
+            params.authorName === 'Business' ? businessName : params.authorName,
           createdAtLabel,
         };
       })
