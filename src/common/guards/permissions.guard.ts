@@ -8,6 +8,7 @@ import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/permissions.decorator';
 import { AUTH_MESSAGES } from '../constants/messages/auth.messages';
 import { JwtUser } from '../decorators/current-user.decorator';
+import { UserRole } from 'src/modules/users/schemas/user.schema';
 
 @Injectable()
 export class PermissionsGuard implements CanActivate {
@@ -23,6 +24,8 @@ export class PermissionsGuard implements CanActivate {
     const { user } = context
       .switchToHttp()
       .getRequest<{ user?: JwtUser & { permissions?: string[] } }>();
+
+    if (user?.userRole === UserRole.OWNER) return true;
 
     const hasAll =
       !!user &&

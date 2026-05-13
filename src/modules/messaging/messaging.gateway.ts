@@ -24,6 +24,7 @@ import type {
 import { Message, MessageSender } from './schemas/message.schema';
 import { WEBSOCKET_MESSAGES } from 'src/common/constants/messages/websocket.messages';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
+import { websocketConfig } from 'src/config/websocket.config';
 
 const MAX_CONTENT_LENGTH = 5000;
 
@@ -55,7 +56,7 @@ interface DeleteMessagePayload {
 }
 
 @UseFilters(WsExceptionFilter)
-@WebSocketGateway({ namespace: '/chat' })
+@WebSocketGateway({ namespace: '/chat', cors: websocketConfig().cors })
 export class MessagingGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {

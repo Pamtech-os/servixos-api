@@ -70,7 +70,7 @@ describe('PermissionsContextGuard', () => {
     const reqUser: JwtUser = {
       sub: new Types.ObjectId().toString(),
       businessId: businessId.toString(),
-      userRole: UserRole.OWNER,
+      userRole: UserRole.EMPLOYEE,
       pinVerified: true,
     };
 
@@ -90,5 +90,26 @@ describe('PermissionsContextGuard', () => {
     expect(result).toBe(true);
     expect(reqUser.permissions).toEqual(['tasks.view', 'tasks.edit']);
     expect(redisService.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('assigns all permissions for owners and skips role hydration', async () => {
+    reflector.getAllAndOverride.mockImplementation((key: string) =>
+      key === PERMISSIONS_KEY ? ['tasks.view'] : undefined,
+    );
+
+    const reqUser: JwtUser = {
+      sub: new Types.ObjectId().toString(),
+      businessId: new Types.ObjectId().toString(),
+      userRole: UserRole.OWNER,
+      pinVerified: true,
+    };
+
+    const result = await guard.canActivate(contextWithUser(reqUser));
+
+    expect(result).toBe(true);
+    expect(Array.isArray(reqUser.permissions)).toBe(true);
+    expect(reqUser.permissions).toContain('tasks.view');
+    expect(usersRepository.findById).not.toHaveBeenCalled();
+    expect(rolesRepository.findById).not.toHaveBeenCalled();
   });
 });

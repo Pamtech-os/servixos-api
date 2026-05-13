@@ -7,6 +7,8 @@ import { JwtUser } from '../decorators/current-user.decorator';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { RolesRepository } from 'src/modules/roles/repositories/roles.repository';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { UserRole } from 'src/modules/users/schemas/user.schema';
+import { ALL_PERMISSIONS } from '../constants/permissions.constants';
 
 type UserWithPermissions = JwtUser & { permissions?: string[] };
 
@@ -38,6 +40,12 @@ export class PermissionsContextGuard implements CanActivate {
       .getRequest<{ user?: UserWithPermissions }>();
     const user = req.user;
     if (!user) return true;
+
+    // Business owners always operate with the full permission set.
+    if (user.userRole === UserRole.OWNER) {
+      user.permissions = [...ALL_PERMISSIONS];
+      return true;
+    }
 
     if (Array.isArray(user.permissions)) {
       return true;
