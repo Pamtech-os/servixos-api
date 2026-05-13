@@ -6,9 +6,10 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { STORAGE_FOLDERS } from 'src/modules/storage/constants/storage-folders.constants';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { CONTRACTS_MESSAGES } from 'src/common/constants/messages/contracts.messages';
@@ -30,11 +31,6 @@ interface PaginatedContracts {
   meta: ReturnType<typeof buildMeta>;
 }
 
-interface ContractUploadResult {
-  secureUrl: string;
-  publicId: string;
-}
-
 const contractsListCacheKey = (
   businessId: string,
   paramsHash: string,
@@ -43,27 +39,15 @@ const contractsListCacheKey = (
 @Injectable()
 export class ContractsService {
   private readonly logger = new Logger(ContractsService.name);
-  private readonly cloudinaryCloudName: string;
-  private readonly cloudinaryApiKey: string;
-  private readonly cloudinaryApiSecret: string;
-  private readonly cloudinaryFolder: string;
 
   constructor(
-    config: ConfigService,
     private readonly contractsRepository: ContractsRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly jobsRepository: JobsRepository,
     private readonly emailService: EmailService,
     private readonly redisService: RedisService,
-  ) {
-    this.cloudinaryCloudName =
-      config.get<string>('CLOUDINARY_CLOUD_NAME') ?? '';
-    this.cloudinaryApiKey = config.get<string>('CLOUDINARY_API_KEY') ?? '';
-    this.cloudinaryApiSecret =
-      config.get<string>('CLOUDINARY_API_SECRET') ?? '';
-    this.cloudinaryFolder =
-      config.get<string>('CLOUDINARY_CONTRACTS_FOLDER') ?? 'servixos/contracts';
-  }
+    private readonly storageService: StorageService,
+  ) {}
 
   async listContracts(
     businessId: string,
@@ -317,12 +301,7 @@ export class ContractsService {
 
       const html = contract.html ?? this.buildContractPdfFallbackHtml(contract);
       const pdfBuffer = await this.renderContractPdfBuffer(html);
-      const uploaded = await this.uploadContractPdf(
-        pdfBuffer,
-        businessId,
-        contract.jobId.toString(),
-        contract.title,
-      );
+      const uploaded = await this.uploadContractPdf(pdfBuffer, contract.title);
 
       await this.contractsRepository.updateById(id, bId, {
         pdfUrl: uploaded.secureUrl,
@@ -471,71 +450,18 @@ export class ContractsService {
 
   private async uploadContractPdf(
     pdfBuffer: Buffer,
-    businessId: string,
-    jobId: string,
     title: string,
-  ): Promise<ContractUploadResult> {
-    if (
-      !this.cloudinaryCloudName ||
-      !this.cloudinaryApiKey ||
-      !this.cloudinaryApiSecret
-    ) {
-      throw new Error('Cloudinary credentials are not configured');
-    }
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const publicId = `${businessId}-${jobId}-${timestamp}`;
-
-    const signatureBase = `folder=${this.cloudinaryFolder}&public_id=${publicId}&timestamp=${timestamp}`;
-    const signature = createHash('sha1')
-      .update(`${signatureBase}${this.cloudinaryApiSecret}`)
-      .digest('hex');
-
-    const form = new FormData();
-    form.append('file', new Blob([pdfBuffer]), `${title}.pdf`);
-    form.append('api_key', this.cloudinaryApiKey);
-    form.append('timestamp', String(timestamp));
-    form.append('folder', this.cloudinaryFolder);
-    form.append('public_id', publicId);
-    form.append('signature', signature);
-    form.append('resource_type', 'raw');
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${this.cloudinaryCloudName}/raw/upload`,
-      {
-        method: 'POST',
-        body: form,
-      },
+  ): Promise<{ secureUrl: string; publicId: string }> {
+    const { url, publicId } = await this.storageService.uploadBuffer(
+      pdfBuffer,
+      STORAGE_FOLDERS.contracts,
+      `${title}.pdf`,
     );
-
-    const payload = (await response.json()) as {
-      secure_url?: string;
-      public_id?: string;
-      error?: { message?: string };
-    };
-
-    if (!response.ok || !payload.secure_url || !payload.public_id) {
-      throw new Error(
-        payload.error?.message ?? CONTRACTS_MESSAGES.ERROR.PDF_FAILED,
-      );
-    }
-
-    return {
-      secureUrl: payload.secure_url,
-      publicId: payload.public_id,
-    };
+    return { secureUrl: url, publicId };
   }
 
   private async destroyContractAsset(publicId: string): Promise<void> {
-    await fetch(
-      `https://api.cloudinary.com/v1_1/${this.cloudinaryCloudName}/resources/raw/upload/${encodeURIComponent(publicId)}`,
-      {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Basic ${Buffer.from(`${this.cloudinaryApiKey}:${this.cloudinaryApiSecret}`).toString('base64')}`,
-        },
-      },
-    ).catch(() => undefined);
+    await this.storageService.delete(publicId).catch(() => undefined);
   }
 
   private async invalidateContractsListCache(

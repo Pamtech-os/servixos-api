@@ -13,6 +13,7 @@ import { ClockStatus } from 'src/modules/employees/schemas/clock-record.schema';
 import { ClockService } from 'src/modules/employees/services/clock.service';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { UserRole } from 'src/modules/users/schemas/user.schema';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const EMPLOYEE_ID = '665def000000000000000001';
@@ -97,10 +98,10 @@ describe('ClockService', () => {
     };
 
     service = new ClockService(
-      employeesRepository as unknown as EmployeesRepository,
-      clockRecordsRepository as unknown as ClockRecordsRepository,
-      businessRepository as unknown as BusinessRepository,
-      redisService as unknown as RedisService,
+      asMock<EmployeesRepository>(employeesRepository),
+      asMock<ClockRecordsRepository>(clockRecordsRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<RedisService>(redisService),
     );
   });
 

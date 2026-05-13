@@ -1,5 +1,4 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
@@ -8,6 +7,8 @@ import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
 import { EmailService } from 'src/modules/email/services/email.service';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { RedisService } from 'src/modules/redis/services/redis.service';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = new Types.ObjectId().toString();
 const CLIENT_ID = new Types.ObjectId().toString();
@@ -47,23 +48,13 @@ describe('ContractsService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    const config = {
-      get: jest.fn((key: string) => {
-        if (key === 'CLOUDINARY_CLOUD_NAME') return 'cloud';
-        if (key === 'CLOUDINARY_API_KEY') return 'key';
-        if (key === 'CLOUDINARY_API_SECRET') return 'secret';
-        if (key === 'CLOUDINARY_CONTRACTS_FOLDER') return 'contracts';
-        return undefined;
-      }),
-    };
-
     service = new ContractsService(
-      config as unknown as ConfigService,
-      contractsRepository as unknown as ContractsRepository,
-      clientsRepository as unknown as ClientsRepository,
-      jobsRepository as unknown as JobsRepository,
-      emailService as unknown as EmailService,
-      redisService as unknown as RedisService,
+      asMock<ContractsRepository>(contractsRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<JobsRepository>(jobsRepository),
+      asMock<EmailService>(emailService),
+      asMock<RedisService>(redisService),
+      {} as StorageService,
     );
   });
 

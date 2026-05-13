@@ -5,9 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { v2 as cloudinary } from 'cloudinary';
 import { Types } from 'mongoose';
-import { Readable } from 'stream';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
@@ -25,14 +23,6 @@ import { Announcement } from '../schemas/announcement.schema';
 import { Conversation } from '../schemas/conversation.schema';
 import { Message, MessageSender } from '../schemas/message.schema';
 import { TeamMessage } from '../schemas/team-message.schema';
-
-export interface UploadResult {
-  attachmentUrl: string;
-  publicId: string;
-  mimeType: string;
-  fileName: string;
-  fileSize: number;
-}
 
 export interface ConversationThreadView {
   conversationId: string;
@@ -85,21 +75,6 @@ interface PaginatedAnnouncements {
   total: number;
 }
 
-const ALLOWED_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'video/mp4',
-  'video/quicktime',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'application/vnd.ms-excel',
-  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-]);
-
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const BUSINESS_TZ_CACHE_TTL_MS = 5 * 60 * 1000;
 
 @Injectable()
@@ -447,68 +422,6 @@ export class MessagingService {
     } catch (error) {
       this.logger.error(
         `getConversations: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
-      );
-      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
-    }
-  }
-
-  async uploadAttachment(
-    file: Express.Multer.File,
-    businessId: string,
-  ): Promise<
-    UploadResult | BadRequestException | InternalServerErrorException
-  > {
-    try {
-      if (file.size > MAX_FILE_SIZE) {
-        this.logger.warn(
-          `uploadAttachment: attachment too large [businessId=${businessId}, size=${file.size}]`,
-        );
-        return new BadRequestException(
-          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TOO_LARGE,
-        );
-      }
-
-      if (!ALLOWED_MIME_TYPES.has(file.mimetype)) {
-        this.logger.warn(
-          `uploadAttachment: invalid attachment type [businessId=${businessId}, mimeType=${file.mimetype}]`,
-        );
-        return new BadRequestException(
-          MESSAGING_MESSAGES.ERROR.ATTACHMENT_TYPE_INVALID,
-        );
-      }
-
-      return await new Promise<UploadResult>((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          {
-            folder: `attachments/${businessId}`,
-            resource_type: 'auto',
-            use_filename: true,
-            unique_filename: true,
-          },
-          (error, result) => {
-            if (error || !result) {
-              this.logger.error(
-                `uploadAttachment: cloudinary upload failed [businessId=${businessId}]: ${error?.message ?? 'No upload response'}`,
-              );
-              return reject(
-                new Error(MESSAGING_MESSAGES.ERROR.ATTACHMENT_UPLOAD_FAILED),
-              );
-            }
-            resolve({
-              attachmentUrl: result.secure_url,
-              publicId: result.public_id,
-              mimeType: file.mimetype,
-              fileName: file.originalname,
-              fileSize: file.size,
-            });
-          },
-        );
-
-        Readable.from(file.buffer).pipe(uploadStream);
-      });
-    } catch (error) {
-      this.logger.error(
-        `uploadAttachment: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }

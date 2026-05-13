@@ -16,6 +16,7 @@ import { Employee } from 'src/modules/employees/schemas/employee.schema';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { RolesRepository } from 'src/modules/roles/repositories/roles.repository';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const EMPLOYEE_ID = '665def000000000000000001';
@@ -151,13 +152,13 @@ describe('EmployeesService', () => {
 
     service = new EmployeesService(
       mockConnection as never,
-      employeesRepository as unknown as EmployeesRepository,
-      clockRecordsRepository as unknown as ClockRecordsRepository,
-      usersRepository as unknown as UsersRepository,
-      rolesRepository as unknown as RolesRepository,
-      businessRepository as unknown as BusinessRepository,
-      agendaService as unknown as AgendaService,
-      redisService as unknown as RedisService,
+      asMock<EmployeesRepository>(employeesRepository),
+      asMock<ClockRecordsRepository>(clockRecordsRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<RolesRepository>(rolesRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<AgendaService>(agendaService),
+      asMock<RedisService>(redisService),
     );
   });
 

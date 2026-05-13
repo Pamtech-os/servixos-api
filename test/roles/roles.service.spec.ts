@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
@@ -12,6 +13,7 @@ import { RolesRepository } from 'src/modules/roles/repositories/roles.repository
 import { RolesService } from 'src/modules/roles/services/roles.service';
 import { Role } from 'src/modules/roles/schemas/role.schema';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const ROLE_ID = '664abc000000000000000001';
@@ -87,23 +89,17 @@ describe('RolesService', () => {
 
     service = new RolesService(
       connection as never,
-      rolesRepository as unknown as RolesRepository,
-      redisService as unknown as RedisService,
-      usersRepository as unknown as UsersRepository,
+      asMock<RolesRepository>(rolesRepository),
+      asMock<RedisService>(redisService),
+      asMock<UsersRepository>(usersRepository),
     );
 
     loggerWarnSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { warn: () => void } }).logger,
-        'warn',
-      )
+      .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 

@@ -147,7 +147,7 @@ Update a contract's status or signature date.
 
 **Response `200`** — updated contract object.
 
-**Errors:** `404` if not found.
+**Errors:** `400` if `status` is `signed` and neither `signedAt` in the request body nor an existing `signedAt` on the contract is present; `404` if not found.
 
 ---
 
@@ -295,6 +295,7 @@ Sign a contract. Uploads the signature image, marks the contract as `signed`, an
 | `sentAt` | ISO date? | Populated when emailed to client |
 | `signedAt` | ISO date? | Populated when client signs |
 | `signingUrl` | string? | |
+| `clientAppDeliveredAt` | ISO date? | Set when the contract is delivered to the client portal |
 | `timezone` | string | IANA timezone string |
 | `deletedAt` | ISO date? | Present only on soft-deleted records |
 | `createdAt` | ISO date | |

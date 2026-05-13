@@ -9,10 +9,7 @@ import {
   Patch,
   Post,
   Query,
-  UploadedFile,
-  UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
@@ -123,27 +120,6 @@ export class MessagingController {
     return {
       message: MESSAGING_MESSAGES.SUCCESS.MESSAGES_MARKED_READ,
       data: null,
-    };
-  }
-
-  @Post('upload-attachment')
-  @UseInterceptors(
-    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
-  )
-  @HttpCode(HttpStatus.CREATED)
-  async uploadAttachment(
-    @CurrentUser() user: JwtUser,
-    @UploadedFile() file: Express.Multer.File,
-  ) {
-    const result = await this.messagingService.uploadAttachment(
-      file,
-      user.businessId,
-    );
-    if (result instanceof HttpException) throw result;
-
-    return {
-      message: MESSAGING_MESSAGES.SUCCESS.MESSAGE_SENT,
-      data: result,
     };
   }
 }

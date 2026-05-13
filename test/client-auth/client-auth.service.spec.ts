@@ -16,6 +16,7 @@ import { ClientsRepository } from 'src/modules/clients/repositories/clients.repo
 import { ClientAuthService } from 'src/modules/client-auth/services/client-auth.service';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
 import { UserRole } from 'src/modules/users/schemas/user.schema';
+import { asMock } from 'test/helpers/mock';
 
 const USER_ID = new Types.ObjectId();
 const CLIENT_ID = new Types.ObjectId();
@@ -116,11 +117,11 @@ describe('ClientAuthService', () => {
 
     service = new ClientAuthService(
       mockConnection as never,
-      jwtService as unknown as JwtService,
-      authRepository as unknown as AuthRepository,
-      usersRepository as unknown as UsersRepository,
-      clientsRepository as unknown as ClientsRepository,
-      businessRepository as unknown as BusinessRepository,
+      asMock<JwtService>(jwtService),
+      asMock<AuthRepository>(authRepository),
+      asMock<UsersRepository>(usersRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<BusinessRepository>(businessRepository),
       agendaService as never,
     );
   });

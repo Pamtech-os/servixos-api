@@ -18,7 +18,6 @@ import { encryptionConfig } from './config/encryption.config';
 import { mailConfig } from './config/mail.config';
 import { aiConfig } from './config/ai.config';
 import { websocketConfig } from './config/websocket.config';
-import { cloudinaryConfig } from './config/cloudinary.config';
 
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { ResponseTransformInterceptor } from './common/interceptors/response-transform.interceptor';
@@ -56,6 +55,7 @@ import { FilesModule } from './modules/files/files.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
   imports: [
@@ -69,7 +69,6 @@ import { TasksModule } from './modules/tasks/tasks.module';
         mailConfig,
         aiConfig,
         websocketConfig,
-        cloudinaryConfig,
       ],
     }),
     MongooseModule.forRootAsync({
@@ -82,6 +81,7 @@ import { TasksModule } from './modules/tasks/tasks.module';
         connectTimeoutMS: 10000,
       }),
     }),
+    StorageModule,
     RedisModule,
     EmailModule,
     AgendaModule,

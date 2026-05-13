@@ -17,6 +17,7 @@ import {
   ListClientContractsDto,
 } from 'src/modules/client-portal/dto/list-client-contracts.dto';
 import { SortOrder } from 'src/modules/client-portal/dto/list-client-invoices.dto';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = new Types.ObjectId().toString();
 const CLIENT_ID = new Types.ObjectId().toString();
@@ -76,12 +77,12 @@ describe('ClientContractsService', () => {
     };
 
     service = new ClientContractsService(
-      config as unknown as ConfigService,
-      contractsRepository as unknown as ContractsRepository,
-      jobsRepository as unknown as JobsRepository,
-      businessRepository as unknown as BusinessRepository,
-      redisService as unknown as RedisService,
-      agendaService as unknown as AgendaService,
+      asMock<ConfigService>(config),
+      asMock<ContractsRepository>(contractsRepository),
+      asMock<JobsRepository>(jobsRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<RedisService>(redisService),
+      asMock<AgendaService>(agendaService),
     );
   });
 

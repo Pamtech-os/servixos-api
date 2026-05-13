@@ -3,6 +3,7 @@ import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.mess
 import { MessagingController } from 'src/modules/messaging/controllers/messaging.controller';
 import { MessagingGateway } from 'src/modules/messaging/messaging.gateway';
 import { MessagingService } from 'src/modules/messaging/services/messaging.service';
+import { asMock } from 'test/helpers/mock';
 
 type JwtUserLike = {
   sub: string;
@@ -31,8 +32,8 @@ describe('MessagingController', () => {
     };
 
     controller = new MessagingController(
-      messagingService as unknown as MessagingService,
-      messagingGateway as unknown as MessagingGateway,
+      asMock<MessagingService>(messagingService),
+      asMock<MessagingGateway>(messagingGateway),
     );
   });
 

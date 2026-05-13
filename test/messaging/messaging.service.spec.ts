@@ -1,30 +1,18 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
-import { PassThrough } from 'stream';
-import { v2 as cloudinary } from 'cloudinary';
+import { BadRequestException, Logger, NotFoundException } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmployeesRepository } from 'src/modules/employees/repositories/employees.repository';
 import { MessagingRepository } from 'src/modules/messaging/repositories/messaging.repository';
-import {
-  MessagingService,
-  UploadResult,
-} from 'src/modules/messaging/services/messaging.service';
+import { MessagingService } from 'src/modules/messaging/services/messaging.service';
 import {
   MessageSender,
   MessageStatus,
 } from 'src/modules/messaging/schemas/message.schema';
 import type { Conversation } from 'src/modules/messaging/schemas/conversation.schema';
 import type { Message } from 'src/modules/messaging/schemas/message.schema';
-
-jest.mock('cloudinary', () => ({
-  v2: {
-    uploader: {
-      upload_stream: jest.fn(),
-    },
-  },
-}));
+import { asMock } from 'test/helpers/mock';
 
 describe('MessagingService', () => {
   let service: MessagingService;
@@ -74,7 +62,7 @@ describe('MessagingService', () => {
       content: 'Hello',
       status: MessageStatus.SENT,
       ...overrides,
-    }) as unknown as Message;
+    }) as Message;
 
   const makeConversation = (): Conversation =>
     ({
@@ -85,7 +73,7 @@ describe('MessagingService', () => {
       businessUnreadCount: 0,
       clientUnreadCount: 0,
       isActive: false,
-    }) as unknown as Conversation;
+    }) as Conversation;
 
   beforeEach(() => {
     messagingRepository = {
@@ -113,24 +101,18 @@ describe('MessagingService', () => {
     businessRepository.findById.mockResolvedValue({ timezone: 'UTC' });
 
     service = new MessagingService(
-      messagingRepository as unknown as MessagingRepository,
-      clientsRepository as unknown as ClientsRepository,
-      employeesRepository as unknown as EmployeesRepository,
-      businessRepository as unknown as BusinessRepository,
+      asMock<MessagingRepository>(messagingRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<EmployeesRepository>(employeesRepository),
+      asMock<BusinessRepository>(businessRepository),
     );
 
     loggerWarnSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { warn: () => void } }).logger,
-        'warn',
-      )
+      .spyOn(Logger.prototype, 'warn')
       .mockImplementation(() => undefined);
 
     loggerErrorSpy = jest
-      .spyOn(
-        (service as unknown as { logger: { error: () => void } }).logger,
-        'error',
-      )
+      .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);
   });
 
@@ -638,92 +620,6 @@ describe('MessagingService', () => {
     });
   });
 
-  // ─── uploadAttachment ──────────────────────────────────────────────────────
-
-  describe('uploadAttachment', () => {
-    const makeFile = (
-      overrides: Partial<Express.Multer.File> = {},
-    ): Express.Multer.File =>
-      ({
-        mimetype: 'image/jpeg',
-        size: 1024,
-        originalname: 'photo.jpg',
-        buffer: Buffer.from('fake'),
-        ...overrides,
-      }) as Express.Multer.File;
-
-    it('should return BadRequestException when file exceeds 10 MB', async () => {
-      // Arrange
-      const file = makeFile({ size: 11 * 1024 * 1024 });
-
-      // Act
-      const result = await service.uploadAttachment(file, businessId);
-
-      // Assert
-      expect(result).toBeInstanceOf(BadRequestException);
-    });
-
-    it('should return BadRequestException for unsupported mime types', async () => {
-      // Arrange
-      const file = makeFile({ mimetype: 'application/x-executable' });
-
-      // Act
-      const result = await service.uploadAttachment(file, businessId);
-
-      // Assert
-      expect(result).toBeInstanceOf(BadRequestException);
-    });
-
-    it('should resolve with upload result on successful upload', async () => {
-      // Arrange
-      const file = makeFile();
-      const fakeResult = {
-        secure_url: 'https://cdn.cloudinary.com/photo.jpg',
-        public_id: 'attachments/biz123/photo',
-      };
-
-      (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(
-        (_opts: unknown, cb: (err: null, res: typeof fakeResult) => void) => {
-          const passthrough = new PassThrough();
-          process.nextTick(() => cb(null, fakeResult));
-          return passthrough;
-        },
-      );
-
-      // Act
-      const result = await service.uploadAttachment(file, businessId);
-
-      // Assert
-      expect(result).not.toBeInstanceOf(Error);
-      const upload = result as UploadResult;
-      expect(upload.attachmentUrl).toBe(fakeResult.secure_url);
-      expect(upload.publicId).toBe(fakeResult.public_id);
-      expect(upload.mimeType).toBe('image/jpeg');
-      expect(upload.fileName).toBe('photo.jpg');
-      expect(upload.fileSize).toBe(1024);
-    });
-
-    it('should return InternalServerErrorException when cloudinary returns an error', async () => {
-      // Arrange
-      const file = makeFile();
-      const cloudinaryError = new Error('Upload failed');
-
-      (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(
-        (_opts: unknown, cb: (err: Error, res: null) => void) => {
-          const passthrough = new PassThrough();
-          process.nextTick(() => cb(cloudinaryError, null));
-          return passthrough;
-        },
-      );
-
-      // Act
-      const result = await service.uploadAttachment(file, businessId);
-
-      // Assert
-      expect(result).toBeInstanceOf(Error);
-    });
-  });
-
   // ─── toPayload ─────────────────────────────────────────────────────────────
 
   describe('toPayload', () => {
@@ -741,7 +637,7 @@ describe('MessagingService', () => {
         fileName: 'f.pdf',
         fileSize: 2048,
       });
-      (msg as unknown as { createdAt: Date }).createdAt = now;
+      Object.assign(msg, { createdAt: now });
 
       // Act
       const payload = service.toPayload(msg as Message & { createdAt?: Date });

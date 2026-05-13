@@ -26,6 +26,7 @@ export async function createTestApp(overrideEnv: {
   process.env.ENCRYPTION_IV = 'b'.repeat(24);
   process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
   process.env.NODE_ENV = 'test';
+  process.env.STORAGE_PROVIDER = 'b'.repeat(10);
 
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],

@@ -6,10 +6,10 @@ import {
   NotFoundException,
   OnModuleInit,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Job as AgendaJob } from 'agenda';
-import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
+import { StorageService } from 'src/modules/storage/storage.service';
+import { STORAGE_FOLDERS } from 'src/modules/storage/constants/storage-folders.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { INVOICES_MESSAGES } from 'src/common/constants/messages/invoices.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
@@ -43,11 +43,6 @@ interface PaginatedInvoices {
   meta: ReturnType<typeof buildMeta>;
 }
 
-interface ContractUploadResult {
-  secureUrl: string;
-  publicId: string;
-}
-
 interface InvoiceClientPreview {
   _id: Types.ObjectId;
   name: string;
@@ -57,27 +52,15 @@ interface InvoiceClientPreview {
 @Injectable()
 export class InvoicesService implements OnModuleInit {
   private readonly logger = new Logger(InvoicesService.name);
-  private readonly cloudinaryCloudName: string;
-  private readonly cloudinaryApiKey: string;
-  private readonly cloudinaryApiSecret: string;
-  private readonly cloudinaryFolder: string;
 
   constructor(
-    config: ConfigService,
     private readonly invoicesRepository: InvoicesRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly businessRepository: BusinessRepository,
     private readonly agendaService: AgendaService,
     private readonly emailService: EmailService,
-  ) {
-    this.cloudinaryCloudName =
-      config.get<string>('CLOUDINARY_CLOUD_NAME') ?? '';
-    this.cloudinaryApiKey = config.get<string>('CLOUDINARY_API_KEY') ?? '';
-    this.cloudinaryApiSecret =
-      config.get<string>('CLOUDINARY_API_SECRET') ?? '';
-    this.cloudinaryFolder =
-      config.get<string>('CLOUDINARY_INVOICES_FOLDER') ?? 'servixos/invoices';
-  }
+    private readonly storageService: StorageService,
+  ) {}
 
   onModuleInit(): void {
     this.agendaService.define(JOBS.INVOICE_SEND, async (job: AgendaJob) => {
@@ -485,8 +468,6 @@ export class InvoicesService implements OnModuleInit {
       const pdfBuffer = await this.renderInvoicePdfBuffer(html);
       const uploaded = await this.uploadInvoicePdf(
         pdfBuffer,
-        businessId,
-        invoice._id.toString(),
         invoice.invoiceNumber,
       );
 
@@ -636,56 +617,14 @@ export class InvoicesService implements OnModuleInit {
 
   private async uploadInvoicePdf(
     pdfBuffer: Buffer,
-    businessId: string,
-    invoiceId: string,
     invoiceNumber: string,
-  ): Promise<ContractUploadResult> {
-    if (
-      !this.cloudinaryCloudName ||
-      !this.cloudinaryApiKey ||
-      !this.cloudinaryApiSecret
-    ) {
-      throw new Error('Cloudinary credentials are not configured');
-    }
-
-    const timestamp = Math.floor(Date.now() / 1000);
-    const publicId = `${businessId}-${invoiceId}-${timestamp}`;
-    const signatureBase = `folder=${this.cloudinaryFolder}&public_id=${publicId}&timestamp=${timestamp}`;
-    const signature = createHash('sha1')
-      .update(`${signatureBase}${this.cloudinaryApiSecret}`)
-      .digest('hex');
-
-    const form = new FormData();
-    form.append('file', new Blob([pdfBuffer]), `${invoiceNumber}.pdf`);
-    form.append('api_key', this.cloudinaryApiKey);
-    form.append('timestamp', String(timestamp));
-    form.append('folder', this.cloudinaryFolder);
-    form.append('public_id', publicId);
-    form.append('signature', signature);
-    form.append('resource_type', 'raw');
-
-    const response = await fetch(
-      `https://api.cloudinary.com/v1_1/${this.cloudinaryCloudName}/raw/upload`,
-      {
-        method: 'POST',
-        body: form,
-      },
+  ): Promise<{ secureUrl: string; publicId: string }> {
+    const { url, publicId } = await this.storageService.uploadBuffer(
+      pdfBuffer,
+      STORAGE_FOLDERS.invoices,
+      `${invoiceNumber}.pdf`,
     );
-
-    const payload = (await response.json()) as {
-      secure_url?: string;
-      public_id?: string;
-      error?: { message?: string };
-    };
-
-    if (!response.ok || !payload.secure_url || !payload.public_id) {
-      throw new Error(payload.error?.message ?? 'Service failed unexpectedly');
-    }
-
-    return {
-      secureUrl: payload.secure_url,
-      publicId: payload.public_id,
-    };
+    return { secureUrl: url, publicId };
   }
 
   private async buildInvoiceAttachment(pdfUrl: string): Promise<

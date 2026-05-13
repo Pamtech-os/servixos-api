@@ -5,6 +5,7 @@ import { RedisService } from 'src/modules/redis/services/redis.service';
 import { SchedulesService } from 'src/modules/schedules/services/schedules.service';
 import { ShiftsRepository } from 'src/modules/schedules/repositories/shifts.repository';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { asMock } from 'test/helpers/mock';
 
 const BUSINESS_ID = new Types.ObjectId().toString();
 const EMPLOYEE_ID = new Types.ObjectId().toString();
@@ -38,10 +39,10 @@ describe('SchedulesService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new SchedulesService(
-      shiftsRepository as unknown as ShiftsRepository,
-      employeesRepository as unknown as EmployeesRepository,
-      businessRepository as unknown as BusinessRepository,
-      redisService as unknown as RedisService,
+      asMock<ShiftsRepository>(shiftsRepository),
+      asMock<EmployeesRepository>(employeesRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<RedisService>(redisService),
     );
   });
 

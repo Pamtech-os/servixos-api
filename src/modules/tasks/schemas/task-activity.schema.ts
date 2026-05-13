@@ -9,6 +9,7 @@ export enum TaskActivityType {
   COMMENT_ADDED = 'comment_added',
   SUBTASK_ADDED = 'subtask_added',
   SUBTASK_UPDATED = 'subtask_updated',
+  ATTACHMENT_ADDED = 'attachment_added',
 }
 
 export class TaskActivityMetadata {
@@ -29,6 +30,9 @@ export class TaskActivityMetadata {
 
   @prop()
   completed?: boolean;
+
+  @prop()
+  filename?: string;
 }
 
 @index({ businessId: 1, taskId: 1, createdAt: -1 })

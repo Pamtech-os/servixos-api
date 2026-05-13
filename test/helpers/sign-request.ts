@@ -46,12 +46,16 @@ export function signRequest(
   r: request.Test,
   clientToken: string,
 ): request.Test {
-  const method = (r as unknown as { method: string }).method;
-  const path = canonicalPath(
-    (r as unknown as { url: string }).url,
-    (r as unknown as { qs?: Record<string, unknown> }).qs,
-  );
-  const data = (r as unknown as { _data: unknown })._data;
+  // supertest exposes method/url/qs/_data as runtime internals not in its TS types
+  const internal = r as unknown as {
+    method: string;
+    url: string;
+    qs?: Record<string, unknown>;
+    _data: unknown;
+  };
+  const method = internal.method;
+  const path = canonicalPath(internal.url, internal.qs);
+  const data = internal._data;
 
   const timestamp = Date.now().toString();
   const bodyStr =
