@@ -16,6 +16,7 @@ import {
   getInitials,
   OnlineUser,
 } from './constants/presence.constants';
+import { websocketConfig } from 'src/config/websocket.config';
 
 export enum PresenceEvent {
   ONLINE_LIST = 'online_list',
@@ -24,7 +25,7 @@ export enum PresenceEvent {
 }
 
 @UseFilters(WsExceptionFilter)
-@WebSocketGateway({ namespace: '/presence' })
+@WebSocketGateway({ namespace: '/presence', cors: websocketConfig().cors })
 export class PresenceGateway
   implements OnGatewayConnection, OnGatewayDisconnect
 {

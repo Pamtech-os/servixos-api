@@ -17,10 +17,11 @@ import { WsSendMessageDto } from '../dto/ws-send-message.dto';
 import { WsJwtClientAuthGuard } from '../guards/ws-jwt-client-auth.guard';
 import type { AuthenticatedSocket } from '../interfaces/authenticated-socket.interface';
 import { ClientMessagesService } from '../services/client-messages.service';
+import { websocketConfig } from 'src/config/websocket.config';
 
 @WebSocketGateway({
   namespace: '/client-messages',
-  cors: { origin: process.env.CLIENT_ORIGIN },
+  cors: websocketConfig().cors,
 })
 @UseFilters(WsExceptionFilter)
 @UseGuards(WsJwtClientAuthGuard)

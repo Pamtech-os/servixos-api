@@ -349,7 +349,7 @@ describe('ClientsService', () => {
       expect(result).toBeNull();
     });
 
-    it('should queue CLIENT_REQUESTS_CLEANUP job with the deleted client email', async () => {
+    it('should queue CLIENT_REQUESTS_CLEANUP job with deleted client id and email', async () => {
       // Arrange
       clientsRepository.softDelete.mockResolvedValue(baseClient);
 
@@ -359,7 +359,11 @@ describe('ClientsService', () => {
       // Assert — fire-and-forget job queued with correct identifiers
       expect(agendaService.now).toHaveBeenCalledWith(
         'client:requests:cleanup',
-        { businessId: BUSINESS_ID, clientEmail: baseClient.email },
+        {
+          businessId: BUSINESS_ID,
+          clientId: baseClient._id.toString(),
+          clientEmail: baseClient.email,
+        },
       );
     });
 

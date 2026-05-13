@@ -900,11 +900,11 @@ export class AuthService {
     userRole: UserRole,
     roleId?: Types.ObjectId,
   ): Promise<Permission[]> {
+    if (userRole === UserRole.OWNER) return [...ALL_PERMISSIONS];
     if (roleId) {
       const role = await this.rolesRepository.findById(roleId.toString());
       if (role?.permissions.length) return role.permissions;
     }
-    if (userRole === UserRole.OWNER) return [...ALL_PERMISSIONS];
     return [];
   }
 

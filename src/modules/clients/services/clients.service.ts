@@ -325,11 +325,12 @@ export class ClientsService {
       void this.agendaService
         .now<ClientRequestsCleanupJobData>(JOBS.CLIENT_REQUESTS_CLEANUP, {
           businessId,
+          clientId: deleted._id.toString(),
           clientEmail: deleted.email,
         })
         .catch((err: unknown) =>
           this.logger.error(
-            `deleteClient: failed to queue requests cleanup [businessId=${businessId}, clientEmail=${deleted.email}]: ${err instanceof Error ? err.stack : String(err)}`,
+            `deleteClient: failed to queue requests cleanup [businessId=${businessId}, clientId=${deleted._id.toString()}, clientEmail=${deleted.email}]: ${err instanceof Error ? err.stack : String(err)}`,
           ),
         );
 

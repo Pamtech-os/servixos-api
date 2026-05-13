@@ -74,7 +74,8 @@ interface ClientProvisioningPayload {
 
 export interface ClientRequestsCleanupJobData {
   businessId: string;
-  clientEmail: string;
+  clientId?: string;
+  clientEmail?: string;
 }
 
 export interface ClientProvisioningJobData extends ClientProvisioningPayload {
@@ -150,23 +151,43 @@ export class RequestsService implements OnModuleInit {
         const payload = job.attrs.data as
           | ClientRequestsCleanupJobData
           | undefined;
-        if (!payload?.businessId || !payload?.clientEmail) {
+        if (
+          !payload?.businessId ||
+          (!payload.clientId && !payload.clientEmail)
+        ) {
           this.logger.warn(
             `${JOBS.CLIENT_REQUESTS_CLEANUP}: missing job payload`,
           );
           return;
         }
 
-        await this.requestsRepository
-          .softDeleteByClientEmail(
-            payload.clientEmail,
-            new Types.ObjectId(payload.businessId),
-          )
-          .catch((error: unknown) =>
-            this.logger.error(
-              `${JOBS.CLIENT_REQUESTS_CLEANUP}: failed [businessId=${payload.businessId}, clientEmail=${payload.clientEmail}]: ${error instanceof Error ? error.stack : String(error)}`,
-            ),
+        const businessObjectId = new Types.ObjectId(payload.businessId);
+
+        try {
+          let deletedByClientId = 0;
+
+          if (
+            payload.clientId &&
+            Types.ObjectId.isValid(payload.clientId.toString())
+          ) {
+            deletedByClientId =
+              await this.requestsRepository.softDeleteByClientId(
+                new Types.ObjectId(payload.clientId),
+                businessObjectId,
+              );
+          }
+
+          if (deletedByClientId === 0 && payload.clientEmail) {
+            await this.requestsRepository.softDeleteByClientEmail(
+              payload.clientEmail,
+              businessObjectId,
+            );
+          }
+        } catch (error) {
+          this.logger.error(
+            `${JOBS.CLIENT_REQUESTS_CLEANUP}: failed [businessId=${payload.businessId}, clientId=${payload.clientId ?? 'n/a'}, clientEmail=${payload.clientEmail ?? 'n/a'}]: ${error instanceof Error ? error.stack : String(error)}`,
           );
+        }
 
         void this.invalidateRequestsListCache(payload.businessId);
       },

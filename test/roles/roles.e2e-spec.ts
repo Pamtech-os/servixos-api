@@ -420,7 +420,7 @@ describe('Roles (integration)', () => {
     expect(cached).not.toBeNull();
   });
 
-  it('enforces permission decorators for roles, staff, tasks, and schedules endpoints', async () => {
+  it('enforces permission decorators for roles, staff, tasks, and schedules endpoints (non-owner user)', async () => {
     const limitedRoleRes = await asOwner(
       req()
         .post('/api/roles')
@@ -437,13 +437,15 @@ describe('Roles (integration)', () => {
 
     const limitedUserEmail = `limited-access-${Date.now()}@test.local`;
     const passwordHash = await hashValue('Password123');
+    const pinHash = await hashValue('1234');
 
     await userModel.create({
       firstName: 'Limited',
       lastName: 'User',
       email: limitedUserEmail,
       passwordHash,
-      userRole: UserRole.OWNER,
+      pinHash,
+      userRole: UserRole.EMPLOYEE,
       businessId: new Types.ObjectId(ownerBusinessId),
       roleId: new Types.ObjectId(limitedRoleId),
       isActive: true,
@@ -459,8 +461,21 @@ describe('Roles (integration)', () => {
     );
     expect(loginRes.status).toBe(200);
 
-    const limitedAccessToken = (loginRes.body as ApiBody<LoginPayload>).data
+    const prePinToken = (loginRes.body as ApiBody<LoginPayload>).data
       ?.accessToken as string;
+    expect(prePinToken).toBeDefined();
+
+    const verifyPinRes = await authed(
+      req()
+        .post('/api/auth/verify-pin')
+        .set('Authorization', `Bearer ${prePinToken}`)
+        .send({ pin: '1234' }),
+    );
+    expect(verifyPinRes.status).toBe(200);
+
+    const limitedAccessToken = (
+      verifyPinRes.body as ApiBody<{ accessToken: string }>
+    ).data?.accessToken as string;
     expect(limitedAccessToken).toBeDefined();
 
     const rolesRes = await asUser(

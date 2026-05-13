@@ -204,6 +204,18 @@ export class RequestsRepository {
     );
   }
 
+  async softDeleteByClientId(
+    clientId: Types.ObjectId,
+    businessId: Types.ObjectId,
+  ): Promise<number> {
+    const result = await this.requestModel.updateMany(
+      { clientId, businessId, deletedAt: null },
+      { $set: { deletedAt: new Date() } },
+    );
+
+    return result.modifiedCount ?? 0;
+  }
+
   private sanitizeRequests(
     requests: ServiceRequestWithMetadata[],
   ): ServiceRequest[] {

@@ -33,6 +33,7 @@ describe('RequestsService', () => {
   let requestsRepository: {
     findById: jest.Mock;
     updateById: jest.Mock;
+    softDeleteByClientId: jest.Mock;
     softDeleteByClientEmail: jest.Mock;
   };
   let clientsRepository: {
@@ -78,6 +79,7 @@ describe('RequestsService', () => {
     requestsRepository = {
       findById: jest.fn(),
       updateById: jest.fn(),
+      softDeleteByClientId: jest.fn().mockResolvedValue(1),
       softDeleteByClientEmail: jest.fn().mockResolvedValue(undefined),
     };
     clientsRepository = {
@@ -386,6 +388,7 @@ describe('RequestsService', () => {
   describe('CLIENT_REQUESTS_CLEANUP job handler', () => {
     const cleanupPayload: ClientRequestsCleanupJobData = {
       businessId: payload.businessId,
+      clientId: new Types.ObjectId().toString(),
       clientEmail: payload.clientEmail,
     };
 
@@ -404,8 +407,25 @@ describe('RequestsService', () => {
       return { attrs: { data } } as Job;
     }
 
-    it('soft-deletes all requests for the client email and invalidates the cache', async () => {
+    it('soft-deletes requests by clientId and invalidates the cache', async () => {
       // Arrange
+      const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
+
+      // Act
+      await handler(makeJob(cleanupPayload));
+
+      // Assert
+      expect(requestsRepository.softDeleteByClientId).toHaveBeenCalledWith(
+        expect.objectContaining({ toString: expect.any(Function) as unknown }),
+        expect.objectContaining({ toString: expect.any(Function) as unknown }),
+      );
+      expect(requestsRepository.softDeleteByClientEmail).not.toHaveBeenCalled();
+      expect(redisService.incr).toHaveBeenCalled();
+    });
+
+    it('falls back to email cleanup when clientId cleanup affects no records', async () => {
+      // Arrange
+      requestsRepository.softDeleteByClientId.mockResolvedValue(0);
       const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
 
       // Act
@@ -431,14 +451,17 @@ describe('RequestsService', () => {
       expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('warns and skips when clientEmail is empty', async () => {
+    it('warns and skips when both clientId and clientEmail are empty', async () => {
       // Arrange
       const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
 
       // Act
-      await handler(makeJob({ ...cleanupPayload, clientEmail: '' }));
+      await handler(
+        makeJob({ ...cleanupPayload, clientId: '', clientEmail: '' }),
+      );
 
       // Assert
+      expect(requestsRepository.softDeleteByClientId).not.toHaveBeenCalled();
       expect(requestsRepository.softDeleteByClientEmail).not.toHaveBeenCalled();
       expect(loggerWarnSpy).toHaveBeenCalledTimes(1);
     });
@@ -446,7 +469,7 @@ describe('RequestsService', () => {
     it('logs error and continues when repository throws', async () => {
       // Arrange
       const handler = captureHandler(JOBS.CLIENT_REQUESTS_CLEANUP);
-      requestsRepository.softDeleteByClientEmail.mockRejectedValue(
+      requestsRepository.softDeleteByClientId.mockRejectedValue(
         new Error('db error'),
       );
 
