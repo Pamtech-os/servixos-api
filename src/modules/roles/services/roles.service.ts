@@ -12,17 +12,16 @@ import { ClientSession, Connection, Types } from 'mongoose';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { ROLES_MESSAGES } from 'src/common/constants/messages/roles.messages';
+import {
+  ALL_PERMISSIONS,
+  Permission,
+} from 'src/common/constants/permissions.constants';
 import { RedisService } from '../../redis/services/redis.service';
 import { UsersRepository } from '../../users/repositories/users.repository';
 import { CreateRoleDto } from '../dto/create-role.dto';
 import { UpdateRoleDto } from '../dto/update-role.dto';
 import { RolesRepository } from '../repositories/roles.repository';
-import {
-  ALL_PERMISSIONS,
-  DefaultRole,
-  Permission,
-  Role,
-} from '../schemas/role.schema';
+import { DefaultRole, Role } from '../schemas/role.schema';
 
 export type PublicRole = Omit<Role, 'isOwnerRole'>;
 

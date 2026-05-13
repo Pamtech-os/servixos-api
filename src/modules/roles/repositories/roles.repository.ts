@@ -2,9 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { ClientSession, Connection, Types } from 'mongoose';
+import { ALL_PERMISSIONS } from 'src/common/constants/permissions.constants';
 import { escapeRegex } from 'src/common/utils/regex.util';
 import {
-  ALL_PERMISSIONS,
   DefaultRole,
   DEFAULT_ROLE_PERMISSIONS,
   Role,

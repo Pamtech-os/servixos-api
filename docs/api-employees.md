@@ -1,7 +1,7 @@
 # Employees API
 
 Base URLs:
-- `/api/employees` — employee CRUD
+- `/api/staff` — employee CRUD
 - `/api/clock` — time-tracking (clock in/out/break)
 
 ---
@@ -41,7 +41,7 @@ All endpoints require business-portal authentication.
 
 ## Endpoints — Employee CRUD
 
-### GET /api/employees
+### GET /api/staff
 
 List employees for the business.
 
@@ -85,7 +85,7 @@ List employees for the business.
 
 ---
 
-### GET /api/employees/online
+### GET /api/staff/online
 
 Get all employees currently clocked in. Response is **not cached** (`Cache-Control: no-store`).
 
@@ -108,7 +108,7 @@ Get all employees currently clocked in. Response is **not cached** (`Cache-Contr
 
 ---
 
-### GET /api/employees/:id
+### GET /api/staff/:id
 
 Get a single employee.
 
@@ -130,7 +130,7 @@ Get a single employee.
 
 ---
 
-### GET /api/employees/:id/clock-history
+### GET /api/staff/:id/clock-history
 
 Get the clock records for an employee within an optional date range.
 
@@ -180,7 +180,7 @@ Get the clock records for an employee within an optional date range.
 
 ---
 
-### POST /api/employees
+### POST /api/staff
 
 Create and invite a new employee. Sends an invitation email with credentials.
 
@@ -224,7 +224,7 @@ Create and invite a new employee. Sends an invitation email with credentials.
 
 ---
 
-### PATCH /api/employees/:id
+### PATCH /api/staff/:id
 
 Update employee details. All fields optional.
 
@@ -250,7 +250,7 @@ Update employee details. All fields optional.
 
 ---
 
-### DELETE /api/employees/:id
+### DELETE /api/staff/:id
 
 Soft-delete an employee.
 

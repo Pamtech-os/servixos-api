@@ -6,6 +6,7 @@ export interface JwtUser {
   businessId: string;
   userRole: UserRole;
   pinVerified: boolean;
+  permissions?: string[];
 }
 
 export const CurrentUser = createParamDecorator(

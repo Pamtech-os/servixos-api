@@ -12,8 +12,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { SCHEDULES_MESSAGES } from 'src/common/constants/messages/schedules.messages';
+import { PERMISSIONS } from 'src/common/constants/permissions.constants';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { Permissions } from 'src/common/decorators/permissions.decorator';
 import { CreateShiftDto } from '../dto/create-shift.dto';
 import { ListSchedulesDto } from '../dto/list-schedules.dto';
 import { ShiftIdParamDto } from '../dto/shift-id-param.dto';
@@ -25,6 +27,7 @@ export class SchedulesController {
   constructor(private readonly schedulesService: SchedulesService) {}
 
   @Get()
+  @Permissions(PERMISSIONS.SCHEDULES_VIEW)
   @HttpCode(HttpStatus.OK)
   async listSchedules(
     @CurrentUser() user: JwtUser,
@@ -44,6 +47,7 @@ export class SchedulesController {
   }
 
   @Post()
+  @Permissions(PERMISSIONS.SCHEDULES_CREATE)
   @HttpCode(HttpStatus.CREATED)
   async createShift(@CurrentUser() user: JwtUser, @Body() dto: CreateShiftDto) {
     const result = await this.schedulesService.createShift(
@@ -59,6 +63,7 @@ export class SchedulesController {
   }
 
   @Patch(':id')
+  @Permissions(PERMISSIONS.SCHEDULES_EDIT)
   @HttpCode(HttpStatus.OK)
   async updateShift(
     @CurrentUser() user: JwtUser,
@@ -79,6 +84,7 @@ export class SchedulesController {
   }
 
   @Delete(':id')
+  @Permissions(PERMISSIONS.SCHEDULES_DELETE)
   @HttpCode(HttpStatus.OK)
   async deleteShift(
     @CurrentUser() user: JwtUser,

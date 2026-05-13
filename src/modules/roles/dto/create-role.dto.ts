@@ -7,8 +7,8 @@ import {
   IsString,
   MaxLength,
 } from 'class-validator';
+import { ALL_PERMISSIONS } from 'src/common/constants/permissions.constants';
 import { ROLES_MESSAGES } from 'src/common/constants/messages/roles.messages';
-import { ALL_PERMISSIONS } from '../schemas/role.schema';
 
 export class CreateRoleDto {
   @IsString({ message: ROLES_MESSAGES.VALIDATION.NAME_INVALID })

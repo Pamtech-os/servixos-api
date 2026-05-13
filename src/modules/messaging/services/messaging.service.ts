@@ -6,14 +6,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
+import { JOBS } from 'src/common/constants/agenda.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { CLIENTS_MESSAGES } from 'src/common/constants/messages/clients.messages';
 import { MESSAGING_MESSAGES } from 'src/common/constants/messages/messaging.messages';
 import { PaginationParams } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
+import { TeamAnnouncementJobData } from 'src/modules/agenda/jobs/email.jobs';
+import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmployeesRepository } from 'src/modules/employees/repositories/employees.repository';
+import { UsersRepository } from 'src/modules/users/repositories/users.repository';
 import { MessagePayload } from '../messaging.events';
 import {
   ConversationThread,
@@ -76,6 +80,9 @@ interface PaginatedAnnouncements {
 }
 
 const BUSINESS_TZ_CACHE_TTL_MS = 5 * 60 * 1000;
+const ANNOUNCEMENT_ENQUEUE_BATCH_SIZE = 50;
+const ANNOUNCEMENT_ENQUEUE_MAX_RETRIES = 3;
+const ANNOUNCEMENT_ENQUEUE_RETRY_BASE_MS = 200;
 
 @Injectable()
 export class MessagingService {
@@ -90,6 +97,8 @@ export class MessagingService {
     private readonly clientsRepository: ClientsRepository,
     private readonly employeesRepository: EmployeesRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly usersRepository: UsersRepository,
+    private readonly agendaService: AgendaService,
   ) {}
 
   async createMessage(params: {
@@ -544,6 +553,27 @@ export class MessagingService {
         createdAt,
       });
 
+      /**
+       * Dispatch announcement notifications asynchronously so response time
+       * stays fast even when a business has many staff accounts.
+       *
+       * Example:
+       * - POST /team/announcements returns 201 immediately
+       * - Background queue enqueues one `email:team:announcement` job per staff
+       * - Job worker sends emails with the standard Servix OS template
+       */
+      void this.enqueueAnnouncementEmails({
+        businessId: params.businessId,
+        title,
+        description,
+        authorName: actor.actorName,
+        createdAt,
+      }).catch((error: unknown) =>
+        this.logger.error(
+          `createAnnouncement: enqueue email jobs failed [businessId=${params.businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        ),
+      );
+
       return this.toAnnouncementView(created);
     } catch (error) {
       this.logger.error(
@@ -761,6 +791,106 @@ export class MessagingService {
         : new Types.ObjectId(),
       actorName: 'Business',
     };
+  }
+
+  private async enqueueAnnouncementEmails(params: {
+    businessId: string;
+    title: string;
+    description: string;
+    authorName: string;
+    createdAt: Date;
+  }): Promise<void> {
+    const [business, recipients] = await Promise.all([
+      this.businessRepository.findById(params.businessId),
+      this.usersRepository.findActiveStaffEmailRecipients(
+        new Types.ObjectId(params.businessId),
+      ),
+    ]);
+
+    if (!recipients.length) return;
+
+    const businessName = business?.name ?? 'Your business';
+    const createdAtLabel = params.createdAt.toISOString();
+    const uniqueEmails = new Set<string>();
+
+    const payloads: TeamAnnouncementJobData[] = recipients
+      .map((recipient) => {
+        const email = recipient.email.trim().toLowerCase();
+        if (!email || uniqueEmails.has(email)) return null;
+        uniqueEmails.add(email);
+
+        const firstName = recipient.firstName?.trim();
+        const lastName = recipient.lastName?.trim();
+        const recipientName = [firstName, lastName].filter(Boolean).join(' ');
+
+        return {
+          to: email,
+          recipientName: recipientName || 'there',
+          businessName,
+          title: params.title,
+          description: params.description,
+          authorName: params.authorName,
+          createdAtLabel,
+        };
+      })
+      .filter(
+        (payload): payload is TeamAnnouncementJobData => payload !== null,
+      );
+
+    if (!payloads.length) return;
+
+    // Sliding-window partition — O(n) with at most ceil(n/BATCH_SIZE) chunks.
+    // Processing batches sequentially avoids flooding MongoDB with N concurrent
+    // `agenda.now()` writes when a business has hundreds of staff accounts.
+    const chunks = this.chunkArray(payloads, ANNOUNCEMENT_ENQUEUE_BATCH_SIZE);
+    let totalFailed = 0;
+
+    for (const batch of chunks) {
+      const results = await Promise.allSettled(
+        batch.map((payload) =>
+          this.enqueueWithRetry(payload, ANNOUNCEMENT_ENQUEUE_MAX_RETRIES),
+        ),
+      );
+      totalFailed += results.filter((r) => r.status === 'rejected').length;
+    }
+
+    if (totalFailed > 0) {
+      this.logger.warn(
+        `enqueueAnnouncementEmails: partial enqueue failure [businessId=${params.businessId}, failed=${totalFailed}, total=${payloads.length}]`,
+      );
+    }
+  }
+
+  private chunkArray<T>(arr: T[], size: number): T[][] {
+    const chunks: T[][] = [];
+    for (let i = 0; i < arr.length; i += size) {
+      chunks.push(arr.slice(i, i + size));
+    }
+    return chunks;
+  }
+
+  private async enqueueWithRetry(
+    payload: TeamAnnouncementJobData,
+    maxRetries: number,
+  ): Promise<void> {
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        await this.agendaService.now<TeamAnnouncementJobData>(
+          JOBS.EMAIL_TEAM_ANNOUNCEMENT,
+          payload,
+        );
+        return;
+      } catch (err) {
+        if (attempt === maxRetries) throw err;
+        // Exponential backoff: 200 ms → 400 ms → 800 ms
+        await new Promise<void>((resolve) =>
+          setTimeout(
+            resolve,
+            ANNOUNCEMENT_ENQUEUE_RETRY_BASE_MS * 2 ** attempt,
+          ),
+        );
+      }
+    }
   }
 
   private async businessNow(businessId: string): Promise<Date> {

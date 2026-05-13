@@ -10,12 +10,14 @@ import { WsAuthGuard } from 'src/common/guards/ws-auth.guard';
 import { BusinessModule } from '../business/business.module';
 import { ClientsModule } from '../clients/clients.module';
 import { EmployeesModule } from '../employees/employees.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
     BusinessModule,
     ClientsModule,
     EmployeesModule,
+    UsersModule,
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({

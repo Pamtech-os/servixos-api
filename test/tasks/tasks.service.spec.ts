@@ -509,7 +509,9 @@ describe('TasksService', () => {
       redisService.set.mockResolvedValue('OK');
 
       // Act
-      await (service as any).checkAndNotifyOverdueTasks();
+      await (
+        service as unknown as { checkAndNotifyOverdueTasks(): Promise<void> }
+      ).checkAndNotifyOverdueTasks();
 
       // Assert — only UTC business reached the overdue query
       expect(tasksRepository.findOverdueForBusiness).toHaveBeenCalledTimes(1);
@@ -551,7 +553,9 @@ describe('TasksService', () => {
       redisService.get.mockResolvedValue('1'); // already sent today
 
       // Act
-      await (service as any).checkAndNotifyOverdueTasks();
+      await (
+        service as unknown as { checkAndNotifyOverdueTasks(): Promise<void> }
+      ).checkAndNotifyOverdueTasks();
 
       // Assert
       expect(agendaService.now).not.toHaveBeenCalled();

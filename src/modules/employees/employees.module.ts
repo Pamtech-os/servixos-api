@@ -6,7 +6,7 @@ import { BusinessModule } from '../business/business.module';
 import { RolesModule } from '../roles/roles.module';
 import { UsersModule } from '../users/users.module';
 import { ClockController } from './controllers/clock.controller';
-import { EmployeesController } from './controllers/employees.controller';
+import { StaffController } from './controllers/staff.controller';
 import { PresenceGateway } from './presence.gateway';
 import { ClockRecordsRepository } from './repositories/clock-records.repository';
 import { EmployeesRepository } from './repositories/employees.repository';
@@ -25,7 +25,7 @@ import { EmployeesService } from './services/employees.service';
       }),
     }),
   ],
-  controllers: [EmployeesController, ClockController],
+  controllers: [StaffController, ClockController],
   providers: [
     EmployeesRepository,
     ClockRecordsRepository,

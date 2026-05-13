@@ -68,6 +68,13 @@ describe('ClockService', () => {
     pinVerified: true,
   };
 
+  const staffActor: JwtUser = {
+    sub: EMPLOYEE_USER_ID,
+    businessId: BUSINESS_ID,
+    userRole: UserRole.STAFF,
+    pinVerified: true,
+  };
+
   beforeEach(() => {
     employeesRepository = {
       findById: jest.fn().mockResolvedValue(baseEmployee),
@@ -147,6 +154,19 @@ describe('ClockService', () => {
       });
 
       const result = await service.clockIn(employeeActor, BUSINESS_ID, {
+        employeeId: EMPLOYEE_ID,
+      });
+
+      expect(result).toBeInstanceOf(ForbiddenException);
+    });
+
+    it('returns forbidden when staff tries clock action for another employee', async () => {
+      employeesRepository.findByUserId.mockResolvedValue({
+        ...baseEmployee,
+        _id: new Types.ObjectId(),
+      });
+
+      const result = await service.clockIn(staffActor, BUSINESS_ID, {
         employeeId: EMPLOYEE_ID,
       });
 

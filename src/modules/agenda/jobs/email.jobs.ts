@@ -11,6 +11,7 @@ import {
   taskUpdatedAssigneeTemplate,
 } from '../../email/templates/task-notification.template';
 import { taskOverdueTemplate } from '../../email/templates/task-overdue.template';
+import { teamAnnouncementTemplate } from '../../email/templates/team-announcement.template';
 import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
@@ -74,6 +75,16 @@ export interface TaskOverdueJobData {
   assigneeName: string;
   taskTitle: string;
   dueDate: string;
+}
+
+export interface TeamAnnouncementJobData {
+  to: string;
+  recipientName: string;
+  businessName: string;
+  title: string;
+  description: string;
+  authorName: string;
+  createdAtLabel: string;
 }
 
 export function defineEmailJobs(
@@ -209,6 +220,32 @@ export function defineEmailJobs(
       name: assigneeName,
       subject: 'Task overdue — Servix OS',
       html: taskOverdueTemplate(assigneeName, taskTitle, dueDate),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_TEAM_ANNOUNCEMENT, async (job: Job) => {
+    const {
+      to,
+      recipientName,
+      businessName,
+      title,
+      description,
+      authorName,
+      createdAtLabel,
+    } = job.attrs.data as TeamAnnouncementJobData;
+
+    await emailService.send({
+      to,
+      name: recipientName,
+      subject: 'New team announcement — Servix OS',
+      html: teamAnnouncementTemplate(
+        recipientName,
+        title,
+        description,
+        authorName,
+        businessName,
+        createdAtLabel,
+      ),
     });
   });
 }

@@ -207,7 +207,7 @@ describe('Tasks + Schedules (integration)', () => {
 
     const employeeRes = await asOwner(
       req()
-        .post('/api/employees')
+        .post('/api/staff')
         .send({
           fullName: 'Alex Crew',
           email: `alex-crew-${Date.now()}@test.local`,

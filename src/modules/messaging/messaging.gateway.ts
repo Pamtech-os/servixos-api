@@ -16,7 +16,11 @@ import { WsExceptionFilter } from 'src/common/gateways/ws-exception.filter';
 import { RedisService } from '../redis/services/redis.service';
 import { EmployeesRepository } from '../employees/repositories/employees.repository';
 import { MessagingService } from './services/messaging.service';
-import { WsEvent, MessagePayload } from './messaging.events';
+import { WsEvent, MessagePayload, teamRoom } from './messaging.events';
+import type {
+  AnnouncementView,
+  TeamMessageView,
+} from './services/messaging.service';
 import { Message, MessageSender } from './schemas/message.schema';
 import { WEBSOCKET_MESSAGES } from 'src/common/constants/messages/websocket.messages';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
@@ -67,6 +71,18 @@ export class MessagingGateway
     private readonly employeesRepository: EmployeesRepository,
   ) {}
 
+  emitTeamMessage(businessId: string, message: TeamMessageView): void {
+    this.server
+      .to(teamRoom(businessId))
+      .emit(WsEvent.TEAM_MESSAGE_SENT, { message });
+  }
+
+  emitAnnouncement(businessId: string, announcement: AnnouncementView): void {
+    this.server
+      .to(teamRoom(businessId))
+      .emit(WsEvent.ANNOUNCEMENT_CREATED, { announcement });
+  }
+
   emitMessageReceivedToConversation(
     businessId: string,
     clientId: string,
@@ -104,6 +120,10 @@ export class MessagingGateway
       const employee = await this.employeesRepository.findByUserId(userId);
       (socket.data as { senderName: string }).senderName =
         employee?.fullName ?? 'Business';
+
+      // Auto-join the business-wide team room so staff receive team messages
+      // and announcements without any explicit client-side join call.
+      await socket.join(teamRoom(businessId));
 
       await this.redis.sadd(`presence:chat:${businessId}`, userId);
       await this.redis.expire(

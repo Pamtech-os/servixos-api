@@ -12,8 +12,10 @@ import {
   Query,
 } from '@nestjs/common';
 import { TASKS_MESSAGES } from 'src/common/constants/messages/tasks.messages';
+import { PERMISSIONS } from 'src/common/constants/permissions.constants';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { Permissions } from 'src/common/decorators/permissions.decorator';
 import { AddTaskAttachmentDto } from '../dto/add-task-attachment.dto';
 import { AddTaskCommentDto } from '../dto/add-task-comment.dto';
 import { AddTaskSubtaskDto } from '../dto/add-task-subtask.dto';
@@ -31,6 +33,7 @@ export class TasksController {
   constructor(private readonly tasksService: TasksService) {}
 
   @Get()
+  @Permissions(PERMISSIONS.TASKS_VIEW)
   @HttpCode(HttpStatus.OK)
   async listTasks(@CurrentUser() user: JwtUser, @Query() query: ListTasksDto) {
     const result = await this.tasksService.listTasks(user.businessId, query);
@@ -44,6 +47,7 @@ export class TasksController {
   }
 
   @Get(':id')
+  @Permissions(PERMISSIONS.TASKS_VIEW)
   @HttpCode(HttpStatus.OK)
   async getTask(@CurrentUser() user: JwtUser, @Param() params: TaskIdParamDto) {
     const result = await this.tasksService.getTask(params.id, user.businessId);
@@ -56,6 +60,7 @@ export class TasksController {
   }
 
   @Get(':id/activities')
+  @Permissions(PERMISSIONS.TASKS_VIEW)
   @HttpCode(HttpStatus.OK)
   async listTaskActivities(
     @CurrentUser() user: JwtUser,
@@ -77,6 +82,7 @@ export class TasksController {
   }
 
   @Post()
+  @Permissions(PERMISSIONS.TASKS_CREATE)
   @HttpCode(HttpStatus.CREATED)
   async createTask(@CurrentUser() user: JwtUser, @Body() dto: CreateTaskDto) {
     const result = await this.tasksService.createTask(
@@ -93,6 +99,7 @@ export class TasksController {
   }
 
   @Patch(':id')
+  @Permissions(PERMISSIONS.TASKS_EDIT)
   @HttpCode(HttpStatus.OK)
   async updateTask(
     @CurrentUser() user: JwtUser,
@@ -114,6 +121,7 @@ export class TasksController {
   }
 
   @Delete(':id')
+  @Permissions(PERMISSIONS.TASKS_DELETE)
   @HttpCode(HttpStatus.OK)
   async deleteTask(
     @CurrentUser() user: JwtUser,
@@ -133,6 +141,7 @@ export class TasksController {
   }
 
   @Post(':id/comments')
+  @Permissions(PERMISSIONS.TASKS_EDIT)
   @HttpCode(HttpStatus.OK)
   async addComment(
     @CurrentUser() user: JwtUser,
@@ -154,6 +163,7 @@ export class TasksController {
   }
 
   @Post(':id/attachments')
+  @Permissions(PERMISSIONS.TASKS_EDIT)
   @HttpCode(HttpStatus.CREATED)
   async addAttachment(
     @CurrentUser() user: JwtUser,
@@ -175,6 +185,7 @@ export class TasksController {
   }
 
   @Post(':id/subtasks')
+  @Permissions(PERMISSIONS.TASKS_EDIT)
   @HttpCode(HttpStatus.OK)
   async addSubtask(
     @CurrentUser() user: JwtUser,
@@ -196,6 +207,7 @@ export class TasksController {
   }
 
   @Patch(':id/subtasks/:subtaskId')
+  @Permissions(PERMISSIONS.TASKS_EDIT)
   @HttpCode(HttpStatus.OK)
   async updateSubtask(
     @CurrentUser() user: JwtUser,

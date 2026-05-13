@@ -22,9 +22,11 @@ export class PermissionsGuard implements CanActivate {
 
     const { user } = context
       .switchToHttp()
-      .getRequest<{ user: JwtUser & { permissions: string[] } }>();
+      .getRequest<{ user?: JwtUser & { permissions?: string[] } }>();
 
-    const hasAll = required.every((perm) => user.permissions?.includes(perm));
+    const hasAll =
+      !!user &&
+      required.every((perm) => user.permissions?.includes(perm) === true);
     if (!hasAll) throw new ForbiddenException(AUTH_MESSAGES.ERROR.FORBIDDEN);
 
     return true;
