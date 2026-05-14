@@ -21,5 +21,44 @@ export const ACTIVITY_LOGS_MESSAGES = {
       DELETED: 'Deleted',
       MODIFIED: 'Modified',
     },
+    CLIENT: {
+      ADDED: (name: string) => `New client ${name} added`,
+      UPDATED: (name: string) => `Client ${name} updated`,
+      DELETED: (name: string) => `Client ${name} deleted`,
+    },
+    INVOICE: {
+      CREATED: (num: string) => `Invoice ${num} created`,
+      MARKED_PAID: (num: string) => `Invoice ${num} marked as paid`,
+      PARTIAL_PAID: (num: string) => `Invoice ${num} partially paid`,
+      UPDATED: (num: string) => `Invoice ${num} updated`,
+      DELETED: (num: string) => `Invoice ${num} deleted`,
+    },
+    JOB: {
+      CREATED: (title: string) => `Job '${title}' created`,
+      STATUS_UPDATED: (title: string, status: string) =>
+        `Job '${title}' status updated to ${status}`,
+      UPDATED: (title: string) => `Job '${title}' updated`,
+      DELETED: (title: string) => `Job '${title}' deleted`,
+    },
+    PAYMENT: {
+      RECORDED: (amount: string) => `Payment of ${amount} recorded`,
+      DELETED: (amount: string) => `Payment of ${amount} deleted`,
+    },
+    EMPLOYEE: {
+      INVITED: (name: string) => `Employee ${name} invited`,
+      UPDATED: (name: string) => `Employee ${name} updated`,
+      DEACTIVATED: (name: string) => `Employee ${name} deactivated`,
+    },
+    TASK: {
+      CREATED: (title: string) => `Task '${title}' created`,
+      UPDATED: (title: string) => `Task '${title}' updated`,
+      DELETED: (title: string) => `Task '${title}' deleted`,
+    },
+    REQUEST: {
+      ACCEPTED: 'Service request accepted',
+      REJECTED: 'Service request rejected',
+      CANCELLED: 'Service request cancelled',
+      CREATED: 'Service request created',
+    },
   },
 } as const;
