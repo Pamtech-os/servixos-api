@@ -32,6 +32,7 @@ import { PermissionsContextGuard } from './common/guards/permissions-context.gua
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
+import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ClientAuthModule } from './modules/client-auth/client-auth.module';
 import { ClientPortalModule } from './modules/client-portal/client-portal.module';
@@ -83,6 +84,7 @@ import { StorageModule } from './modules/storage/storage.module';
         connectTimeoutMS: 10000,
       }),
     }),
+    AnalyticsModule,
     StorageModule,
     RedisModule,
     EmailModule,
