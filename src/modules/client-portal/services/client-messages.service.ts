@@ -10,6 +10,7 @@ import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { MessagingService } from '../../messaging/services/messaging.service';
+import { MessagePayload } from '../../messaging/messaging.events';
 import { RedisService } from '../../redis/services/redis.service';
 import { ListClientMessagesDto } from '../dto/list-client-messages.dto';
 
@@ -241,19 +242,22 @@ export class ClientMessagesService {
     content: string,
   ): Promise<
     | {
-        id: string;
-        sender: 'business' | 'client';
-        senderName: string;
-        content?: string;
-        isRead: boolean;
-        attachments: [];
-        createdAt: string;
+        clientMessage: {
+          id: string;
+          sender: 'business' | 'client';
+          senderName: string;
+          content?: string;
+          isRead: boolean;
+          attachments: [];
+          createdAt: string;
+        };
+        rawMessage: MessagePayload;
       }
     | NotFoundException
     | InternalServerErrorException
   > {
     try {
-      const payload = await this.messagingService.sendMessageFromClient(
+      const rawMessage = await this.messagingService.sendMessageFromClient(
         businessId,
         clientId,
         providerId,
@@ -270,13 +274,16 @@ export class ClientMessagesService {
       ]);
 
       return {
-        id: payload.id,
-        sender: payload.sender as 'business' | 'client',
-        senderName: payload.senderName,
-        content: payload.content,
-        isRead: payload.sender === 'client',
-        attachments: [],
-        createdAt: payload.createdAt,
+        clientMessage: {
+          id: rawMessage.id,
+          sender: rawMessage.sender as 'business' | 'client',
+          senderName: rawMessage.senderName,
+          content: rawMessage.content,
+          isRead: rawMessage.sender === 'client',
+          attachments: [],
+          createdAt: rawMessage.createdAt,
+        },
+        rawMessage,
       };
     } catch (error) {
       if (error instanceof NotFoundException) return error;

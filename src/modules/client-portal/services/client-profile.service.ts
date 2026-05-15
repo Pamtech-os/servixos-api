@@ -201,7 +201,10 @@ export class ClientProfileService {
 
       const passwordHash = await hashValue(dto.newPassword);
       await Promise.all([
-        this.usersRepository.updateById(userId, { passwordHash }),
+        this.usersRepository.updateById(userId, {
+          passwordHash,
+          mustChangePassword: false,
+        }),
         this.authRepository.revokeAllUserRefreshTokens(user._id),
       ]);
 

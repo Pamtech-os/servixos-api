@@ -7,11 +7,12 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger, UseGuards, UseFilters } from '@nestjs/common';
+import { HttpException, Logger, UseGuards, UseFilters } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { MESSAGE_EVENTS } from 'src/client/constants/ws-events';
 import { CLIENT_MESSAGES } from 'src/client/constants/messages';
 import { WsExceptionFilter } from 'src/common/gateways/ws-exception.filter';
+import { WsEvent } from '../../messaging/messaging.events';
 import { WsConversationRoomDto } from '../dto/ws-conversation-room.dto';
 import { WsSendMessageDto } from '../dto/ws-send-message.dto';
 import { WsJwtClientAuthGuard } from '../guards/ws-jwt-client-auth.guard';
@@ -96,14 +97,25 @@ export class ClientMessagesGateway
       payload.providerId,
       payload.content,
     );
+    if (message instanceof HttpException) throw message;
 
-    this.server.to(roomId).emit(MESSAGE_EVENTS.NEW_MESSAGE, message);
+    this.server
+      .to(roomId)
+      .emit(MESSAGE_EVENTS.NEW_MESSAGE, message.clientMessage);
+
+    // Bridge client-sent messages to the business chat namespace so staff
+    // sockets receive the same real-time updates without polling.
+    this.server
+      .of?.('/chat')
+      ?.to(`${client.data.businessId}:${client.data.clientId}`)
+      .emit(WsEvent.MESSAGE_RECEIVED, { message: message.rawMessage });
 
     const conversation = await this.messagesService.getConversationSummary(
       client.data.businessId,
       client.data.clientId,
       payload.providerId,
     );
+    if (conversation instanceof HttpException) throw conversation;
 
     this.server
       .to(client.data.clientId)

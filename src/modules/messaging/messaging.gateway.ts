@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { Types } from 'mongoose';
 import { WsAuthGuard } from 'src/common/guards/ws-auth.guard';
 import { WsExceptionFilter } from 'src/common/gateways/ws-exception.filter';
+import { MESSAGE_EVENTS } from 'src/client/constants/ws-events';
 import { RedisService } from '../redis/services/redis.service';
 import { EmployeesRepository } from '../employees/repositories/employees.repository';
 import { MessagingService } from './services/messaging.service';
@@ -92,6 +93,15 @@ export class MessagingGateway
     this.server
       .to(`${businessId}:${clientId}`)
       .emit(WsEvent.MESSAGE_RECEIVED, { message });
+
+    // Bridge business-sent messages to the client namespace using the
+    // existing client event contract.
+    this.server
+      .of?.('/client-messages')
+      ?.to(`client-conversation:${clientId}:${businessId}`)
+      .emit(MESSAGE_EVENTS.NEW_MESSAGE, this.toClientPortalMessage(message));
+
+    void this.emitClientConversationUpdated(businessId, clientId);
   }
 
   emitMessageReadToConversation(
@@ -106,6 +116,15 @@ export class MessagingGateway
       readAt,
       readBy,
     });
+
+    // Keep client portal read indicator updates in sync when business marks read.
+    this.server
+      .of?.('/client-messages')
+      ?.to(`client-conversation:${clientId}:${businessId}`)
+      .emit(MESSAGE_EVENTS.MESSAGE_READ, {
+        clientId,
+        providerId: businessId,
+      });
   }
 
   async handleConnection(socket: Socket): Promise<void> {
@@ -416,5 +435,65 @@ export class MessagingGateway
         messageId: payload.messageId,
         deletedAt: new Date().toISOString(),
       });
+  }
+
+  private toClientPortalMessage(message: MessagePayload): {
+    id: string;
+    sender: 'business' | 'client';
+    senderName: string;
+    content?: string;
+    isRead: boolean;
+    attachments: Array<{
+      url: string;
+      fileName?: string;
+      mimeType?: string;
+    }>;
+    createdAt: string;
+  } {
+    return {
+      id: message.id,
+      sender: message.sender as 'business' | 'client',
+      senderName: message.senderName,
+      content: message.content,
+      isRead: !!message.readAt,
+      attachments: message.attachmentUrl
+        ? [
+            {
+              url: message.attachmentUrl,
+              fileName: message.fileName,
+              mimeType: message.mimeType,
+            },
+          ]
+        : [],
+      createdAt: message.createdAt,
+    };
+  }
+
+  private async emitClientConversationUpdated(
+    businessId: string,
+    clientId: string,
+  ): Promise<void> {
+    try {
+      const summary =
+        await this.messagingService.getConversationSummaryForClient(
+          businessId,
+          clientId,
+          businessId,
+        );
+
+      this.server
+        .of?.('/client-messages')
+        ?.to(clientId)
+        .emit(MESSAGE_EVENTS.CONVERSATION_UPDATED, {
+          id: summary._id.toString(),
+          lastMessageContent: summary.lastMessageContent,
+          lastMessageAt: summary.lastMessageAt?.toISOString(),
+          clientUnreadCount: summary.clientUnreadCount,
+        });
+    } catch (error) {
+      this.logger.warn(
+        `emitClientConversationUpdated: skipped [businessId=${businessId}, clientId=${clientId}] ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 }

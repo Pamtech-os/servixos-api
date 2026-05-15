@@ -62,6 +62,7 @@ interface ClientAuthLogin {
     id: string;
     clientId: string;
     email: string;
+    mustChangePassword: boolean;
   };
 }
 
@@ -401,6 +402,7 @@ describe('Client Portal (integration)', () => {
     }>;
     expect(dashboardBody.data?.outstandingBalance).toBeGreaterThan(0);
     expect(dashboardBody.data?.pendingContractsCount).toBeGreaterThanOrEqual(1);
+    expect(dashboardBody.data?.recentActivities).toHaveLength(5);
 
     const invoicesRes = await asClient(
       req().get('/api/client/api/invoices').query({ page: 1, limit: 10 }),
@@ -451,6 +453,14 @@ describe('Client Portal (integration)', () => {
 
     const contactsRes = await asClient(req().get('/api/client/api/contacts'));
     expect(contactsRes.status).toBe(200);
+    const contactsBody = contactsRes.body as ApiBody<
+      Array<{
+        businessEmail?: string;
+        businessPhone?: string;
+      }>
+    >;
+    expect(contactsBody.data?.[0]?.businessEmail).toBeTruthy();
+    expect(contactsBody.data?.[0]?.businessPhone).toBeTruthy();
 
     const activitiesRes = await asClient(
       req().get('/api/client/api/activities'),
@@ -513,5 +523,10 @@ describe('Client Portal (integration)', () => {
       }),
     );
     expect(changePasswordSuccessRes.status).toBe(200);
+
+    const meRes = await asClient(req().get('/api/client-auth/me'));
+    expect(meRes.status).toBe(200);
+    const meBody = meRes.body as ApiBody<ClientAuthLogin['user']>;
+    expect(meBody.data?.mustChangePassword).toBe(false);
   });
 });

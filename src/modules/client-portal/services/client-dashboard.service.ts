@@ -14,6 +14,8 @@ import { RedisService } from '../../redis/services/redis.service';
 import { ClientActivitiesService } from './client-activities.service';
 import { ClientDashboardData } from '../types/client-portal.types';
 
+const DASHBOARD_RECENT_ACTIVITIES_LIMIT = 5;
+
 @Injectable()
 export class ClientDashboardService {
   private readonly logger = new Logger(ClientDashboardService.name);
@@ -32,7 +34,16 @@ export class ClientDashboardService {
     try {
       const cacheKey = CLIENT_CACHE_KEYS.dashboard(clientId);
       const cached = await this.redisService.get(cacheKey);
-      if (cached) return JSON.parse(cached) as ClientDashboardData;
+      if (cached) {
+        const cachedData = JSON.parse(cached) as ClientDashboardData;
+        return {
+          ...cachedData,
+          recentActivities: (cachedData.recentActivities ?? []).slice(
+            0,
+            DASHBOARD_RECENT_ACTIVITIES_LIMIT,
+          ),
+        };
+      }
 
       const [invoiceSummary, pendingContractsCount, recentActivities] =
         await Promise.all([
@@ -45,7 +56,11 @@ export class ClientDashboardService {
             new Types.ObjectId(clientId),
             ContractStatus.SENT,
           ),
-          this.activitiesService.listRecentActivities(businessId, clientId, 10),
+          this.activitiesService.listRecentActivities(
+            businessId,
+            clientId,
+            DASHBOARD_RECENT_ACTIVITIES_LIMIT,
+          ),
         ]);
 
       const data: ClientDashboardData = {

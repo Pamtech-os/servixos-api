@@ -19,6 +19,7 @@ describe('Messaging REST/WS parity', () => {
     toPayload: jest.Mock;
     markDelivered: jest.Mock;
     sendMessageFromBusiness: jest.Mock;
+    getConversationSummaryForClient: jest.Mock;
   };
 
   beforeEach(() => {
@@ -27,6 +28,7 @@ describe('Messaging REST/WS parity', () => {
       toPayload: jest.fn(),
       markDelivered: jest.fn(),
       sendMessageFromBusiness: jest.fn(),
+      getConversationSummaryForClient: jest.fn(),
     };
 
     gateway = new MessagingGateway(
@@ -84,6 +86,12 @@ describe('Messaging REST/WS parity', () => {
     messagingService.toPayload.mockReturnValue(expectedPayload);
     messagingService.markDelivered.mockResolvedValue(undefined);
     messagingService.sendMessageFromBusiness.mockResolvedValue(expectedPayload);
+    messagingService.getConversationSummaryForClient.mockResolvedValue({
+      _id: new Types.ObjectId(),
+      lastMessageContent: expectedPayload.content,
+      lastMessageAt: new Date(expectedPayload.createdAt),
+      clientUnreadCount: 1,
+    });
 
     const socket = {
       data: { userId, businessId, senderName: 'Business' },

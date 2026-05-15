@@ -7563,7 +7563,7 @@ Returns aggregated stats. **Cached per client.**
 
 > `outstandingBalance` = sum of `unpaid` + `partial` invoices in cents.
 > `totalPaid` = sum of `paid` invoices in cents.
-> `recentActivities` = latest 10 activity records.
+> `recentActivities` = latest 5 activity records.
 
 ---
 
