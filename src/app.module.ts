@@ -58,6 +58,7 @@ import { FilesModule } from './modules/files/files.module';
 import { ContractsModule } from './modules/contracts/contracts.module';
 import { SchedulesModule } from './modules/schedules/schedules.module';
 import { TasksModule } from './modules/tasks/tasks.module';
+import { PdfModule } from './modules/pdf/pdf.module';
 import { StorageModule } from './modules/storage/storage.module';
 
 @Module({
@@ -85,6 +86,7 @@ import { StorageModule } from './modules/storage/storage.module';
       }),
     }),
     AnalyticsModule,
+    PdfModule,
     StorageModule,
     RedisModule,
     EmailModule,

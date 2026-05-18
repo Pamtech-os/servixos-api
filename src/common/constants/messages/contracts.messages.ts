@@ -10,6 +10,7 @@ export const CONTRACTS_MESSAGES = {
     STATUS_INVALID: 'Status must be one of draft, sent, signed, cancelled',
     EXPIRES_AT_INVALID: 'expiresAt must be a valid ISO 8601 date string',
     SIGNED_AT_INVALID: 'signedAt must be a valid ISO 8601 date string',
+    HTML_INVALID: 'Contract content must be a valid string',
     LIMIT_MAX: 'Limit cannot exceed 50',
     CLIENT_EMAIL_REQUIRED: 'clientEmail is required',
     CLIENT_EMAIL_INVALID: 'clientEmail must be a valid email address',

@@ -1,16 +1,20 @@
 import {
+  BadRequestException,
   InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
+import { INVOICES_MESSAGES } from 'src/common/constants/messages/invoices.messages';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmailService } from 'src/modules/email/services/email.service';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
+import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
+import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
 import { InvoicesRepository } from 'src/modules/invoices/repositories/invoices.repository';
 import { RequestsRepository } from 'src/modules/requests/repositories/requests.repository';
 import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
@@ -20,6 +24,9 @@ import {
 } from 'src/modules/invoices/schemas/invoice.schema';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { asMock } from 'test/helpers/mock';
+
+const JOB_ID = '664abc000000000000000003';
+const CONTRACT_ID = '664abc000000000000000004';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';
@@ -68,6 +75,9 @@ describe('InvoicesService', () => {
   let jobsRepository: {
     findById: jest.Mock;
   };
+  let contractsRepository: {
+    findByJobId: jest.Mock;
+  };
   let agendaService: {
     define: jest.Mock;
     now: jest.Mock;
@@ -113,6 +123,12 @@ describe('InvoicesService', () => {
     jobsRepository = {
       findById: jest.fn().mockResolvedValue(null),
     };
+    contractsRepository = {
+      findByJobId: jest.fn().mockResolvedValue({
+        _id: new Types.ObjectId(CONTRACT_ID),
+        status: ContractStatus.SIGNED,
+      }),
+    };
     agendaService = {
       define: jest.fn(),
       now: jest.fn().mockResolvedValue(undefined),
@@ -124,6 +140,7 @@ describe('InvoicesService', () => {
       asMock<BusinessRepository>(businessRepository),
       asMock<RequestsRepository>(requestsRepository),
       asMock<JobsRepository>(jobsRepository),
+      asMock<ContractsRepository>(contractsRepository),
       asMock<AgendaService>(agendaService),
       {} as EmailService,
       {} as StorageService,
@@ -161,6 +178,61 @@ describe('InvoicesService', () => {
       }),
     );
     expect(result).not.toBeInstanceOf(InternalServerErrorException);
+  });
+
+  it('returns 400 when job has no contract and jobId is provided', async () => {
+    // Arrange
+    jobsRepository.findById.mockResolvedValueOnce({
+      _id: new Types.ObjectId(JOB_ID),
+      clientId: new Types.ObjectId(CLIENT_ID),
+      price: 200,
+    });
+    contractsRepository.findByJobId.mockResolvedValueOnce(null);
+
+    // Act
+    const result = await service.createInvoice(BUSINESS_ID, {
+      clientId: CLIENT_ID,
+      jobId: JOB_ID,
+      invoiceDate: '2026-05-08T10:00:00.000Z',
+      lineItems: [{ description: 'Labour', quantity: 1, unitPrice: 100 }],
+      taxRate: 0,
+    });
+
+    // Assert
+    expect(result).toBeInstanceOf(BadRequestException);
+    expect((result as BadRequestException).message).toBe(
+      INVOICES_MESSAGES.ERROR.CONTRACT_REQUIRED,
+    );
+    expect(invoicesRepository.create).not.toHaveBeenCalled();
+  });
+
+  it('returns 400 when job contract exists but is not yet signed', async () => {
+    // Arrange
+    jobsRepository.findById.mockResolvedValueOnce({
+      _id: new Types.ObjectId(JOB_ID),
+      clientId: new Types.ObjectId(CLIENT_ID),
+      price: 200,
+    });
+    contractsRepository.findByJobId.mockResolvedValueOnce({
+      _id: new Types.ObjectId(CONTRACT_ID),
+      status: ContractStatus.SENT,
+    });
+
+    // Act
+    const result = await service.createInvoice(BUSINESS_ID, {
+      clientId: CLIENT_ID,
+      jobId: JOB_ID,
+      invoiceDate: '2026-05-08T10:00:00.000Z',
+      lineItems: [{ description: 'Labour', quantity: 1, unitPrice: 100 }],
+      taxRate: 0,
+    });
+
+    // Assert
+    expect(result).toBeInstanceOf(BadRequestException);
+    expect((result as BadRequestException).message).toBe(
+      INVOICES_MESSAGES.ERROR.CONTRACT_NOT_SIGNED,
+    );
+    expect(invoicesRepository.create).not.toHaveBeenCalled();
   });
 
   it('returns 500 when all retry attempts fail with a duplicate key error', async () => {

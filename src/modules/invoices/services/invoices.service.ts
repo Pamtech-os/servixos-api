@@ -38,6 +38,8 @@ import {
 } from '../schemas/invoice.schema';
 import { JobsRepository } from '../../jobs/repositories/jobs.repository';
 import { RequestsRepository } from '../../requests/repositories/requests.repository';
+import { ContractStatus } from '../../contracts/schemas/contract.schema';
+import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
 
 interface PaginatedInvoices {
   statistics: InvoiceListStatistics;
@@ -61,6 +63,7 @@ export class InvoicesService implements OnModuleInit {
     private readonly businessRepository: BusinessRepository,
     private readonly requestsRepository: RequestsRepository,
     private readonly jobsRepository: JobsRepository,
+    private readonly contractsRepository: ContractsRepository,
     private readonly agendaService: AgendaService,
     private readonly emailService: EmailService,
     private readonly storageService: StorageService,
@@ -162,6 +165,22 @@ export class InvoicesService implements OnModuleInit {
             INVOICES_MESSAGES.ERROR.JOB_CLIENT_MISMATCH,
           );
         }
+
+        const jobContract = await this.contractsRepository.findByJobId(
+          job._id,
+          bId,
+        );
+        if (!jobContract) {
+          return new BadRequestException(
+            INVOICES_MESSAGES.ERROR.CONTRACT_REQUIRED,
+          );
+        }
+        if (jobContract.status !== ContractStatus.SIGNED) {
+          return new BadRequestException(
+            INVOICES_MESSAGES.ERROR.CONTRACT_NOT_SIGNED,
+          );
+        }
+
         if (job.price !== undefined) {
           const subtotal = toTwoDecimal(
             (dto.lineItems as InvoiceLineItem[]).reduce(

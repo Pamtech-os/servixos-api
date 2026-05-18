@@ -45,5 +45,9 @@ export const INVOICES_MESSAGES = {
     JOB_CLIENT_MISMATCH: 'The job does not belong to the specified client',
     JOB_AMOUNT_MISMATCH:
       'Invoice would exceed the total uninvoiced amount for this job',
+    CONTRACT_REQUIRED:
+      'A contract must be generated for this job before creating an invoice.',
+    CONTRACT_NOT_SIGNED:
+      'The client must sign the contract for this job before creating an invoice.',
   },
 } as const;

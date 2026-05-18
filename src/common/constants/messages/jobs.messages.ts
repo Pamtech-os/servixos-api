@@ -38,6 +38,8 @@ export const JOBS_MESSAGES = {
     CONTRACT_GEN_FAILED: 'Unable to generate contract document at this time',
     CONTRACT_SEND_FAILED: 'Unable to send contract communication at this time',
     BULK_DELETE_FAILED: 'Unable to delete selected jobs at this time',
+    CONTRACT_NOT_SIGNED:
+      'The client must sign the contract before this job can be started.',
     START_NOT_ALLOWED:
       'Only pending jobs can be started. Completed or cancelled jobs cannot be started.',
     DEPOSIT_REQUIRED_TO_START:

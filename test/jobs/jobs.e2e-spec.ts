@@ -128,6 +128,22 @@ describe('Jobs (integration)', () => {
     );
   }
 
+  async function generateAndSignContract(jobId: string): Promise<void> {
+    const genRes = await asOwner(
+      req().post(`/api/jobs/${jobId}/contract/generate`),
+    );
+    expect(genRes.status).toBe(200);
+    const contractId = (genRes.body as ApiBody<{ contractId: string }>).data!
+      .contractId;
+
+    const signRes = await asOwner(
+      req()
+        .patch(`/api/contracts/${contractId}`)
+        .send({ status: 'signed', signedAt: new Date().toISOString() }),
+    );
+    expect(signRes.status).toBe(200);
+  }
+
   function captureOtpFor(email: string): string {
     const calls = nowSpy.mock.calls as [string, EmailJobArgs][];
     const match = [...calls]
@@ -294,13 +310,15 @@ describe('Jobs (integration)', () => {
     expect(createJobRes.status).toBe(201);
     const jobId = (createJobRes.body as ApiBody<{ _id: string }>).data!._id;
 
-    const startWithoutDepositRes = await asOwner(
+    const startWithoutContractRes = await asOwner(
       req().patch(`/api/jobs/${jobId}/start`).send({}),
     );
-    expect(startWithoutDepositRes.status).toBe(400);
-    expect((startWithoutDepositRes.body as ApiBody).message).toBe(
-      JOBS_MESSAGES.ERROR.DEPOSIT_REQUIRED_TO_START,
+    expect(startWithoutContractRes.status).toBe(400);
+    expect((startWithoutContractRes.body as ApiBody).message).toBe(
+      JOBS_MESSAGES.ERROR.CONTRACT_NOT_SIGNED,
     );
+
+    await generateAndSignContract(jobId);
 
     const createInvoiceRes = await asOwner(
       req()
@@ -395,6 +413,8 @@ describe('Jobs (integration)', () => {
     );
     expect(createJobRes.status).toBe(201);
     const jobId = (createJobRes.body as ApiBody<{ _id: string }>).data!._id;
+
+    await generateAndSignContract(jobId);
 
     const createDepositInvoiceRes = await asOwner(
       req()

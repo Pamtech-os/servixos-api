@@ -11,6 +11,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { Job as AgendaJob } from 'agenda';
 import { createHash } from 'node:crypto';
 import { Types } from 'mongoose';
+import { PdfService } from 'src/modules/pdf/pdf.service';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { STORAGE_FOLDERS } from 'src/modules/storage/constants/storage-folders.constants';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
@@ -60,7 +61,9 @@ interface ContractUploadResult {
 
 export interface ContractGenerateResult {
   contractId: string;
-  pdfUrl: string;
+  pdfUrl: string | null;
+  /** Present only when PDF generation failed; frontend can render this directly for preview/editing. */
+  html: string | null;
 }
 
 const JOBS_LIST_DEFAULT_LIMIT = 8;
@@ -95,6 +98,7 @@ export class JobsService implements OnModuleInit {
     private readonly emailService: EmailService,
     private readonly invoicesService: InvoicesService,
     private readonly storageService: StorageService,
+    private readonly pdfService: PdfService,
   ) {
     this.appUrl = config.get<string>('APP_URL') ?? 'http://localhost:3000';
     this.clientAppUrl =
@@ -305,6 +309,14 @@ export class JobsService implements OnModuleInit {
       }
       if (existing.status !== JobStatus.PENDING) {
         return new BadRequestException(JOBS_MESSAGES.ERROR.START_NOT_ALLOWED);
+      }
+
+      const contract = await this.contractsRepository.findByJobId(
+        existing._id,
+        bId,
+      );
+      if (!contract || contract.status !== ContractStatus.SIGNED) {
+        return new BadRequestException(JOBS_MESSAGES.ERROR.CONTRACT_NOT_SIGNED);
       }
 
       const baselineAmount =
@@ -526,8 +538,19 @@ export class JobsService implements OnModuleInit {
       const title = `${job.title} Service Contract`;
       const html = await this.generateContractHtml(job, client, business.name);
 
-      const pdfBuffer = await this.renderContractPdfBuffer(html);
-      const uploaded = await this.uploadContractPdf(pdfBuffer, title);
+      let pdfUrl: string | null = null;
+      let cloudinaryPublicId: string | undefined;
+
+      try {
+        const pdfBuffer = await this.pdfService.renderHtmlToPdf(html);
+        const uploaded = await this.uploadContractPdf(pdfBuffer, title);
+        pdfUrl = uploaded.secureUrl;
+        cloudinaryPublicId = uploaded.publicId;
+      } catch (pdfError) {
+        this.logger.warn(
+          `generateContract: PDF generation failed, returning temporary contract [jobId=${id}]: ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`,
+        );
+      }
 
       const contract = await this.contractsRepository.upsertByJobId(
         job._id,
@@ -538,8 +561,8 @@ export class JobsService implements OnModuleInit {
           clientId: client._id,
           title,
           html,
-          pdfUrl: uploaded.secureUrl,
-          cloudinaryPublicId: uploaded.publicId,
+          pdfUrl: pdfUrl ?? '',
+          ...(cloudinaryPublicId && { cloudinaryPublicId }),
           status: ContractStatus.DRAFT,
           timezone: job.timezone,
         },
@@ -547,7 +570,8 @@ export class JobsService implements OnModuleInit {
 
       return {
         contractId: contract._id.toString(),
-        pdfUrl: contract.pdfUrl,
+        pdfUrl,
+        html: pdfUrl ? null : html,
       };
     } catch (error) {
       this.logger.error(
@@ -915,46 +939,6 @@ Requirements:
     </div>
   </body>
 </html>`;
-  }
-
-  private async renderContractPdfBuffer(html: string): Promise<Buffer> {
-    const modulePath = 'puppeteer';
-    const imported = (await import(modulePath)) as { default?: unknown };
-    const puppeteer = imported.default as {
-      launch: (options: {
-        headless: boolean | 'new';
-        args?: string[];
-      }) => Promise<{
-        newPage: () => Promise<{
-          setContent: (
-            html: string,
-            options: { waitUntil: 'networkidle0' },
-          ) => Promise<void>;
-          pdf: (options: {
-            format: 'A4';
-            printBackground: boolean;
-          }) => Promise<Buffer>;
-        }>;
-        close: () => Promise<void>;
-      }>;
-    };
-
-    if (!puppeteer || typeof puppeteer.launch !== 'function') {
-      throw new Error('Puppeteer module is not available');
-    }
-
-    const browser = await puppeteer.launch({
-      headless: 'new',
-      args: ['--no-sandbox', '--disable-setuid-sandbox'],
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
-      return await page.pdf({ format: 'A4', printBackground: true });
-    } finally {
-      await browser.close();
-    }
   }
 
   private async uploadContractPdf(

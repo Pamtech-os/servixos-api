@@ -15,11 +15,21 @@ import { EmailService } from 'src/modules/email/services/email.service';
 import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
+import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { JobsService } from 'src/modules/jobs/services/jobs.service';
 import { Job, JobStatus } from 'src/modules/jobs/schemas/job.schema';
+import { PdfService } from 'src/modules/pdf/pdf.service';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { asMock } from 'test/helpers/mock';
+
+const CONTRACT_ID = '664abc000000000000000099';
+
+const signedContract = {
+  _id: new Types.ObjectId(CONTRACT_ID),
+  status: ContractStatus.SIGNED,
+  signedAt: new Date('2026-05-08T09:00:00.000Z'),
+};
 
 const BUSINESS_ID = '664abc123456789012345678';
 const JOB_ID = '664abc000000000000000001';
@@ -43,6 +53,9 @@ describe('JobsService (start/complete)', () => {
     transitionStatusById: jest.Mock;
     updateById: jest.Mock;
   };
+  let contractsRepository: {
+    findByJobId: jest.Mock;
+  };
   let redisService: {
     set: jest.Mock;
     incr: jest.Mock;
@@ -58,6 +71,10 @@ describe('JobsService (start/complete)', () => {
       findById: jest.fn(),
       transitionStatusById: jest.fn(),
       updateById: jest.fn(),
+    };
+
+    contractsRepository = {
+      findByJobId: jest.fn().mockResolvedValue(signedContract),
     };
 
     redisService = {
@@ -77,7 +94,7 @@ describe('JobsService (start/complete)', () => {
     service = new JobsService(
       asMock<ConfigService>(config),
       asMock<JobsRepository>(jobsRepository),
-      {} as ContractsRepository,
+      asMock<ContractsRepository>(contractsRepository),
       {} as ClientsRepository,
       {} as BusinessRepository,
       asMock<AgendaService>(agendaService),
@@ -85,6 +102,7 @@ describe('JobsService (start/complete)', () => {
       {} as EmailService,
       asMock<InvoicesService>(invoicesService),
       {} as StorageService,
+      {} as PdfService,
     );
 
     loggerErrorSpy = jest
@@ -122,6 +140,41 @@ describe('JobsService (start/complete)', () => {
       expect(redisService.incr).toHaveBeenCalledTimes(1);
       expect(redisService.set).toHaveBeenCalledTimes(1);
       expect(result).toEqual(started);
+    });
+
+    it('returns 400 when contract is not signed yet', async () => {
+      // Arrange
+      jobsRepository.findById.mockResolvedValueOnce(baseJob(JobStatus.PENDING));
+      contractsRepository.findByJobId.mockResolvedValueOnce({
+        _id: new Types.ObjectId(CONTRACT_ID),
+        status: ContractStatus.SENT,
+      });
+
+      // Act
+      const result = await service.startJob(JOB_ID, BUSINESS_ID);
+
+      // Assert
+      expect(result).toBeInstanceOf(BadRequestException);
+      expect((result as BadRequestException).message).toBe(
+        JOBS_MESSAGES.ERROR.CONTRACT_NOT_SIGNED,
+      );
+      expect(jobsRepository.transitionStatusById).not.toHaveBeenCalled();
+    });
+
+    it('returns 400 when no contract exists for job', async () => {
+      // Arrange
+      jobsRepository.findById.mockResolvedValueOnce(baseJob(JobStatus.PENDING));
+      contractsRepository.findByJobId.mockResolvedValueOnce(null);
+
+      // Act
+      const result = await service.startJob(JOB_ID, BUSINESS_ID);
+
+      // Assert
+      expect(result).toBeInstanceOf(BadRequestException);
+      expect((result as BadRequestException).message).toBe(
+        JOBS_MESSAGES.ERROR.CONTRACT_NOT_SIGNED,
+      );
+      expect(jobsRepository.transitionStatusById).not.toHaveBeenCalled();
     });
 
     it('returns 400 when upfront deposit is below 50%', async () => {

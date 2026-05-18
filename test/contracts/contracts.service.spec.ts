@@ -7,6 +7,7 @@ import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
 import { EmailService } from 'src/modules/email/services/email.service';
 import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { RedisService } from 'src/modules/redis/services/redis.service';
+import { PdfService } from 'src/modules/pdf/pdf.service';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { asMock } from 'test/helpers/mock';
 
@@ -55,6 +56,7 @@ describe('ContractsService', () => {
       asMock<EmailService>(emailService),
       asMock<RedisService>(redisService),
       {} as StorageService,
+      {} as PdfService,
     );
   });
 
