@@ -7,6 +7,7 @@ import { Invoice, InvoiceStatus } from '../../invoices/schemas/invoice.schema';
 import { Job, JobStatus } from '../../jobs/schemas/job.schema';
 import { Payment } from '../../payments/schemas/payment.schema';
 import { ServiceRequest } from '../../requests/schemas/service-request.schema';
+import { Review } from '../../reviews/schemas/review.schema';
 import { PageView } from '../schemas/page-view.schema';
 import type {
   RawActivityLog,
@@ -37,6 +38,7 @@ export class AnalyticsRepository {
   private readonly invoiceModel: ReturnModelType<typeof Invoice>;
   private readonly activityLogModel: ReturnModelType<typeof ActivityLog>;
   private readonly serviceRequestModel: ReturnModelType<typeof ServiceRequest>;
+  private readonly reviewModel: ReturnModelType<typeof Review>;
 
   constructor(@InjectConnection() connection: Connection) {
     this.pageViewModel = getModelForClass(PageView, {
@@ -53,6 +55,9 @@ export class AnalyticsRepository {
       existingConnection: connection,
     });
     this.serviceRequestModel = getModelForClass(ServiceRequest, {
+      existingConnection: connection,
+    });
+    this.reviewModel = getModelForClass(Review, {
       existingConnection: connection,
     });
   }
@@ -383,5 +388,10 @@ export class AnalyticsRepository {
         },
       },
     ]);
+  }
+
+  /** Counts all reviews submitted for the business. */
+  async countReviews(businessId: Types.ObjectId): Promise<number> {
+    return this.reviewModel.countDocuments({ businessId }).exec();
   }
 }

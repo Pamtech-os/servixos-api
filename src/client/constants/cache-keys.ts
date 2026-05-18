@@ -18,4 +18,6 @@ export const CLIENT_CACHE_KEYS = {
   contacts: (clientId: string) => `client:contacts:${clientId}`,
   activities: (clientId: string, query: string) =>
     `client:activities:${clientId}:${query}`,
+  review: (clientId: string, jobId: string) =>
+    `client:review:${clientId}:${jobId}`,
 };

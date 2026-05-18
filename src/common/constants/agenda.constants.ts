@@ -18,6 +18,7 @@ export const JOBS = {
   EMAIL_TEAM_ANNOUNCEMENT: 'email:team:announcement',
   TASK_OVERDUE_NOTIFICATION: 'task:overdue:notification',
   CLIENT_REQUESTS_CLEANUP: 'client:requests:cleanup',
+  REVIEW_SUBMITTED: 'review:submitted',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

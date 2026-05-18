@@ -64,4 +64,9 @@ export const CACHE_TTL = {
 
   // Subscription limit counts (max clients, jobs, invoices per month)
   SUBSCRIPTION_LIMIT_COUNT: 60 * 2, // 2 minutes
+
+  // Reviews
+  REVIEWS_LIST: 60 * 2, // 2 minutes
+  REVIEWS_LIST_VERSION: 60 * 60 * 24 * 30, // 30 days (cache-busting marker)
+  REVIEW_STATS: 60 * 5, // 5 minutes
 } as const;

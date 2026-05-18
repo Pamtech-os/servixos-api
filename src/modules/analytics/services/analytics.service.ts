@@ -316,17 +316,19 @@ export class AnalyticsService {
 
       const bId = new Types.ObjectId(businessId);
 
-      // All five aggregations run concurrently — network/IO bound not CPU bound
+      // All six aggregations run concurrently — network/IO bound not CPU bound
       const [
         monthlyRevenue,
         activeClientsCount,
         outstandingInvoices,
+        reviewCount,
         recentActivityRaw,
         topClientsRaw,
       ] = await Promise.all([
         this.analyticsRepository.getCurrentMonthRevenue(bId),
         this.analyticsRepository.countActiveClients(bId),
         this.analyticsRepository.getOutstandingInvoices(bId),
+        this.analyticsRepository.countReviews(bId),
         this.analyticsRepository.getRecentActivity(
           bId,
           DASHBOARD_ACTIVITY_LIMIT,
@@ -341,7 +343,7 @@ export class AnalyticsService {
           count: outstandingInvoices.count,
           totalAmount: toTwoDecimal(outstandingInvoices.totalAmount),
         },
-        reviewCount: 0, // placeholder until the reviews module is built
+        reviewCount,
         recentActivity: recentActivityRaw.map((log) => ({
           id: log._id.toString(),
           actorName: log.actorName,

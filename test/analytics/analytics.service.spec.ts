@@ -45,6 +45,7 @@ describe('AnalyticsService', () => {
     getCurrentMonthRevenue: jest.Mock;
     countActiveClients: jest.Mock;
     getOutstandingInvoices: jest.Mock;
+    countReviews: jest.Mock;
     getRecentActivity: jest.Mock;
     getTopClientsBySpend: jest.Mock;
   };
@@ -69,6 +70,7 @@ describe('AnalyticsService', () => {
       getCurrentMonthRevenue: jest.fn(),
       countActiveClients: jest.fn(),
       getOutstandingInvoices: jest.fn(),
+      countReviews: jest.fn().mockResolvedValue(0),
       getRecentActivity: jest.fn(),
       getTopClientsBySpend: jest.fn(),
     };
@@ -358,7 +360,7 @@ describe('AnalyticsService', () => {
       expect(analyticsRepo.getCurrentMonthRevenue).not.toHaveBeenCalled();
     });
 
-    it('should aggregate all five queries in parallel and return shaped data', async () => {
+    it('should aggregate all six queries in parallel and return shaped data', async () => {
       // Arrange
       redis.get.mockResolvedValue(null);
       redis.set.mockResolvedValue(undefined);
@@ -409,13 +411,13 @@ describe('AnalyticsService', () => {
       expect(stats.monthlyRevenue).toBe(12400.57); // rounded to 2 dp
       expect(stats.activeClientsCount).toBe(23);
       expect(stats.outstandingInvoices.totalAmount).toBe(3200.12); // rounded
-      expect(stats.reviewCount).toBe(0); // placeholder
+      expect(stats.reviewCount).toBe(0); // countReviews mock returns 0
       expect(stats.recentActivity[0].actorName).toBe('Jane');
       expect(stats.topClients[0].clientId).toBe(clientObjectId.toString());
       expect(stats.topClients[0].totalSpent).toBe(9800.99);
     });
 
-    it('should run all five repository queries concurrently', async () => {
+    it('should run all six repository queries concurrently', async () => {
       // Arrange
       redis.get.mockResolvedValue(null);
       redis.set.mockResolvedValue(undefined);
@@ -434,6 +436,10 @@ describe('AnalyticsService', () => {
         callOrder.push('invoices');
         return Promise.resolve({ count: 0, totalAmount: 0 });
       });
+      analyticsRepo.countReviews.mockImplementation(() => {
+        callOrder.push('reviews');
+        return Promise.resolve(0);
+      });
       analyticsRepo.getRecentActivity.mockImplementation(() => {
         callOrder.push('activity');
         return Promise.resolve([]);
@@ -446,13 +452,14 @@ describe('AnalyticsService', () => {
       // Act
       await service.getDashboard(bId);
 
-      // Assert — all five were called (order may vary because they run in parallel)
-      expect(callOrder).toHaveLength(5);
+      // Assert — all six were called (order may vary because they run in parallel)
+      expect(callOrder).toHaveLength(6);
       expect(callOrder).toEqual(
         expect.arrayContaining([
           'revenue',
           'clients',
           'invoices',
+          'reviews',
           'activity',
           'topClients',
         ]),

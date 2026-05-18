@@ -10,6 +10,7 @@ import { JobsModule } from '../jobs/jobs.module';
 import { MessagingModule } from '../messaging/messaging.module';
 import { PaymentsModule } from '../payments/payments.module';
 import { RedisModule } from '../redis/redis.module';
+import { ReviewsModule } from '../reviews/reviews.module';
 import { UsersModule } from '../users/users.module';
 import { ClientActivitiesController } from './controllers/client-activities.controller';
 import { ClientContactsController } from './controllers/client-contacts.controller';
@@ -19,6 +20,7 @@ import { ClientFilesController } from './controllers/client-files.controller';
 import { ClientInvoicesController } from './controllers/client-invoices.controller';
 import { ClientMessagesController } from './controllers/client-messages.controller';
 import { ClientProfileController } from './controllers/client-profile.controller';
+import { ClientReviewsController } from './controllers/client-reviews.controller';
 import { ClientMessagesGateway } from './gateways/client-messages.gateway';
 import { ClientHttpAuthGuard } from './guards/client-http-auth.guard';
 import { WsJwtClientAuthGuard } from './guards/ws-jwt-client-auth.guard';
@@ -30,6 +32,7 @@ import { ClientFilesService } from './services/client-files.service';
 import { ClientInvoicesService } from './services/client-invoices.service';
 import { ClientMessagesService } from './services/client-messages.service';
 import { ClientProfileService } from './services/client-profile.service';
+import { ClientReviewsService } from './services/client-reviews.service';
 
 @Module({
   imports: [
@@ -53,6 +56,7 @@ import { ClientProfileService } from './services/client-profile.service';
     MessagingModule,
     PaymentsModule,
     RedisModule,
+    ReviewsModule,
   ],
   controllers: [
     ClientDashboardController,
@@ -63,6 +67,7 @@ import { ClientProfileService } from './services/client-profile.service';
     ClientContactsController,
     ClientActivitiesController,
     ClientProfileController,
+    ClientReviewsController,
   ],
   providers: [
     AuthRepository,
@@ -76,6 +81,7 @@ import { ClientProfileService } from './services/client-profile.service';
     ClientContactsService,
     ClientActivitiesService,
     ClientProfileService,
+    ClientReviewsService,
     ClientMessagesGateway,
   ],
 })
