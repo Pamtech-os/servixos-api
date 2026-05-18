@@ -13,6 +13,7 @@ import { BusinessRepository } from 'src/modules/business/repositories/business.r
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmailService } from 'src/modules/email/services/email.service';
 import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
+import { PaymentsService } from 'src/modules/payments/services/payments.service';
 import { RedisService } from 'src/modules/redis/services/redis.service';
 import { ContractsRepository } from 'src/modules/contracts/repositories/contracts.repository';
 import { ContractStatus } from 'src/modules/contracts/schemas/contract.schema';
@@ -64,6 +65,9 @@ describe('JobsService (start/complete)', () => {
   let invoicesService: {
     getPaidSummaryForJob: jest.Mock;
   };
+  let paymentsService: {
+    getSumDirectForJob: jest.Mock;
+  };
   let loggerErrorSpy: jest.SpyInstance;
 
   beforeEach(() => {
@@ -87,6 +91,9 @@ describe('JobsService (start/complete)', () => {
         .fn()
         .mockResolvedValue({ amountPaid: 100, totalInvoiced: 200 }),
     };
+    paymentsService = {
+      getSumDirectForJob: jest.fn().mockResolvedValue(0),
+    };
 
     const config = { get: jest.fn().mockReturnValue(undefined) };
     const agendaService = { define: jest.fn() };
@@ -101,6 +108,7 @@ describe('JobsService (start/complete)', () => {
       asMock<RedisService>(redisService),
       {} as EmailService,
       asMock<InvoicesService>(invoicesService),
+      asMock<PaymentsService>(paymentsService),
       {} as StorageService,
       {} as PdfService,
     );
@@ -177,20 +185,48 @@ describe('JobsService (start/complete)', () => {
       expect(jobsRepository.transitionStatusById).not.toHaveBeenCalled();
     });
 
-    it('returns 400 when upfront deposit is below 50%', async () => {
+    it('returns 400 when combined invoice + direct payments are below 50%', async () => {
+      // Arrange
       jobsRepository.findById.mockResolvedValueOnce(baseJob(JobStatus.PENDING));
       invoicesService.getPaidSummaryForJob.mockResolvedValueOnce({
-        amountPaid: 80,
+        amountPaid: 60,
         totalInvoiced: 200,
       });
+      paymentsService.getSumDirectForJob.mockResolvedValueOnce(20);
 
+      // Act
       const result = await service.startJob(JOB_ID, BUSINESS_ID);
 
+      // Assert
       expect(result).toBeInstanceOf(BadRequestException);
       expect((result as BadRequestException).message).toBe(
         JOBS_MESSAGES.ERROR.DEPOSIT_REQUIRED_TO_START,
       );
       expect(jobsRepository.transitionStatusById).not.toHaveBeenCalled();
+    });
+
+    it('passes deposit check when direct job payment covers the shortfall', async () => {
+      // Arrange
+      const pending = baseJob(JobStatus.PENDING);
+      const started = {
+        ...pending,
+        status: JobStatus.IN_PROGRESS,
+        startedAt: new Date(),
+      };
+      jobsRepository.findById.mockResolvedValueOnce(pending);
+      invoicesService.getPaidSummaryForJob.mockResolvedValueOnce({
+        amountPaid: 0,
+        totalInvoiced: 0,
+      });
+      paymentsService.getSumDirectForJob.mockResolvedValueOnce(100);
+      jobsRepository.transitionStatusById.mockResolvedValueOnce(started);
+
+      // Act
+      const result = await service.startJob(JOB_ID, BUSINESS_ID);
+
+      // Assert
+      expect(result).toEqual(started);
+      expect(jobsRepository.transitionStatusById).toHaveBeenCalledTimes(1);
     });
 
     it('returns 400 when job price is missing under deposit policy', async () => {

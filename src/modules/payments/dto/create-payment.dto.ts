@@ -17,6 +17,10 @@ export class CreatePaymentDto {
   invoiceId?: string;
 
   @IsOptional()
+  @IsMongoId({ message: PAYMENTS_MESSAGES.VALIDATION.JOB_ID_INVALID })
+  jobId?: string;
+
+  @IsOptional()
   @IsMongoId({ message: PAYMENTS_MESSAGES.VALIDATION.CLIENT_ID_INVALID })
   clientId?: string;
 

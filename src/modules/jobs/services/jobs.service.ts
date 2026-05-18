@@ -27,6 +27,7 @@ import { ClientsRepository } from '../../clients/repositories/clients.repository
 import { contractClientTemplate } from '../../email/templates/contract-client.template';
 import { EmailService } from '../../email/services/email.service';
 import { InvoicesService } from '../../invoices/services/invoices.service';
+import { PaymentsService } from '../../payments/services/payments.service';
 import { RedisService } from '../../redis/services/redis.service';
 import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
 import { CreateJobDto } from '../dto/create-job.dto';
@@ -97,6 +98,7 @@ export class JobsService implements OnModuleInit {
     private readonly redisService: RedisService,
     private readonly emailService: EmailService,
     private readonly invoicesService: InvoicesService,
+    private readonly paymentsService: PaymentsService,
     private readonly storageService: StorageService,
     private readonly pdfService: PdfService,
   ) {
@@ -329,16 +331,20 @@ export class JobsService implements OnModuleInit {
         );
       }
 
-      const paidSummary = await this.invoicesService.getPaidSummaryForJob(
-        businessId,
-        id,
-      );
+      const [paidSummary, directPaid] = await Promise.all([
+        this.invoicesService.getPaidSummaryForJob(businessId, id),
+        this.paymentsService.getSumDirectForJob(businessId, id),
+      ]);
       if (paidSummary instanceof InternalServerErrorException) {
         return paidSummary;
       }
+      if (directPaid instanceof InternalServerErrorException) {
+        return directPaid;
+      }
 
+      const totalPaid = toTwoDecimal(paidSummary.amountPaid + directPaid);
       const minimumDeposit = toTwoDecimal(baselineAmount * 0.5);
-      if (paidSummary.amountPaid + 0.000001 < minimumDeposit) {
+      if (totalPaid + 0.000001 < minimumDeposit) {
         return new BadRequestException(
           JOBS_MESSAGES.ERROR.DEPOSIT_REQUIRED_TO_START,
         );

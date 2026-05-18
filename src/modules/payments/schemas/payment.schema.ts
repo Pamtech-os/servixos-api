@@ -16,6 +16,7 @@ export enum PaymentStatus {
 
 @index({ businessId: 1, paymentDate: -1 })
 @index({ businessId: 1, invoiceId: 1 })
+@index({ businessId: 1, jobId: 1 })
 @modelOptions({ schemaOptions: { collection: 'payments', timestamps: true } })
 export class Payment {
   _id: Types.ObjectId;
@@ -25,6 +26,9 @@ export class Payment {
 
   @prop({ ref: 'Invoice', type: Types.ObjectId })
   invoiceId?: Types.ObjectId;
+
+  @prop({ ref: 'Job', type: Types.ObjectId })
+  jobId?: Types.ObjectId;
 
   @prop({ ref: 'Client', type: Types.ObjectId })
   clientId?: Types.ObjectId;
