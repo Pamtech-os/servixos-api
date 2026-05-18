@@ -68,6 +68,7 @@ Some list endpoints include a `statistics` top-level key with aggregate counts/t
 |---|---|
 | [api-auth.md](./api-auth.md) | Business login, onboarding, PIN, password reset |
 | [api-client-auth.md](./api-client-auth.md) | Client portal login & auth |
+| [api-client-websocket.md](./api-client-websocket.md) | Client portal realtime messaging via WebSocket |
 | [api-clients.md](./api-clients.md) | Client management |
 | [api-requests.md](./api-requests.md) | Service requests (inbound enquiries) |
 | [api-jobs.md](./api-jobs.md) | Job scheduling, start/complete, contracts |

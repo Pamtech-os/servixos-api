@@ -11,5 +11,6 @@ import { RequestsService } from './services/requests.service';
   imports: [ClientsModule, BusinessModule, UsersModule, MessagingModule],
   providers: [RequestsRepository, RequestsService],
   controllers: [RequestsController],
+  exports: [RequestsRepository],
 })
 export class RequestsModule {}

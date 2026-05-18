@@ -30,6 +30,7 @@ class RequestAiPriceEstimate {
 
 @index({ businessId: 1, status: 1 })
 @index({ businessId: 1, createdAt: -1 })
+@index({ businessId: 1, clientId: 1, status: 1 })
 @modelOptions({
   schemaOptions: { collection: 'service_requests', timestamps: true },
 })

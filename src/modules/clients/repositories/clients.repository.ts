@@ -155,6 +155,19 @@ export class ClientsRepository {
     return client;
   }
 
+  async setBalance(
+    id: Types.ObjectId,
+    businessId: Types.ObjectId,
+    balance: number,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.clientModel.updateOne(
+      { _id: id, businessId, deletedAt: null },
+      { $set: { balance } },
+      { session },
+    );
+  }
+
   async attachUserIdIfMissing(
     email: string,
     businessId: Types.ObjectId,

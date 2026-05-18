@@ -12,13 +12,15 @@ import { Server } from 'socket.io';
 import { MESSAGE_EVENTS } from 'src/client/constants/ws-events';
 import { CLIENT_MESSAGES } from 'src/client/constants/messages';
 import { WsExceptionFilter } from 'src/common/gateways/ws-exception.filter';
-import { WsEvent } from '../../messaging/messaging.events';
+import { WsEvent, clientPresenceKey } from '../../messaging/messaging.events';
 import { WsConversationRoomDto } from '../dto/ws-conversation-room.dto';
 import { WsSendMessageDto } from '../dto/ws-send-message.dto';
 import { WsJwtClientAuthGuard } from '../guards/ws-jwt-client-auth.guard';
 import type { AuthenticatedSocket } from '../interfaces/authenticated-socket.interface';
 import { ClientMessagesService } from '../services/client-messages.service';
+import { RedisService } from '../../redis/services/redis.service';
 import { websocketConfig } from 'src/config/websocket.config';
+import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 
 @WebSocketGateway({
   namespace: '/client-messages',
@@ -37,6 +39,7 @@ export class ClientMessagesGateway
   constructor(
     private readonly messagesService: ClientMessagesService,
     private readonly authGuard: WsJwtClientAuthGuard,
+    private readonly redis: RedisService,
   ) {}
 
   async handleConnection(client: AuthenticatedSocket): Promise<void> {
@@ -49,17 +52,40 @@ export class ClientMessagesGateway
       return;
     }
 
+    const { clientId, businessId } = client.data;
+
+    await this.redis.sadd(clientPresenceKey(businessId), clientId);
+    await this.redis.expire(
+      clientPresenceKey(businessId),
+      CACHE_TTL.WS_PRESENCE,
+    );
+
+    this.server
+      .of?.('/chat')
+      ?.to(`${businessId}:${clientId}`)
+      .emit(WsEvent.CLIENT_ONLINE, { clientId });
+
     client.emit(MESSAGE_EVENTS.CONNECTED, {
-      clientId: client.data.clientId,
+      clientId,
       message: 'Connected',
     });
 
-    this.logger.log(
-      `Client socket connected [clientId=${client.data.clientId}]`,
-    );
+    this.logger.log(`Client socket connected [clientId=${clientId}]`);
   }
 
-  async handleDisconnect(_client: AuthenticatedSocket): Promise<void> {}
+  async handleDisconnect(client: AuthenticatedSocket): Promise<void> {
+    const { clientId, businessId } = client.data ?? {};
+    if (!clientId || !businessId) return;
+
+    await this.redis.srem(clientPresenceKey(businessId), clientId);
+
+    this.server
+      .of?.('/chat')
+      ?.to(`${businessId}:${clientId}`)
+      .emit(WsEvent.CLIENT_OFFLINE, { clientId });
+
+    this.logger.log(`Client socket disconnected [clientId=${clientId}]`);
+  }
 
   @SubscribeMessage(MESSAGE_EVENTS.JOIN_CONVERSATION)
   async handleJoinConversation(
@@ -145,12 +171,16 @@ export class ClientMessagesGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: WsConversationRoomDto,
   ): void {
+    const { clientId, businessId } = client.data;
+
     client
-      .to(buildRoomId(client.data.clientId, payload.providerId))
-      .emit(MESSAGE_EVENTS.TYPING, {
-        clientId: client.data.clientId,
-        isTyping: true,
-      });
+      .to(buildRoomId(clientId, payload.providerId))
+      .emit(MESSAGE_EVENTS.TYPING, { clientId, isTyping: true });
+
+    this.server
+      .of?.('/chat')
+      ?.to(`${businessId}:${clientId}`)
+      .emit(WsEvent.CLIENT_TYPING, { clientId });
   }
 
   @SubscribeMessage(MESSAGE_EVENTS.TYPING_STOP)
@@ -158,12 +188,16 @@ export class ClientMessagesGateway
     @ConnectedSocket() client: AuthenticatedSocket,
     @MessageBody() payload: WsConversationRoomDto,
   ): void {
+    const { clientId, businessId } = client.data;
+
     client
-      .to(buildRoomId(client.data.clientId, payload.providerId))
-      .emit(MESSAGE_EVENTS.TYPING, {
-        clientId: client.data.clientId,
-        isTyping: false,
-      });
+      .to(buildRoomId(clientId, payload.providerId))
+      .emit(MESSAGE_EVENTS.TYPING, { clientId, isTyping: false });
+
+    this.server
+      .of?.('/chat')
+      ?.to(`${businessId}:${clientId}`)
+      .emit(WsEvent.CLIENT_STOPPED_TYPING, { clientId });
   }
 
   async emitConversationRead(

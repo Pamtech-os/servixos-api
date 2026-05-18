@@ -24,6 +24,10 @@ export class Client {
   @prop({ trim: true })
   phone?: string;
 
+  /** Running total of unpaid invoice amounts across all pending/partial invoices */
+  @prop({ default: 0, min: 0 })
+  balance: number;
+
   @prop()
   deletedAt?: Date;
 }

@@ -149,16 +149,32 @@ Get or create the conversation thread linked to this request. Opens a chat chann
   "statusCode": 200,
   "message": "Conversation retrieved",
   "data": {
-    "_id": "...",
-    "businessId": "...",
+    "conversation": {
+      "_id": "...",
+      "businessId": "...",
+      "clientId": "...",
+      "lastMessageContent": "",
+      "lastMessageAt": null,
+      "businessUnreadCount": 0,
+      "clientUnreadCount": 0
+    },
+    "messages": [],
     "clientId": "...",
-    "lastMessageContent": "",
-    "lastMessageAt": null,
-    "businessUnreadCount": 0,
-    "clientUnreadCount": 0
+    "requestStatus": "pending"
   }
 }
 ```
+
+Response data fields:
+
+| Field | Type | Notes |
+|---|---|---|
+| `conversation` | object | Conversation document for this business/client pair |
+| `messages` | `MessagePayload[]` | Most recent messages for initial render |
+| `clientId` | ObjectId string | Use this as the room key payload for websocket `join_room` |
+| `requestStatus` | enum | Current request status |
+
+If the request's client account is not provisioned yet, this endpoint returns `404`.
 
 ---
 
@@ -314,3 +330,130 @@ accepted → cancelled
 | Update | `requests.edit` |
 | Delete | `requests.delete` |
 | Create | public — no permission required |
+
+---
+
+## Request Page WebSocket Chat (Business Portal)
+
+Use this flow on the business portal request details page to chat in real time with the client linked to that request.
+
+### 1) Fetch request conversation context
+
+Call:
+
+`GET /api/requests/:id/conversation`
+
+From the response, take:
+
+- `data.clientId` (required for room join and message events)
+- `data.messages` (seed initial thread UI)
+
+If this endpoint returns `404` with "client not provisioned", keep showing request details and retry this endpoint (client provisioning runs asynchronously).
+
+### 2) Connect websocket namespace
+
+Namespace: `/chat`
+
+```ts
+import { io } from 'socket.io-client';
+
+const socket = io(`${API_BASE_URL}/chat`, {
+  auth: {
+    token: accessToken,
+    businessId,
+  },
+  transports: ['websocket', 'polling'],
+});
+```
+
+Notes:
+
+- Do not prefix socket namespace with `/api`
+- `auth.token` and `auth.businessId` are both required for handshake auth
+
+### 3) Join the request's client room
+
+```ts
+socket.emit('join_room', { clientId });
+```
+
+Server confirms with:
+
+- `room_joined` payload: `{ room, history }`
+- `room` format: `${businessId}:${clientId}`
+- `history` is message history for that room
+
+### 4) Send message from request page
+
+```ts
+socket.emit('send_message', {
+  clientId,
+  content: 'Hello, we received your request.',
+});
+```
+
+For attachment messages, include `attachmentUrl/publicId/mimeType/fileName/fileSize` from `POST /api/messages/upload-attachment`.
+
+### 5) Listen for realtime events
+
+Core events for request page chat:
+
+| Event | Payload |
+|---|---|
+| `connected` | `{ socketId, userId }` |
+| `message_received` | `{ message: MessagePayload }` |
+| `message_delivered` | `{ messageId, deliveredAt }` |
+| `message_read` | `{ upToMessageId, readAt, readBy }` |
+| `user_typing` | `{ userId, senderName }` |
+| `user_stopped_typing` | `{ userId }` |
+| `error` | `{ code?, message }` |
+| `connection_error` | `{ code, message }` then socket disconnect |
+
+`MessagePayload` shape:
+
+```ts
+{
+  id: string;
+  conversationId: string;
+  businessId: string;
+  clientId: string;
+  sender: 'business' | 'client';
+  senderName: string;
+  content?: string;
+  status: 'sent' | 'delivered' | 'read';
+  deliveredAt?: string;
+  readAt?: string;
+  editedAt?: string;
+  attachmentUrl?: string;
+  publicId?: string;
+  mimeType?: string;
+  fileName?: string;
+  fileSize?: number;
+  createdAt: string;
+}
+```
+
+### 6) Read receipts and typing indicators
+
+Mark read:
+
+```ts
+socket.emit('mark_read', {
+  clientId,
+  upToMessageId: latestMessageId,
+});
+```
+
+Typing:
+
+```ts
+socket.emit('typing_start', { clientId });
+socket.emit('typing_stop', { clientId });
+```
+
+### 7) Cleanup on page leave
+
+```ts
+socket.emit('leave_room', { clientId });
+socket.disconnect();
+```

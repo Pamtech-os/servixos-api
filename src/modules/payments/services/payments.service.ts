@@ -17,6 +17,7 @@ import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
+import { ClientsRepository } from '../../clients/repositories/clients.repository';
 import { CreatePaymentDto } from '../dto/create-payment.dto';
 import { ListPaymentsDto } from '../dto/list-payments.dto';
 import { UpdatePaymentDto } from '../dto/update-payment.dto';
@@ -46,6 +47,7 @@ export class PaymentsService implements OnModuleInit {
     private readonly paymentsRepository: PaymentsRepository,
     private readonly invoicesRepository: InvoicesRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly clientsRepository: ClientsRepository,
     private readonly agendaService: AgendaService,
   ) {}
 
@@ -227,6 +229,12 @@ export class PaymentsService implements OnModuleInit {
       );
 
       await session.commitTransaction();
+
+      const clientId = created.clientId ?? invoice.clientId;
+      if (clientId) {
+        await this.refreshClientBalance(clientId, bId);
+      }
+
       return created;
     } catch (error) {
       await session.abortTransaction();
@@ -354,6 +362,15 @@ export class PaymentsService implements OnModuleInit {
       }
 
       await session.commitTransaction();
+
+      const affectedClientIds = new Set<string>();
+      if (existing.clientId)
+        affectedClientIds.add(existing.clientId.toString());
+      if (updated.clientId) affectedClientIds.add(updated.clientId.toString());
+      for (const cid of affectedClientIds) {
+        await this.refreshClientBalance(new Types.ObjectId(cid), bId);
+      }
+
       return updated;
     } catch (error) {
       await session.abortTransaction();
@@ -400,6 +417,11 @@ export class PaymentsService implements OnModuleInit {
       }
 
       await session.commitTransaction();
+
+      if (existing.clientId) {
+        await this.refreshClientBalance(existing.clientId, bId);
+      }
+
       return null;
     } catch (error) {
       await session.abortTransaction();
@@ -409,6 +431,28 @@ export class PaymentsService implements OnModuleInit {
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
       await session.endSession();
+    }
+  }
+
+  private async refreshClientBalance(
+    clientId: Types.ObjectId,
+    businessId: Types.ObjectId,
+  ): Promise<void> {
+    try {
+      const { outstandingBalance } =
+        await this.invoicesRepository.getClientInvoiceSummary(
+          businessId,
+          clientId,
+        );
+      await this.clientsRepository.setBalance(
+        clientId,
+        businessId,
+        outstandingBalance,
+      );
+    } catch (err) {
+      this.logger.error(
+        `refreshClientBalance: failed [clientId=${clientId.toString()}, businessId=${businessId.toString()}]: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 
@@ -514,13 +558,4 @@ export class PaymentsService implements OnModuleInit {
       session,
     );
   }
-
-  /**
-   * Stores dates in business-local wall-clock for globally distributed tenants.
-   *
-   * Example:
-   * - utcDate: 2026-05-08T15:00:00.000Z
-   * - timezone: America/New_York (UTC-4)
-   * - stored: 2026-05-08T11:00:00.000Z
-   */
 }

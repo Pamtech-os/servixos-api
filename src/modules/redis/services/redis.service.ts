@@ -114,6 +114,10 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return this.client.smembers(key);
   }
 
+  async sismember(key: string, member: string): Promise<boolean> {
+    return (await this.client.sismember(key, member)) === 1;
+  }
+
   // Hash operations (used for presence metadata)
   async hset(key: string, field: string, value: string): Promise<void> {
     await this.client.hset(key, field, value);

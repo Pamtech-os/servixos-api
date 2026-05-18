@@ -10,7 +10,9 @@ import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { EmailService } from 'src/modules/email/services/email.service';
+import { JobsRepository } from 'src/modules/jobs/repositories/jobs.repository';
 import { InvoicesRepository } from 'src/modules/invoices/repositories/invoices.repository';
+import { RequestsRepository } from 'src/modules/requests/repositories/requests.repository';
 import { InvoicesService } from 'src/modules/invoices/services/invoices.service';
 import {
   Invoice,
@@ -60,6 +62,12 @@ describe('InvoicesService', () => {
   let businessRepository: {
     findById: jest.Mock;
   };
+  let requestsRepository: {
+    findAcceptedByClientId: jest.Mock;
+  };
+  let jobsRepository: {
+    findById: jest.Mock;
+  };
   let agendaService: {
     define: jest.Mock;
     now: jest.Mock;
@@ -97,6 +105,14 @@ describe('InvoicesService', () => {
         timezone: 'America/New_York',
       }),
     };
+    requestsRepository = {
+      findAcceptedByClientId: jest
+        .fn()
+        .mockResolvedValue({ _id: new Types.ObjectId() }),
+    };
+    jobsRepository = {
+      findById: jest.fn().mockResolvedValue(null),
+    };
     agendaService = {
       define: jest.fn(),
       now: jest.fn().mockResolvedValue(undefined),
@@ -106,6 +122,8 @@ describe('InvoicesService', () => {
       asMock<InvoicesRepository>(invoicesRepository),
       asMock<ClientsRepository>(clientsRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<RequestsRepository>(requestsRepository),
+      asMock<JobsRepository>(jobsRepository),
       asMock<AgendaService>(agendaService),
       {} as EmailService,
       {} as StorageService,

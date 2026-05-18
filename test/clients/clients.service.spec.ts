@@ -26,6 +26,7 @@ const baseClient: Client = {
   name: 'Jane Smith',
   email: 'jane@example.com',
   phone: '+12025550100',
+  balance: 0,
 };
 
 const baseBusiness = {

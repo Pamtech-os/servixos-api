@@ -24,6 +24,12 @@ export enum WsEvent {
   MESSAGE_DELETED = 'message_deleted',
   ERROR = 'error',
 
+  // Server → Business /chat (client presence, bridged from /client-messages)
+  CLIENT_ONLINE = 'client_online',
+  CLIENT_OFFLINE = 'client_offline',
+  CLIENT_TYPING = 'client_typing',
+  CLIENT_STOPPED_TYPING = 'client_stopped_typing',
+
   // Server → Client (team channel)
   TEAM_MESSAGE_SENT = 'team_message_sent',
   ANNOUNCEMENT_CREATED = 'announcement_created',
@@ -31,6 +37,10 @@ export enum WsEvent {
 
 /** Business-wide Socket.io room key for team messaging. */
 export const teamRoom = (businessId: string): string => `team:${businessId}`;
+
+/** Redis key for tracking which clients are online per business. */
+export const clientPresenceKey = (businessId: string): string =>
+  `presence:client:${businessId}`;
 
 export interface MessagePayload {
   id: string;

@@ -9,6 +9,7 @@ import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
 import { InvoicesRepository } from 'src/modules/invoices/repositories/invoices.repository';
 import { InvoiceStatus } from 'src/modules/invoices/schemas/invoice.schema';
 import { PaymentsRepository } from 'src/modules/payments/repositories/payments.repository';
@@ -43,6 +44,9 @@ describe('PaymentsService', () => {
   };
   let businessRepository: {
     findById: jest.Mock;
+  };
+  let clientsRepository: {
+    setBalance: jest.Mock;
   };
   let agendaService: {
     define: jest.Mock;
@@ -96,6 +100,9 @@ describe('PaymentsService', () => {
         timezone: 'America/New_York',
       }),
     };
+    clientsRepository = {
+      setBalance: jest.fn().mockResolvedValue(undefined),
+    };
     agendaService = {
       define: jest.fn(),
     };
@@ -105,6 +112,7 @@ describe('PaymentsService', () => {
       asMock<PaymentsRepository>(paymentsRepository),
       asMock<InvoicesRepository>(invoicesRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<ClientsRepository>(clientsRepository),
       asMock<AgendaService>(agendaService),
     );
 

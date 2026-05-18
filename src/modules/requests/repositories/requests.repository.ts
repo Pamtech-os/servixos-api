@@ -204,6 +204,22 @@ export class RequestsRepository {
     );
   }
 
+  async findAcceptedByClientId(
+    clientId: Types.ObjectId,
+    businessId: Types.ObjectId,
+  ): Promise<ServiceRequest | null> {
+    const request = await this.requestModel
+      .findOne({
+        clientId,
+        businessId,
+        status: RequestStatus.ACCEPTED,
+        deletedAt: null,
+      })
+      .lean<ServiceRequestWithMetadata>()
+      .exec();
+    return this.sanitizeRequest(request);
+  }
+
   async softDeleteByClientId(
     clientId: Types.ObjectId,
     businessId: Types.ObjectId,

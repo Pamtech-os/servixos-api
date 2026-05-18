@@ -7,12 +7,12 @@ import { Types } from 'mongoose';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { ANALYTICS_MESSAGES } from 'src/common/constants/messages/analytics.messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import { Business } from '../../business/schemas/business.schema';
-import { BusinessRepository } from '../../business/repositories/business.repository';
-import { JobStatus } from '../../jobs/schemas/job.schema';
-import { RedisService } from '../../redis/services/redis.service';
-import { AnalyticsRepository } from '../repositories/analytics.repository';
-import { AnalyticsService } from './analytics.service';
+import { Business } from 'src/modules/business/schemas/business.schema';
+import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
+import { JobStatus } from 'src/modules/jobs/schemas/job.schema';
+import { RedisService } from 'src/modules/redis/services/redis.service';
+import { AnalyticsRepository } from 'src/modules/analytics/repositories/analytics.repository';
+import { AnalyticsService } from 'src/modules/analytics/services/analytics.service';
 import { asMock } from 'test/helpers/mock';
 
 // ─── Factories ────────────────────────────────────────────────────────────────

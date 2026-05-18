@@ -36,6 +36,8 @@ import {
   InvoiceLineItem,
   InvoiceStatus,
 } from '../schemas/invoice.schema';
+import { JobsRepository } from '../../jobs/repositories/jobs.repository';
+import { RequestsRepository } from '../../requests/repositories/requests.repository';
 
 interface PaginatedInvoices {
   statistics: InvoiceListStatistics;
@@ -57,6 +59,8 @@ export class InvoicesService implements OnModuleInit {
     private readonly invoicesRepository: InvoicesRepository,
     private readonly clientsRepository: ClientsRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly requestsRepository: RequestsRepository,
+    private readonly jobsRepository: JobsRepository,
     private readonly agendaService: AgendaService,
     private readonly emailService: EmailService,
     private readonly storageService: StorageService,
@@ -148,6 +152,44 @@ export class InvoicesService implements OnModuleInit {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.CLIENT_NOT_FOUND);
       }
 
+      if (dto.jobId) {
+        const job = await this.jobsRepository.findById(dto.jobId, bId);
+        if (!job) {
+          return new BadRequestException(INVOICES_MESSAGES.ERROR.JOB_NOT_FOUND);
+        }
+        if (job.clientId.toString() !== client._id.toString()) {
+          return new BadRequestException(
+            INVOICES_MESSAGES.ERROR.JOB_CLIENT_MISMATCH,
+          );
+        }
+        if (job.price !== undefined) {
+          const subtotal = toTwoDecimal(
+            (dto.lineItems as InvoiceLineItem[]).reduce(
+              (sum, item) => sum + item.quantity * item.unitPrice,
+              0,
+            ),
+          );
+          const { totalInvoiced } =
+            await this.invoicesRepository.getPaidSummaryByJob(
+              bId,
+              new Types.ObjectId(dto.jobId),
+            );
+          if (toTwoDecimal(totalInvoiced + subtotal) > job.price + 0.001) {
+            return new BadRequestException(
+              INVOICES_MESSAGES.ERROR.JOB_AMOUNT_MISMATCH,
+            );
+          }
+        }
+      } else {
+        const acceptedRequest =
+          await this.requestsRepository.findAcceptedByClientId(client._id, bId);
+        if (!acceptedRequest) {
+          return new BadRequestException(
+            INVOICES_MESSAGES.ERROR.REQUEST_NOT_ACCEPTED,
+          );
+        }
+      }
+
       const totalAmount = this.computeInvoiceTotal(
         dto.lineItems as InvoiceLineItem[],
         dto.taxRate ?? 0,
@@ -158,7 +200,7 @@ export class InvoicesService implements OnModuleInit {
       for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
         const invoiceNumber = await this.generateInvoiceNumber(bId, attempt);
         try {
-          return await this.invoicesRepository.create({
+          const invoice = await this.invoicesRepository.create({
             businessId: bId,
             clientId: client._id,
             invoiceNumber,
@@ -172,6 +214,8 @@ export class InvoicesService implements OnModuleInit {
             jobId: dto.jobId ? new Types.ObjectId(dto.jobId) : undefined,
             timezone: business.timezone,
           });
+          await this.refreshClientBalance(client._id, bId);
+          return invoice;
         } catch (err) {
           const isDuplicate =
             typeof err === 'object' &&
@@ -251,6 +295,8 @@ export class InvoicesService implements OnModuleInit {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.NOT_FOUND);
       }
 
+      await this.refreshClientBalance(existing.clientId, bId);
+
       if (
         dto.status === InvoiceStatus.PAID &&
         existing.status !== InvoiceStatus.PAID
@@ -284,13 +330,12 @@ export class InvoicesService implements OnModuleInit {
     businessId: string,
   ): Promise<null | NotFoundException | InternalServerErrorException> {
     try {
-      const deleted = await this.invoicesRepository.softDelete(
-        id,
-        new Types.ObjectId(businessId),
-      );
+      const bId = new Types.ObjectId(businessId);
+      const deleted = await this.invoicesRepository.softDelete(id, bId);
       if (!deleted) {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.NOT_FOUND);
       }
+      await this.refreshClientBalance(deleted.clientId, bId);
       return null;
     } catch (error) {
       this.logger.error(
@@ -380,6 +425,28 @@ export class InvoicesService implements OnModuleInit {
         `getPaidSummaryForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  private async refreshClientBalance(
+    clientId: Types.ObjectId,
+    businessId: Types.ObjectId,
+  ): Promise<void> {
+    try {
+      const { outstandingBalance } =
+        await this.invoicesRepository.getClientInvoiceSummary(
+          businessId,
+          clientId,
+        );
+      await this.clientsRepository.setBalance(
+        clientId,
+        businessId,
+        outstandingBalance,
+      );
+    } catch (err) {
+      this.logger.error(
+        `refreshClientBalance: failed [clientId=${clientId.toString()}, businessId=${businessId.toString()}]: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

@@ -17,7 +17,12 @@ import { MESSAGE_EVENTS } from 'src/client/constants/ws-events';
 import { RedisService } from '../redis/services/redis.service';
 import { EmployeesRepository } from '../employees/repositories/employees.repository';
 import { MessagingService } from './services/messaging.service';
-import { WsEvent, MessagePayload, teamRoom } from './messaging.events';
+import {
+  WsEvent,
+  MessagePayload,
+  teamRoom,
+  clientPresenceKey,
+} from './messaging.events';
 import type {
   AnnouncementView,
   TeamMessageView,
@@ -194,14 +199,14 @@ export class MessagingGateway
       true,
     );
 
-    const history = await this.messagingService.getRecentMessages(
-      businessId,
-      payload.clientId,
-      20,
-    );
+    const [history, clientOnline] = await Promise.all([
+      this.messagingService.getRecentMessages(businessId, payload.clientId, 20),
+      this.redis.sismember(clientPresenceKey(businessId), payload.clientId),
+    ]);
 
     socket.emit(WsEvent.ROOM_JOINED, {
       room,
+      clientOnline,
       history: history
         .reverse()
         .map((m) =>

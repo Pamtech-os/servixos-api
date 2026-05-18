@@ -39,5 +39,11 @@ export const INVOICES_MESSAGES = {
     NO_LINE_ITEMS: 'Invoice must have at least one line item',
     AUTO_PAYMENT_CREATE_FAILED:
       'Unable to create linked payment record at this time',
+    REQUEST_NOT_ACCEPTED:
+      'An accepted service request is required before creating an invoice for this client',
+    JOB_NOT_FOUND: 'The linked job was not found',
+    JOB_CLIENT_MISMATCH: 'The job does not belong to the specified client',
+    JOB_AMOUNT_MISMATCH:
+      'Invoice would exceed the total uninvoiced amount for this job',
   },
 } as const;
