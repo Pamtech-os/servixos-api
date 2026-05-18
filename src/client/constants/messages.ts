@@ -89,6 +89,15 @@ export const CLIENT_MESSAGES = {
       UPDATED: 'Profile updated successfully',
     },
   },
+  REVIEW: {
+    SUCCESS: {
+      CREATED: 'Review submitted successfully',
+      FOUND: 'Review retrieved successfully',
+    },
+    ERROR: {
+      NOT_FOUND: 'Review not found',
+    },
+  },
   VALIDATION: {
     PROVIDER_ID_INVALID: 'Provider ID must be a valid Mongo ID',
     SIGNATURE_INVALID: 'Invalid signature format',

@@ -60,6 +60,7 @@ import { SchedulesModule } from './modules/schedules/schedules.module';
 import { TasksModule } from './modules/tasks/tasks.module';
 import { PdfModule } from './modules/pdf/pdf.module';
 import { StorageModule } from './modules/storage/storage.module';
+import { ReviewsModule } from './modules/reviews/reviews.module';
 
 @Module({
   imports: [
@@ -113,6 +114,7 @@ import { StorageModule } from './modules/storage/storage.module';
     ContractsModule,
     SchedulesModule,
     TasksModule,
+    ReviewsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

@@ -85,6 +85,7 @@ Some list endpoints include a `statistics` top-level key with aggregate counts/t
 | [api-roles-permissions.md](./api-roles-permissions.md) | Role CRUD + permission reference |
 | [api-employees.md](./api-employees.md) | Employee management + time tracking |
 | [api-export.md](./api-export.md) | Client data export |
+| [api-reviews.md](./api-reviews.md) | Job reviews — submit, retrieve, stats (both portals) |
 
 ---
 

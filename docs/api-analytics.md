@@ -358,11 +358,11 @@ Returns all dashboard summary statistics in a single request. Use this endpoint 
 None.
 
 **Notes**
-- All five internal aggregations run concurrently server-side — total response time equals the slowest sub-query, not the sum.
+- All six internal aggregations run concurrently server-side — total response time equals the slowest sub-query, not the sum.
 - `monthlyRevenue` is the sum of payments with a `paymentDate` that falls within the **current UTC calendar month**.
 - `activeClientsCount` counts clients who have at least one job with status `pending` or `in_progress`. Clients with only `completed` or `cancelled` jobs are not included.
 - `outstandingInvoices.totalAmount` is the sum of remaining balances (`totalAmount − amountPaid`) across all `pending` and `partial` invoices. It is not the sum of total invoice amounts.
-- `reviewCount` is always `0` — this field is a placeholder until the reviews module is built.
+- `reviewCount` is the total number of reviews submitted for this business across all jobs.
 - `recentActivity` returns the 5 most recent entries, sorted newest first.
 - `topClients` returns up to 5 clients sorted by total lifetime spend descending. Clients whose records have been deleted are excluded.
 - All monetary values (`monthlyRevenue`, `outstandingInvoices.totalAmount`, `topClients[].totalSpent`) are rounded to 2 decimal places.
@@ -391,7 +391,7 @@ x-signature: sha256=abc123...
       "count": 7,
       "totalAmount": 4350.00
     },
-    "reviewCount": 0,
+    "reviewCount": 28,
     "recentActivity": [
       {
         "id": "64f1a2b3c4d5e6f7a8b9c0d1",
@@ -704,7 +704,7 @@ interface DashboardStats {
   monthlyRevenue: number;         // current UTC month, 2 dp
   activeClientsCount: number;
   outstandingInvoices: OutstandingInvoices;
-  reviewCount: number;            // always 0 until reviews module ships
+  reviewCount: number;            // total reviews submitted for this business
   recentActivity: RecentActivity[];
   topClients: TopClient[];
 }
@@ -735,6 +735,6 @@ type DashboardResponse = ApiResponse<DashboardStats>;
 - [ ] Revenue `data` array is always the full requested month range (zero-filled). Safe to map directly to chart labels without gap-checking.
 - [ ] Jobs `data` array always has exactly 4 entries (all statuses). Safe to destructure by index or find by `status`.
 - [ ] Cache TTLs are server-side only — do not add client-side cache headers or you may serve data that is older than the server TTL.
-- [ ] `reviewCount` will always be `0` — hide or grey-out the reviews card in the UI until the reviews module ships.
+- [ ] `reviewCount` is live — use it for the reviews KPI card on the dashboard. For the full breakdown (average, distribution), call `GET /api/reviews/stats` separately.
 - [ ] `timestamp` in `recentActivity` is an ISO 8601 UTC string — convert to business-local time before display using the business's `timezone` field from the business profile.
 - [ ] For the traffic `conversionRate`, display `0.00%` with a tooltip explaining it tracks website-to-request conversions, until tracking data begins flowing.

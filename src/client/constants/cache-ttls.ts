@@ -11,4 +11,5 @@ export const CLIENT_CACHE_TTLS = {
   PROFILE: 300,
   CONTACTS: 600,
   ACTIVITIES: 120,
+  REVIEW_SINGLE: 300,
 } as const;
