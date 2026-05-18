@@ -632,7 +632,7 @@ export class RequestsService implements OnModuleInit {
         ).toISOString(),
         price: acceptedRequest.quotedPrice,
         notes: acceptedRequest.endDate
-          ? `Accepted schedule window ends on ${acceptedRequest.endDate.toISOString()}.`
+          ? `Accepted schedule window ends on ${acceptedRequest.endDate.toISOString().split('T')[0]}.`
           : undefined,
         timezone: business.timezone,
       };
