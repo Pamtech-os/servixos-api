@@ -3,6 +3,7 @@ export const PAYMENTS_MESSAGES = {
     ID_INVALID: 'Payment ID must be a valid Mongo ID',
     INVOICE_ID_INVALID: 'Invoice ID must be a valid Mongo ID',
     CLIENT_ID_INVALID: 'Client ID must be a valid Mongo ID',
+    JOB_ID_INVALID: 'Job ID must be a valid Mongo ID',
     PAYMENT_DATE_INVALID: 'Payment date must be a valid ISO 8601 date string',
     PAYMENT_MODE_INVALID:
       'Payment mode must be one of cash, bank_transfer, credit_card, cheque, mobile_money',

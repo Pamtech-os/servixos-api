@@ -201,6 +201,29 @@ export class PaymentsRepository {
     return !!row;
   }
 
+  async sumDirectPaymentsForJob(
+    businessId: Types.ObjectId,
+    jobId: Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<number> {
+    const query = this.paymentModel.aggregate<{ total: number }>([
+      {
+        $match: {
+          businessId,
+          jobId,
+          invoiceId: { $exists: false },
+          deletedAt: null,
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amount' } } },
+    ]);
+    if (session) query.session(session);
+
+    const [row] = await query.exec();
+
+    return row?.total ?? 0;
+  }
+
   async findAllForClient(
     businessId: Types.ObjectId,
     clientId: Types.ObjectId,

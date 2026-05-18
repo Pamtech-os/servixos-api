@@ -158,6 +158,7 @@ export class PaymentsService implements OnModuleInit {
             clientId: dto.clientId
               ? new Types.ObjectId(dto.clientId)
               : undefined,
+            jobId: dto.jobId ? new Types.ObjectId(dto.jobId) : undefined,
             paymentDate: localPaymentDate,
             paymentMode: dto.paymentMode,
             amount: toTwoDecimal(dto.amount),
@@ -431,6 +432,27 @@ export class PaymentsService implements OnModuleInit {
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
       await session.endSession();
+    }
+  }
+
+  /**
+   * Returns the total amount of standalone payments (no invoice) recorded directly against a job.
+   * Used by the deposit check in startJob to count direct job payments.
+   */
+  async getSumDirectForJob(
+    businessId: string,
+    jobId: string,
+  ): Promise<number | InternalServerErrorException> {
+    try {
+      return this.paymentsRepository.sumDirectPaymentsForJob(
+        new Types.ObjectId(businessId),
+        new Types.ObjectId(jobId),
+      );
+    } catch (error) {
+      this.logger.error(
+        `getSumDirectForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
   }
 
