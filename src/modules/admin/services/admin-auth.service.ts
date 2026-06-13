@@ -332,7 +332,6 @@ export class AdminAuthService {
   }
 
   private signAccessToken(adminId: string, email: string): string {
-    const payload: AdminJwtPayload = { sub: adminId, email, aud: 'admin' };
-    return this.jwtService.sign(payload);
+    return this.jwtService.sign({ sub: adminId, email });
   }
 }
