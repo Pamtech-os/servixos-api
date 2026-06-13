@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   InternalServerErrorException,
-  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -9,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { CLIENT_AUTH_MESSAGES } from 'src/common/constants/messages/client-auth.messages';
-import { hashValue } from 'src/common/utils/hash.util';
+import * as hashUtil from 'src/common/utils/hash.util';
 import { AuthRepository } from 'src/modules/auth/repositories/auth.repository';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { ClientsRepository } from 'src/modules/clients/repositories/clients.repository';
@@ -24,8 +23,6 @@ const BUSINESS_ID = new Types.ObjectId();
 
 describe('ClientAuthService', () => {
   let service: ClientAuthService;
-  let warnSpy: jest.SpyInstance;
-
   let mockConnection: {
     startSession: jest.Mock;
   };
@@ -61,16 +58,6 @@ describe('ClientAuthService', () => {
   let agendaService: {
     now: jest.Mock;
   };
-
-  beforeAll(() => {
-    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => {
-      // Suppress expected negative-path auth warnings in test output.
-    });
-  });
-
-  afterAll(() => {
-    warnSpy.mockRestore();
-  });
 
   beforeEach(() => {
     mockSession = {
@@ -127,10 +114,8 @@ describe('ClientAuthService', () => {
   });
 
   describe('login', () => {
-    let passwordHash: string;
-
-    beforeAll(async () => {
-      passwordHash = await hashValue('Password123');
+    beforeEach(() => {
+      jest.spyOn(hashUtil, 'compareValue').mockResolvedValue(true);
     });
 
     it('logs in a valid client user and returns session tokens', async () => {
@@ -138,7 +123,7 @@ describe('ClientAuthService', () => {
       usersRepository.findByEmail.mockResolvedValue({
         _id: USER_ID,
         email: 'client@test.local',
-        passwordHash,
+        passwordHash: 'mock-hash',
         userRole: UserRole.CLIENT,
         businessId: BUSINESS_ID,
         isActive: true,

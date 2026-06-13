@@ -48,6 +48,10 @@ export class ActivityLog {
   @prop()
   resourceType?: string;
 
+  /** Human-readable target for admin activity log views (e.g. "TechNova Inc.", "Invoice #INV-1042"). */
+  @prop({ type: String })
+  target?: string;
+
   /** Snapshot of request metadata for security auditing */
   @prop()
   ipAddress?: string;

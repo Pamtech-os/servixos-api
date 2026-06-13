@@ -111,6 +111,13 @@ export class Business {
   @prop({ default: 'UTC' })
   timezone: string;
 
+  /** Set by admin to block platform access for this business and all its staff. */
+  @prop({ default: false })
+  isSuspended: boolean;
+
+  @prop()
+  suspendedAt?: Date;
+
   @prop()
   deletedAt?: Date;
 }

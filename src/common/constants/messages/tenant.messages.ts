@@ -6,6 +6,7 @@ export const TENANT_MESSAGES = {
     // Intentionally generic — do not reveal whether the business is inactive
     // vs non-existent; both resolve to Access denied to prevent state enumeration
     INACTIVE: 'Access denied',
+    SUSPENDED: 'Access denied',
     // Intentionally generic — do not reveal token/header structure to callers
     MISMATCH: 'Access denied',
     // Intentionally generic — do not confirm deletion; treat as not found to

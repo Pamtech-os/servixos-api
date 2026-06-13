@@ -19,7 +19,7 @@ import { ClientAuthService } from './services/client-auth.service';
         secret:
           config.get<string>('CLIENT_JWT_SECRET') ||
           config.get<string>('JWT_SECRET') ||
-          'change-me-in-production',
+          '',
         signOptions: {
           expiresIn: (config.get<string>('JWT_EXPIRES_IN') ||
             '15m') as `${number}${'s' | 'm' | 'h' | 'd'}`,

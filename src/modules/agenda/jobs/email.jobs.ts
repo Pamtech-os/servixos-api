@@ -12,6 +12,11 @@ import {
 } from '../../email/templates/task-notification.template';
 import { taskOverdueTemplate } from '../../email/templates/task-overdue.template';
 import { teamAnnouncementTemplate } from '../../email/templates/team-announcement.template';
+import {
+  adminCustomEmailTemplate,
+  adminInvitationTemplate,
+} from '../../email/templates/admin-custom-email.template';
+import { adminOtpTemplate } from '../../email/templates/admin-otp.template';
 import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
@@ -85,6 +90,26 @@ export interface TeamAnnouncementJobData {
   description: string;
   authorName: string;
   createdAtLabel: string;
+}
+
+export interface AdminCustomEmailJobData {
+  to: string;
+  recipientName: string;
+  subject: string;
+  message: string;
+}
+
+export interface AdminInvitationJobData {
+  to: string;
+  firstName: string;
+  temporaryPassword: string;
+  loginUrl: string;
+}
+
+export interface AdminOtpJobData {
+  to: string;
+  firstName: string;
+  otp: string;
 }
 
 export function defineEmailJobs(
@@ -220,6 +245,38 @@ export function defineEmailJobs(
       name: assigneeName,
       subject: 'Task overdue — Servix OS',
       html: taskOverdueTemplate(assigneeName, taskTitle, dueDate),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_ADMIN_CUSTOM, async (job: Job) => {
+    const { to, recipientName, subject, message } = job.attrs
+      .data as AdminCustomEmailJobData;
+    await emailService.send({
+      to,
+      name: recipientName,
+      subject,
+      html: adminCustomEmailTemplate(recipientName, subject, message),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_ADMIN_INVITATION, async (job: Job) => {
+    const { to, firstName, temporaryPassword, loginUrl } = job.attrs
+      .data as AdminInvitationJobData;
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Welcome to Servix OS — Your Account is Ready',
+      html: adminInvitationTemplate(firstName, temporaryPassword, loginUrl),
+    });
+  });
+
+  agenda.define(JOBS.EMAIL_ADMIN_OTP, async (job: Job) => {
+    const { to, firstName, otp } = job.attrs.data as AdminOtpJobData;
+    await emailService.send({
+      to,
+      name: firstName,
+      subject: 'Your Admin Login OTP — Servix OS',
+      html: adminOtpTemplate(firstName, otp),
     });
   });
 

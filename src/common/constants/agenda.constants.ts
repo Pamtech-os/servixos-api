@@ -19,6 +19,9 @@ export const JOBS = {
   TASK_OVERDUE_NOTIFICATION: 'task:overdue:notification',
   CLIENT_REQUESTS_CLEANUP: 'client:requests:cleanup',
   REVIEW_SUBMITTED: 'review:submitted',
+  EMAIL_ADMIN_CUSTOM: 'email:admin:custom',
+  EMAIL_ADMIN_INVITATION: 'email:admin:invitation',
+  EMAIL_ADMIN_OTP: 'email:admin:otp',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];
