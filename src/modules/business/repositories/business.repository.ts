@@ -42,6 +42,19 @@ export class BusinessRepository {
       .exec();
   }
 
+  async findByName(name: string): Promise<Business | null> {
+    return this.businessModel
+      .findOne({
+        name: new RegExp(
+          `^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`,
+          'i',
+        ),
+        deletedAt: null,
+      })
+      .lean<Business>()
+      .exec();
+  }
+
   async findSubdomainsStartingWith(base: string): Promise<string[]> {
     const docs = await this.businessModel
       .find(

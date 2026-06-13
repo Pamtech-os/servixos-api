@@ -44,7 +44,7 @@ import { ClientReviewsService } from './services/client-reviews.service';
         secret:
           config.get<string>('CLIENT_JWT_SECRET') ||
           config.get<string>('JWT_SECRET') ||
-          'change-me-in-production',
+          '',
       }),
     }),
     UsersModule,

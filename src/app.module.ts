@@ -61,6 +61,8 @@ import { TasksModule } from './modules/tasks/tasks.module';
 import { PdfModule } from './modules/pdf/pdf.module';
 import { StorageModule } from './modules/storage/storage.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
+import { AdminModule } from './modules/admin/admin.module';
+import { SupportModule } from './modules/support/support.module';
 
 @Module({
   imports: [
@@ -115,6 +117,8 @@ import { ReviewsModule } from './modules/reviews/reviews.module';
     SchedulesModule,
     TasksModule,
     ReviewsModule,
+    AdminModule,
+    SupportModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

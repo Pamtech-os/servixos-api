@@ -41,6 +41,7 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     MAILTRAP_TOKEN: 'xxxxxxxxxxxxxxxxxx',
     MAIL_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
     STORAGE_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
+    ADMIN_DEFAULT_PASSWORD: 'xxxxxxxxxxxxxxxxxx',
   };
 
   const missing = Object.entries(required)

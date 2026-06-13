@@ -52,6 +52,10 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.DELETED);
     }
 
+    if (business.isSuspended) {
+      throw new ForbiddenException(TENANT_MESSAGES.ERROR.SUSPENDED);
+    }
+
     if (
       business.subscription.status === SubscriptionStatus.CANCELED ||
       business.subscription.status === SubscriptionStatus.LOCKED

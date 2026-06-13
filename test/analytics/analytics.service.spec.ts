@@ -221,14 +221,18 @@ describe('AnalyticsService', () => {
     });
 
     it('should fill in zero-revenue months on cache miss', async () => {
-      // Arrange — repository returns data for only one month
+      // Arrange — supply data only for the previous month so the current month is zero-filled
+      const now = new Date();
+      const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const prevMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+
       redis.get.mockResolvedValue(null);
       redis.set.mockResolvedValue(undefined);
       businessRepo.findById.mockResolvedValue(
         makeBusiness({ timezone: 'UTC' }),
       );
       analyticsRepo.getRevenueByMonth.mockResolvedValue([
-        { month: '2026-04', revenue: 3000, count: 5 },
+        { month: prevMonth, revenue: 3000, count: 5 },
       ]);
 
       // Act — request 2 months
@@ -240,7 +244,7 @@ describe('AnalyticsService', () => {
 
       expect(result).toHaveLength(2);
       const months = (result as { month: string }[]).map((r) => r.month);
-      expect(months).toContain('2026-04');
+      expect(months).toContain(prevMonth);
     });
 
     it('should return NotFoundException when business is not found', async () => {
