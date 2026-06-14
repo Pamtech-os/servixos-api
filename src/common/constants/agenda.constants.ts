@@ -22,6 +22,8 @@ export const JOBS = {
   EMAIL_ADMIN_CUSTOM: 'email:admin:custom',
   EMAIL_ADMIN_INVITATION: 'email:admin:invitation',
   EMAIL_ADMIN_OTP: 'email:admin:otp',
+  REPORT_GENERATE: 'report:generate',
+  REPORT_SCHEDULE_TICK: 'report:schedule:tick',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

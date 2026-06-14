@@ -9,4 +9,5 @@ export const STORAGE_FOLDERS = {
   invoices: 'servixos/invoices',
   contracts: 'servixos/contracts',
   clientExports: 'servixos/client-exports',
+  adminReports: 'servixos/admin-reports',
 } as const;
