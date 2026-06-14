@@ -24,7 +24,6 @@ export const ADMIN_MESSAGES = {
     LOGIN: 'Login successful',
     LOGOUT: 'Logged out successfully',
     DASHBOARD: 'Dashboard data retrieved successfully',
-    RECENT_ACTIVITIES: 'Recent activities retrieved successfully',
     USERS_RETRIEVED: 'Users retrieved successfully',
     USER_RETRIEVED: 'User retrieved successfully',
     USER_SUSPENDED: 'User suspended successfully',

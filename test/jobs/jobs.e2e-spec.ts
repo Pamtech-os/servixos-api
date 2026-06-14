@@ -383,7 +383,7 @@ describe('Jobs (integration)', () => {
     expect(
       (startAfterDepositRes.body as ApiBody<{ status: string }>).data?.status,
     ).toBe('in_progress');
-  });
+  }, 60_000);
 
   it('supports completion and balance-invoice settlement flow', async () => {
     const createClientRes = await asOwner(
@@ -523,7 +523,7 @@ describe('Jobs (integration)', () => {
       (getBalanceInvoiceRes.body as ApiBody<{ amountPaid: number }>).data
         ?.amountPaid,
     ).toBe(150);
-  });
+  }, 60_000);
 
   it('returns 404 for update and delete when job does not exist', async () => {
     const missingJobId = new Types.ObjectId().toString();

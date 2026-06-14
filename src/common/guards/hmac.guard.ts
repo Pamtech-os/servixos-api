@@ -48,7 +48,12 @@ export class HmacGuard implements CanActivate {
     }
 
     // Verify the client token exists and hasn't expired
-    const stored = await this.redisService.get(`client_token:${clientToken}`);
+    let stored: string | null;
+    try {
+      stored = await this.redisService.get(`client_token:${clientToken}`);
+    } catch {
+      throw new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
     if (!stored) {
       throw new UnauthorizedException(API_KEY_MESSAGES.ERROR.EXPIRED);
     }

@@ -19,6 +19,20 @@ interface MonthlyCountBucket {
   count: number;
 }
 
+export interface DailyRevenueBucket {
+  year: number;
+  month: number;
+  day: number;
+  total: number;
+}
+
+export interface DailyCountBucket {
+  year: number;
+  month: number;
+  day: number;
+  count: number;
+}
+
 export interface RecentActivityItem {
   action: string;
   category: string;
@@ -46,29 +60,37 @@ export class AdminDashboardRepository {
     });
   }
 
-  async countTotalUsers(): Promise<number> {
-    return this.userModel.countDocuments({ deletedAt: null }).exec();
+  /** Count users. Pass `from` to restrict to registrations within a period. */
+  async countTotalUsers(from?: Date): Promise<number> {
+    const filter: Record<string, unknown> = { deletedAt: null };
+    if (from) filter.createdAt = { $gte: from };
+    return this.userModel.countDocuments(filter).exec();
   }
 
-  async countActiveBusinesses(): Promise<number> {
-    return this.businessModel.countDocuments({ deletedAt: null }).exec();
+  /** Count businesses. Pass `from` to restrict to registrations within a period. */
+  async countActiveBusinesses(from?: Date): Promise<number> {
+    const filter: Record<string, unknown> = { deletedAt: null };
+    if (from) filter.createdAt = { $gte: from };
+    return this.businessModel.countDocuments(filter).exec();
   }
 
-  async sumMonthlyRevenue(): Promise<number> {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  /** Sum payment amounts between `from` and `to`. */
+  async sumRevenue(from: Date, to: Date): Promise<number> {
     const result = await this.paymentModel
-      .aggregate<{
-        total: number;
-      }>([
-        { $match: { paymentDate: { $gte: start }, deletedAt: null } },
+      .aggregate<{ total: number }>([
+        {
+          $match: {
+            paymentDate: { $gte: from, $lte: to },
+            deletedAt: null,
+          },
+        },
         { $group: { _id: null, total: { $sum: '$amount' } } },
       ])
       .exec();
     return result[0]?.total ?? 0;
   }
 
-  /** Revenue grouped by month for the last N months. */
+  /** Revenue grouped by month for the last N months (default chart). */
   async revenueByMonth(months: number): Promise<MonthlyRevenueBucket[]> {
     const since = new Date();
     since.setMonth(since.getMonth() - months + 1);
@@ -100,7 +122,41 @@ export class AdminDashboardRepository {
       .exec();
   }
 
-  /** New business registrations grouped by month for the last N months. */
+  /** Revenue grouped by day within an explicit date range (filtered chart). */
+  async revenueByDay(from: Date, to: Date): Promise<DailyRevenueBucket[]> {
+    return this.paymentModel
+      .aggregate<DailyRevenueBucket>([
+        {
+          $match: {
+            paymentDate: { $gte: from, $lte: to },
+            deletedAt: null,
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$paymentDate' },
+              month: { $month: '$paymentDate' },
+              day: { $dayOfMonth: '$paymentDate' },
+            },
+            total: { $sum: '$amount' },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            year: '$_id.year',
+            month: '$_id.month',
+            day: '$_id.day',
+            total: 1,
+          },
+        },
+        { $sort: { year: 1, month: 1, day: 1 } },
+      ])
+      .exec();
+  }
+
+  /** New business registrations grouped by month for the last N months (default chart). */
   async businessCountByMonth(months: number): Promise<MonthlyCountBucket[]> {
     const since = new Date();
     since.setMonth(since.getMonth() - months + 1);
@@ -132,9 +188,48 @@ export class AdminDashboardRepository {
       .exec();
   }
 
-  async findRecentActivities(limit: number): Promise<RecentActivityItem[]> {
+  /** New business registrations grouped by day within an explicit date range (filtered chart). */
+  async businessCountByDay(from: Date, to: Date): Promise<DailyCountBucket[]> {
+    return this.businessModel
+      .aggregate<DailyCountBucket>([
+        {
+          $match: {
+            createdAt: { $gte: from, $lte: to },
+            deletedAt: null,
+          },
+        },
+        {
+          $group: {
+            _id: {
+              year: { $year: '$createdAt' },
+              month: { $month: '$createdAt' },
+              day: { $dayOfMonth: '$createdAt' },
+            },
+            count: { $sum: 1 },
+          },
+        },
+        {
+          $project: {
+            _id: 0,
+            year: '$_id.year',
+            month: '$_id.month',
+            day: '$_id.day',
+            count: 1,
+          },
+        },
+        { $sort: { year: 1, month: 1, day: 1 } },
+      ])
+      .exec();
+  }
+
+  async findRecentActivities(
+    limit: number,
+    from?: Date,
+  ): Promise<RecentActivityItem[]> {
+    const filter: Record<string, unknown> = {};
+    if (from) filter.createdAt = { $gte: from };
     return this.activityLogModel
-      .find()
+      .find(filter)
       .sort({ createdAt: -1 })
       .limit(limit)
       .select({ action: 1, category: 1, actorName: 1, createdAt: 1 })

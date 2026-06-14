@@ -56,9 +56,13 @@ describe('AdminUsersService', () => {
   beforeEach(() => {
     adminUsersRepo = {
       findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
-      getStats: jest
-        .fn()
-        .mockResolvedValue({ total: 0, active: 0, suspended: 0 }),
+      getStats: jest.fn().mockResolvedValue({
+        totalUsers: 0,
+        activeUsers: 0,
+        businessOwners: 0,
+        teamMembers: 0,
+        clients: 0,
+      }),
       findByIdWithBusiness: jest.fn(),
       updateById: jest.fn().mockResolvedValue(undefined),
       findManyByIds: jest.fn().mockResolvedValue([]),
@@ -93,16 +97,21 @@ describe('AdminUsersService', () => {
       const users = [makeUser()];
       adminUsersRepo.findAll.mockResolvedValue({ data: users, total: 1 });
       adminUsersRepo.getStats.mockResolvedValue({
-        total: 1,
-        active: 1,
-        suspended: 0,
+        totalUsers: 1,
+        activeUsers: 1,
+        businessOwners: 0,
+        teamMembers: 0,
+        clients: 0,
       });
 
       // Act
       const result = await service.listUsers({ page: 1, limit: 10 });
 
       // Assert
-      expect(result).toMatchObject({ stats: { total: 1, active: 1 }, users });
+      expect(result).toMatchObject({
+        stats: { totalUsers: 1, activeUsers: 1, clients: 0 },
+        users,
+      });
       expect(result).toHaveProperty('meta.total', 1);
     });
 

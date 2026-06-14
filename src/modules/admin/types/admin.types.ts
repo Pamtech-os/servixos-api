@@ -28,6 +28,8 @@ export interface AdminTokenData {
   accessToken: string;
 }
 
+export type DashboardPeriod = 'today' | 'last7days' | 'last30days';
+
 export interface MonthlyDataPoint {
   label: string;
   value: number;
@@ -39,6 +41,7 @@ export interface DashboardStats {
   activeBusinesses: number;
   revenueHistory: MonthlyDataPoint[];
   growthHistory: MonthlyDataPoint[];
+  recentActivities: RecentActivityEntry[];
 }
 
 export interface RecentActivityEntry {
