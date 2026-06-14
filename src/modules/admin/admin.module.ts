@@ -12,6 +12,7 @@ import { AdminSubscriptionsController } from './controllers/admin-subscriptions.
 import { AdminActivityLogsController } from './controllers/admin-activity-logs.controller';
 import { AdminRolesController } from './controllers/admin-roles.controller';
 import { AdminSupportController } from './controllers/admin-support.controller';
+import { AdminReportsController } from './controllers/admin-reports.controller';
 import { AdminRepository } from './repositories/admin.repository';
 import { AdminAuthRepository } from './repositories/admin-auth.repository';
 import { AdminDashboardRepository } from './repositories/admin-dashboard.repository';
@@ -21,6 +22,7 @@ import { AdminSubscriptionsRepository } from './repositories/admin-subscriptions
 import { AdminActivityLogsRepository } from './repositories/admin-activity-logs.repository';
 import { AdminRolesRepository } from './repositories/admin-roles.repository';
 import { AdminSupportRepository } from './repositories/admin-support.repository';
+import { AdminReportsRepository } from './repositories/admin-reports.repository';
 import { AdminAuthService } from './services/admin-auth.service';
 import { AdminDashboardService } from './services/admin-dashboard.service';
 import { AdminSeederService } from './services/admin-seeder.service';
@@ -30,6 +32,7 @@ import { AdminSubscriptionsService } from './services/admin-subscriptions.servic
 import { AdminActivityLogsService } from './services/admin-activity-logs.service';
 import { AdminRolesService } from './services/admin-roles.service';
 import { AdminSupportService } from './services/admin-support.service';
+import { AdminReportsService } from './services/admin-reports.service';
 import { JwtAdminStrategy } from './strategies/jwt-admin.strategy';
 
 @Module({
@@ -59,6 +62,7 @@ import { JwtAdminStrategy } from './strategies/jwt-admin.strategy';
     AdminActivityLogsController,
     AdminRolesController,
     AdminSupportController,
+    AdminReportsController,
   ],
   providers: [
     AdminRepository,
@@ -70,6 +74,7 @@ import { JwtAdminStrategy } from './strategies/jwt-admin.strategy';
     AdminActivityLogsRepository,
     AdminRolesRepository,
     AdminSupportRepository,
+    AdminReportsRepository,
     AdminAuthService,
     AdminDashboardService,
     AdminSeederService,
@@ -79,6 +84,7 @@ import { JwtAdminStrategy } from './strategies/jwt-admin.strategy';
     AdminActivityLogsService,
     AdminRolesService,
     AdminSupportService,
+    AdminReportsService,
     JwtAdminStrategy,
   ],
 })
