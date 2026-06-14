@@ -17,7 +17,7 @@ interface MockRedisClient {
   hset: jest.Mock;
   hdel: jest.Mock;
   hgetall: jest.Mock;
-  disconnect: jest.Mock;
+  quit: jest.Mock;
 }
 
 describe('RedisService', () => {
@@ -40,7 +40,7 @@ describe('RedisService', () => {
       hset: jest.fn(),
       hdel: jest.fn(),
       hgetall: jest.fn(),
-      disconnect: jest.fn(),
+      quit: jest.fn().mockResolvedValue(undefined),
     };
 
     service = new RedisService(asMock<ConfigService>({}));
@@ -367,14 +367,14 @@ describe('RedisService', () => {
   // ─── lifecycle ─────────────────────────────────────────────────────────────
 
   describe('onModuleDestroy', () => {
-    it('should disconnect the Redis client on module teardown', () => {
+    it('should quit the Redis client on module teardown', () => {
       // Arrange — client already set via beforeEach
 
       // Act
       service.onModuleDestroy();
 
       // Assert
-      expect(mockClient.disconnect).toHaveBeenCalled();
+      expect(mockClient.quit).toHaveBeenCalled();
     });
   });
 });

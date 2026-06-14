@@ -29,6 +29,7 @@ export interface AdminUserStats {
   activeUsers: number;
   businessOwners: number;
   teamMembers: number;
+  clients: number;
 }
 
 interface UserListFilters {
@@ -161,6 +162,7 @@ export class AdminUsersRepository {
       active: { count: number }[];
       owners: { count: number }[];
       team: { count: number }[];
+      clients: { count: number }[];
     }
 
     const results = await this.userModel
@@ -182,6 +184,10 @@ export class AdminUsersRepository {
               },
               { $count: 'count' },
             ],
+            clients: [
+              { $match: { userRole: UserRole.CLIENT } },
+              { $count: 'count' },
+            ],
           },
         },
       ])
@@ -194,6 +200,7 @@ export class AdminUsersRepository {
       activeUsers: r.active[0]?.count ?? 0,
       businessOwners: r.owners[0]?.count ?? 0,
       teamMembers: r.team[0]?.count ?? 0,
+      clients: r.clients[0]?.count ?? 0,
     };
   }
 

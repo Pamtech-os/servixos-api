@@ -56,7 +56,7 @@ export class AdminBusinessesRepository {
     filters: BusinessListFilters,
     pagination: PaginationParams,
   ): Promise<{ data: AdminBusinessListItem[]; total: number }> {
-    const matchStage = this.buildMatchStage(filters);
+    const matchStage = await this.buildMatchStage(filters);
 
     const pipeline: PipelineStage[] = [
       { $match: { deletedAt: null, ...matchStage } },
@@ -220,14 +220,39 @@ export class AdminBusinessesRepository {
     );
   }
 
-  private buildMatchStage(
+  private async buildMatchStage(
     filters: BusinessListFilters,
-  ): Record<string, unknown> {
+  ): Promise<Record<string, unknown>> {
     const match: Record<string, unknown> = {};
 
     if (filters.search) {
       const regex = new RegExp(filters.search, 'i');
-      match['$or'] = [{ name: regex }, { subdomain: regex }];
+      // Find owner IDs matching email, first name, last name, or full name
+      const ownerIds = await this.userModel
+        .find({
+          $or: [
+            { email: regex },
+            { firstName: regex },
+            { lastName: regex },
+            {
+              $expr: {
+                $regexMatch: {
+                  input: { $concat: ['$firstName', ' ', '$lastName'] },
+                  regex: filters.search,
+                  options: 'i',
+                },
+              },
+            },
+          ],
+        })
+        .distinct('_id')
+        .exec();
+
+      match['$or'] = [
+        { name: regex },
+        { subdomain: regex },
+        { ownerId: { $in: ownerIds } },
+      ];
     }
 
     if (filters.status && filters.status !== AdminBusinessStatus.ALL) {
