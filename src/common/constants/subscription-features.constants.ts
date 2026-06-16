@@ -11,6 +11,16 @@ export const PLAN_ORDER: Record<SubscriptionPlan, number> = {
 };
 
 export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
+  // ── Starter (baseline — all plans inherit these) ───────────────────────────
+  'jobs.manage': SubscriptionPlan.STARTER,
+  'invoices.manage': SubscriptionPlan.STARTER,
+  'clients.manage': SubscriptionPlan.STARTER,
+  'ai.business-setup': SubscriptionPlan.STARTER,
+  'ai.insights': SubscriptionPlan.STARTER,
+  'ai.suggestions': SubscriptionPlan.STARTER,
+  'support.center': SubscriptionPlan.STARTER,
+
+  // ── Growth ─────────────────────────────────────────────────────────────────
   // Clients
   'clients.export': SubscriptionPlan.GROWTH,
   'clients.messaging': SubscriptionPlan.GROWTH,
@@ -29,19 +39,13 @@ export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
   'tasks.all': SubscriptionPlan.GROWTH,
   'team.messaging': SubscriptionPlan.GROWTH,
 
+  // AI
+  'ai.pricing-assistant': SubscriptionPlan.GROWTH,
+  'ai.contract-generator': SubscriptionPlan.GROWTH,
+
   // Analytics
   'analytics.revenue': SubscriptionPlan.GROWTH,
   'analytics.traffic': SubscriptionPlan.GROWTH,
-
-  // Roles
-  'roles.custom': SubscriptionPlan.PRO,
-
-  // Website
-  'website.custom-domain': SubscriptionPlan.PRO,
-
-  // AI
-  'ai.insights': SubscriptionPlan.PRO,
-  'ai.advisor': SubscriptionPlan.PRO,
 
   // Files & Contracts
   'files.all': SubscriptionPlan.GROWTH,
@@ -49,6 +53,11 @@ export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
 
   // Activity Logs
   'activity-logs.view': SubscriptionPlan.GROWTH,
+
+  // ── Pro ────────────────────────────────────────────────────────────────────
+  'roles.custom': SubscriptionPlan.PRO,
+  'website.custom-domain': SubscriptionPlan.PRO,
+  'ai.advisor': SubscriptionPlan.PRO,
 } as const;
 
 export type FeatureKey = keyof typeof FEATURE_PLAN_MAP;
@@ -68,17 +77,19 @@ export function getFeaturesForPlan(plan: SubscriptionPlan): FeatureKey[] {
  */
 export const PLAN_LIMITS = {
   [SubscriptionPlan.STARTER]: {
-    maxClients: 25,
-    maxJobsPerMonth: 20,
-    maxInvoicesPerMonth: 20,
+    maxClients: 10,
+    maxJobsPerMonth: 10,
+    maxInvoicesPerMonth: 10,
     maxEmployees: 0,
+    maxAiSuggestions: 5,
     activityLogDays: 0,
   },
   [SubscriptionPlan.GROWTH]: {
-    maxClients: 250,
-    maxJobsPerMonth: 200,
-    maxInvoicesPerMonth: 200,
+    maxClients: 50,
+    maxJobsPerMonth: Infinity,
+    maxInvoicesPerMonth: 50,
     maxEmployees: 10,
+    maxAiSuggestions: 50,
     activityLogDays: 30,
   },
   [SubscriptionPlan.PRO]: {
@@ -86,6 +97,7 @@ export const PLAN_LIMITS = {
     maxJobsPerMonth: Infinity,
     maxInvoicesPerMonth: Infinity,
     maxEmployees: Infinity,
+    maxAiSuggestions: Infinity,
     activityLogDays: 365,
   },
 } as const;

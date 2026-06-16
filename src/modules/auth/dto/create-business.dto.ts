@@ -1,6 +1,8 @@
 import {
   IsArray,
   IsEmail,
+  IsEnum,
+  IsIn,
   IsMongoId,
   IsNotEmpty,
   IsOptional,
@@ -10,6 +12,7 @@ import {
 import { Transform } from 'class-transformer';
 import { IsCleanBusinessDescription } from 'src/common/validators/clean-business-description.validator';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
+import { SubscriptionPlan } from 'src/modules/business/schemas/business.schema';
 
 export class CreateBusinessDto {
   @IsEmail({}, { message: AUTH_MESSAGES.VALIDATION.EMAIL_INVALID })
@@ -60,4 +63,14 @@ export class CreateBusinessDto {
     typeof value === 'string' ? value.trim() : value,
   )
   timezone: string;
+
+  @IsEnum(SubscriptionPlan, { message: 'Invalid subscription plan' })
+  @IsOptional()
+  plan?: SubscriptionPlan;
+
+  @IsIn(['monthly', 'yearly'], {
+    message: 'Billing interval must be monthly or yearly',
+  })
+  @IsOptional()
+  billingInterval?: 'monthly' | 'yearly';
 }

@@ -1,6 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { json, urlencoded } from 'express';
+import { json, raw, urlencoded } from 'express';
 import helmet from 'helmet';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
@@ -42,6 +42,14 @@ function validateEnvironment(config: ConfigService, logger: AppLogger): void {
     MAIL_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
     STORAGE_PROVIDER: 'xxxxxxxxxxxxxxxxxx',
     ADMIN_DEFAULT_PASSWORD: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_SECRET_KEY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_WEBHOOK_SECRET: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_STARTER_MONTHLY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_STARTER_YEARLY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_GROWTH_MONTHLY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_GROWTH_YEARLY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_PRO_MONTHLY: 'xxxxxxxxxxxxxxxxxx',
+    STRIPE_PRICE_PRO_YEARLY: 'xxxxxxxxxxxxxxxxxx',
   };
 
   const missing = Object.entries(required)
@@ -102,6 +110,10 @@ async function bootstrap(): Promise<void> {
   // Multipart/form-data (file uploads) is handled per-route via
   // @UseInterceptors(FileInterceptor('field')) which uses multer internally.
   const uploadLimit = config.get<string>('UPLOAD_SIZE_LIMIT') ?? '50mb';
+
+  // Raw body for Stripe webhook signature verification — must come BEFORE json()
+  app.use('/api/stripe/webhook', raw({ type: 'application/json' }));
+
   app.use(json({ limit: uploadLimit }));
   app.use(urlencoded({ extended: true, limit: uploadLimit }));
 

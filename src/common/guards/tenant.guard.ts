@@ -10,6 +10,7 @@ import { Reflector } from '@nestjs/core';
 import { Types } from 'mongoose';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
+import { ALLOW_LOCKED_KEY } from '../decorators/allow-locked.decorator';
 import { TENANT_MESSAGES } from '../constants/messages/tenant.messages';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { JwtUser } from '../decorators/current-user.decorator';
@@ -56,11 +57,18 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.SUSPENDED);
     }
 
-    if (
-      business.subscription.status === SubscriptionStatus.CANCELED ||
-      business.subscription.status === SubscriptionStatus.LOCKED
-    ) {
+    if (business.subscription.status === SubscriptionStatus.CANCELED) {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.INACTIVE);
+    }
+
+    if (business.subscription.status === SubscriptionStatus.LOCKED) {
+      const allowLocked = this.reflector.getAllAndOverride<boolean>(
+        ALLOW_LOCKED_KEY,
+        [context.getHandler(), context.getClass()],
+      );
+      if (!allowLocked) {
+        throw new ForbiddenException(TENANT_MESSAGES.ERROR.INACTIVE);
+      }
     }
 
     if (req.user.businessId !== businessId) {
