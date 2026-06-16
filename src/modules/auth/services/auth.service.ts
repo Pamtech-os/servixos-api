@@ -735,6 +735,21 @@ export class AuthService {
           ),
         );
 
+      // Async: create Stripe customer + subscription with 30-day trial
+      void this.agendaService
+        .now(JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER, {
+          businessId: businessId.toString(),
+          email: user.email,
+          name: dto.businessName,
+          plan: dto.plan ?? SubscriptionPlan.STARTER,
+          billingInterval: dto.billingInterval ?? 'monthly',
+        })
+        .catch((err: unknown) =>
+          this.logger.error(
+            `Job "${JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER}" failed to enqueue: ${err instanceof Error ? err.stack : String(err)}`,
+          ),
+        );
+
       return {
         accessToken,
         refreshToken,
@@ -789,6 +804,7 @@ export class AuthService {
             status: SubscriptionStatus.TRIALING,
             trialEndsAt,
             features: getFeaturesForPlan(SubscriptionPlan.STARTER),
+            hasPaymentMethod: false,
           },
         },
         session,

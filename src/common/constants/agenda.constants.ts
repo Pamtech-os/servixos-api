@@ -24,6 +24,23 @@ export const JOBS = {
   EMAIL_ADMIN_OTP: 'email:admin:otp',
   REPORT_GENERATE: 'report:generate',
   REPORT_SCHEDULE_TICK: 'report:schedule:tick',
+  // Subscription & billing
+  SUBSCRIPTION_SETUP_STRIPE_CUSTOMER: 'subscription:setup:stripe:customer',
+  SUBSCRIPTION_PAYMENT_SUCCEEDED: 'subscription:payment:succeeded',
+  SUBSCRIPTION_PAYMENT_FAILED: 'subscription:payment:failed',
+  SUBSCRIPTION_LOCK_ACCOUNT: 'subscription:lock:account',
+  SUBSCRIPTION_GRACE_PERIOD_REMINDER: 'subscription:grace:reminder',
+  SUBSCRIPTION_TRIAL_ENDING: 'subscription:trial:ending',
+  SUBSCRIPTION_CANCELED: 'subscription:canceled',
+  EMAIL_SUBSCRIPTION_ACTIVATED: 'email:subscription:activated',
+  EMAIL_SUBSCRIPTION_UPGRADED: 'email:subscription:upgraded',
+  EMAIL_TRIAL_ENDING: 'email:trial:ending',
+  EMAIL_PAYMENT_FAILED: 'email:payment:failed',
+  EMAIL_GRACE_PERIOD_REMINDER: 'email:grace:reminder',
+  EMAIL_ACCOUNT_LOCKED: 'email:account:locked',
+  SUBSCRIPTION_CARD_SAVED: 'subscription:card:saved',
+  SUBSCRIPTION_ACTION_REQUIRED: 'subscription:action:required',
+  EMAIL_ACTION_REQUIRED: 'email:action:required',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

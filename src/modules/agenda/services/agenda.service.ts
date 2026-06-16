@@ -73,4 +73,9 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
   define(jobName: AgendaJobName, processor: (job: Job) => Promise<void>): void {
     this.agenda.define(jobName, processor);
   }
+
+  /** Cancels all scheduled jobs matching the given query. Returns count of cancelled jobs. */
+  async cancel(query: Record<string, unknown>): Promise<number> {
+    return (await this.agenda.cancel(query)) ?? 0;
+  }
 }

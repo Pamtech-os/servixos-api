@@ -65,4 +65,21 @@ export class BusinessRepository {
       .exec();
     return docs.map((d) => d.subdomain).filter((s): s is string => !!s);
   }
+
+  async updateById(
+    id: string,
+    update: Record<string, unknown>,
+    session?: import('mongoose').ClientSession,
+  ): Promise<void> {
+    await this.businessModel
+      .updateOne({ _id: id }, { $set: update }, { session })
+      .exec();
+  }
+
+  async findByStripeCustomerId(customerId: string): Promise<Business | null> {
+    return this.businessModel
+      .findOne({ stripeCustomerId: customerId })
+      .lean<Business>()
+      .exec();
+  }
 }

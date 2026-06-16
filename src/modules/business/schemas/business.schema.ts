@@ -52,12 +52,17 @@ class Subscription {
    */
   @prop({ type: () => String, default: [] }, PropType.ARRAY)
   features: string[];
+
+  /** True once a payment method has been confirmed via setup_intent.succeeded webhook. */
+  @prop({ default: false })
+  hasPaymentMethod: boolean;
 }
 
 export { Subscription };
 
 @index({ ownerId: 1 }, { unique: true })
 @index({ subdomain: 1 }, { unique: true, sparse: true })
+@index({ stripeCustomerId: 1 }, { unique: true, sparse: true })
 @modelOptions({ schemaOptions: { collection: 'businesses', timestamps: true } })
 export class Business {
   _id: Types.ObjectId;
@@ -117,6 +122,22 @@ export class Business {
 
   @prop()
   suspendedAt?: Date;
+
+  /** Stripe Customer ID — set async after business creation */
+  @prop({ trim: true })
+  stripeCustomerId?: string;
+
+  /** Active Stripe Subscription ID */
+  @prop({ trim: true })
+  stripeSubscriptionId?: string;
+
+  /** Active Stripe Price ID (reflects current plan + billing interval) */
+  @prop({ trim: true })
+  stripePriceId?: string;
+
+  /** Billing cycle chosen at subscription — 'monthly' or 'yearly' */
+  @prop({ enum: ['monthly', 'yearly'], default: 'monthly' })
+  billingInterval?: string;
 
   @prop()
   deletedAt?: Date;

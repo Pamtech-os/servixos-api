@@ -63,6 +63,8 @@ import { StorageModule } from './modules/storage/storage.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { SupportModule } from './modules/support/support.module';
+import { StripeModule } from './modules/stripe/stripe.module';
+import { SubscriptionModule } from './modules/subscription/subscription.module';
 
 @Module({
   imports: [
@@ -119,6 +121,8 @@ import { SupportModule } from './modules/support/support.module';
     ReviewsModule,
     AdminModule,
     SupportModule,
+    StripeModule,
+    SubscriptionModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

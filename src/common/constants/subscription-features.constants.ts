@@ -68,17 +68,19 @@ export function getFeaturesForPlan(plan: SubscriptionPlan): FeatureKey[] {
  */
 export const PLAN_LIMITS = {
   [SubscriptionPlan.STARTER]: {
-    maxClients: 25,
-    maxJobsPerMonth: 20,
-    maxInvoicesPerMonth: 20,
+    maxClients: 10,
+    maxJobsPerMonth: 10,
+    maxInvoicesPerMonth: 10,
     maxEmployees: 0,
+    maxAiSuggestions: 5,
     activityLogDays: 0,
   },
   [SubscriptionPlan.GROWTH]: {
-    maxClients: 250,
-    maxJobsPerMonth: 200,
-    maxInvoicesPerMonth: 200,
+    maxClients: 50,
+    maxJobsPerMonth: Infinity,
+    maxInvoicesPerMonth: 50,
     maxEmployees: 10,
+    maxAiSuggestions: 50,
     activityLogDays: 30,
   },
   [SubscriptionPlan.PRO]: {
@@ -86,6 +88,7 @@ export const PLAN_LIMITS = {
     maxJobsPerMonth: Infinity,
     maxInvoicesPerMonth: Infinity,
     maxEmployees: Infinity,
+    maxAiSuggestions: Infinity,
     activityLogDays: 365,
   },
 } as const;
