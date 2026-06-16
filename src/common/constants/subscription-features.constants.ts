@@ -11,6 +11,16 @@ export const PLAN_ORDER: Record<SubscriptionPlan, number> = {
 };
 
 export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
+  // ── Starter (baseline — all plans inherit these) ───────────────────────────
+  'jobs.manage': SubscriptionPlan.STARTER,
+  'invoices.manage': SubscriptionPlan.STARTER,
+  'clients.manage': SubscriptionPlan.STARTER,
+  'ai.business-setup': SubscriptionPlan.STARTER,
+  'ai.insights': SubscriptionPlan.STARTER,
+  'ai.suggestions': SubscriptionPlan.STARTER,
+  'support.center': SubscriptionPlan.STARTER,
+
+  // ── Growth ─────────────────────────────────────────────────────────────────
   // Clients
   'clients.export': SubscriptionPlan.GROWTH,
   'clients.messaging': SubscriptionPlan.GROWTH,
@@ -29,19 +39,13 @@ export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
   'tasks.all': SubscriptionPlan.GROWTH,
   'team.messaging': SubscriptionPlan.GROWTH,
 
+  // AI
+  'ai.pricing-assistant': SubscriptionPlan.GROWTH,
+  'ai.contract-generator': SubscriptionPlan.GROWTH,
+
   // Analytics
   'analytics.revenue': SubscriptionPlan.GROWTH,
   'analytics.traffic': SubscriptionPlan.GROWTH,
-
-  // Roles
-  'roles.custom': SubscriptionPlan.PRO,
-
-  // Website
-  'website.custom-domain': SubscriptionPlan.PRO,
-
-  // AI
-  'ai.insights': SubscriptionPlan.PRO,
-  'ai.advisor': SubscriptionPlan.PRO,
 
   // Files & Contracts
   'files.all': SubscriptionPlan.GROWTH,
@@ -49,6 +53,11 @@ export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
 
   // Activity Logs
   'activity-logs.view': SubscriptionPlan.GROWTH,
+
+  // ── Pro ────────────────────────────────────────────────────────────────────
+  'roles.custom': SubscriptionPlan.PRO,
+  'website.custom-domain': SubscriptionPlan.PRO,
+  'ai.advisor': SubscriptionPlan.PRO,
 } as const;
 
 export type FeatureKey = keyof typeof FEATURE_PLAN_MAP;

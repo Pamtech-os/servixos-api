@@ -67,7 +67,7 @@ Public — no auth required. Use this on your pricing/signup page.
       "description": "...",
       "monthlyPriceUsd": 2900,
       "yearlyPriceUsd": 27840,
-      "features": ["clients.manage", "jobs.manage", "invoices.create"],
+      "features": ["jobs.manage", "invoices.manage", "clients.manage", "ai.business-setup", "ai.insights", "ai.suggestions", "support.center"],
       "limits": {
         "maxClients": 10,
         "maxJobsPerMonth": 10,
@@ -409,7 +409,7 @@ Returns the full business profile including the current subscription state.
     "subscription": {
       "plan": "growth",
       "status": "active",
-      "features": ["clients.manage", "clients.export", "employees.manage"],
+      "features": ["jobs.manage", "invoices.manage", "clients.manage", "ai.business-setup", "ai.insights", "ai.suggestions", "support.center", "clients.export", "employees.manage", "..."],
       "billingInterval": "monthly",
       "hasPaymentMethod": true,
       "trialEndsAt": null,
