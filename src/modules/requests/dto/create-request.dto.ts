@@ -39,6 +39,10 @@ export class CreateRequestDto {
   requestedDate: string;
 
   @IsOptional()
+  @IsDateString({}, { message: REQUESTS_MESSAGES.VALIDATION.END_DATE_INVALID })
+  requestedEndDate?: string;
+
+  @IsOptional()
   @IsString({ message: REQUESTS_MESSAGES.VALIDATION.MESSAGE_INVALID })
   @Transform(({ value }: { value: string }) => value?.trim())
   message?: string;
