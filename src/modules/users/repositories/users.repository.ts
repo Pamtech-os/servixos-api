@@ -87,6 +87,19 @@ export class UsersRepository {
     return query.exec();
   }
 
+  async softDeleteById(
+    id: string | Types.ObjectId,
+    session?: ClientSession,
+  ): Promise<void> {
+    await this.userModel
+      .updateOne(
+        { _id: id },
+        { $set: { deletedAt: new Date(), isActive: false } },
+        { session },
+      )
+      .exec();
+  }
+
   async findActiveStaffEmailRecipients(
     businessId: Types.ObjectId,
   ): Promise<StaffEmailRecipient[]> {

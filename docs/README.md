@@ -86,6 +86,8 @@ Some list endpoints include a `statistics` top-level key with aggregate counts/t
 | [api-employees.md](./api-employees.md) | Employee management + time tracking |
 | [api-export.md](./api-export.md) | Client data export |
 | [api-reviews.md](./api-reviews.md) | Job reviews — submit, retrieve, stats (both portals) |
+| [api-settings.md](./api-settings.md) | Business profile, notifications, password, account deletion |
+| [subscription-api.md](./subscription-api.md) | Plans, billing, upgrades, Stripe payment flows |
 
 ---
 
