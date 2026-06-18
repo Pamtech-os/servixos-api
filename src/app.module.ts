@@ -65,6 +65,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { SupportModule } from './modules/support/support.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
+import { SettingsModule } from './modules/settings/settings.module';
 
 @Module({
   imports: [
@@ -123,6 +124,7 @@ import { SubscriptionModule } from './modules/subscription/subscription.module';
     SupportModule,
     StripeModule,
     SubscriptionModule,
+    SettingsModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

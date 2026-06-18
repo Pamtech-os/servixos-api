@@ -76,6 +76,15 @@ export class BusinessRepository {
       .exec();
   }
 
+  async softDeleteById(
+    id: string,
+    session?: import('mongoose').ClientSession,
+  ): Promise<void> {
+    await this.businessModel
+      .updateOne({ _id: id }, { $set: { deletedAt: new Date() } }, { session })
+      .exec();
+  }
+
   async findByStripeCustomerId(customerId: string): Promise<Business | null> {
     return this.businessModel
       .findOne({ stripeCustomerId: customerId })

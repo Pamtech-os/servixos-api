@@ -6,7 +6,6 @@ import {
   getFeaturesForPlan,
   PLAN_LIMITS,
 } from '../common/constants/subscription-features.constants';
-
 @Injectable()
 export class PlanSeeder implements OnModuleInit {
   private readonly logger = new Logger(PlanSeeder.name);
