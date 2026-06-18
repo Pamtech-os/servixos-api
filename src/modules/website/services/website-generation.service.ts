@@ -43,6 +43,16 @@ export interface PublicWebsiteData {
   };
 }
 
+export interface MyWebsiteData {
+  isPublished: boolean;
+  subdomain: string;
+  colorPrimary: string;
+  colorSecondary: string;
+  font: string;
+  aiContent?: AiContent;
+  bookingForm?: BookingForm;
+}
+
 @Injectable()
 export class WebsiteGenerationService {
   private readonly logger = new Logger(WebsiteGenerationService.name);
@@ -97,6 +107,33 @@ export class WebsiteGenerationService {
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
+  }
+
+  /**
+   * Returns the full website configuration for the authenticated business owner,
+   * including unpublished/draft state. Requires a config to already exist
+   * (created via generateForBusiness).
+   */
+  async getMyWebsite(
+    businessId: string,
+  ): Promise<MyWebsiteData | NotFoundException> {
+    const [business, config] = await Promise.all([
+      this.businessRepository.findById(businessId),
+      this.websiteConfigRepository.findByBusinessId(businessId),
+    ]);
+
+    if (!business || !config)
+      return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+    return {
+      isPublished: config.isPublished,
+      subdomain: business.subdomain ?? businessId,
+      colorPrimary: config.colorPrimary,
+      colorSecondary: config.colorSecondary,
+      font: config.font,
+      aiContent: config.aiContent,
+      bookingForm: config.bookingForm,
+    };
   }
 
   /**
