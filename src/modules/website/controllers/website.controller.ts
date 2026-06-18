@@ -22,6 +22,16 @@ export class WebsiteController {
     private readonly websiteGenerationService: WebsiteGenerationService,
   ) {}
 
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async getMyWebsite(@CurrentUser() user: JwtUser) {
+    const result = await this.websiteGenerationService.getMyWebsite(
+      user.businessId,
+    );
+    if (result instanceof HttpException) throw result;
+    return { message: WEBSITE_MESSAGES.SUCCESS.RETRIEVED, data: result };
+  }
+
   @Post('generate')
   @HttpCode(HttpStatus.OK)
   async generate(@CurrentUser() user: JwtUser) {

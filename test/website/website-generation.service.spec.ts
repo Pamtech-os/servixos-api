@@ -5,6 +5,7 @@ import { BusinessRepository } from 'src/modules/business/repositories/business.r
 import { WebsiteConfigRepository } from 'src/modules/website/repositories/website-config.repository';
 import {
   WebsiteGenerationService,
+  type MyWebsiteData,
   type PublicWebsiteData,
 } from 'src/modules/website/services/website-generation.service';
 import { BookingFieldKey } from 'src/modules/website/schemas/website-config.schema';
@@ -45,6 +46,136 @@ const baseConfig = {
     contact: { callToAction: 'Get a free quote' },
   },
 };
+
+describe('WebsiteGenerationService.getMyWebsite', () => {
+  let service: WebsiteGenerationService;
+  let businessRepository: { findById: jest.Mock };
+  let websiteConfigRepository: { findByBusinessId: jest.Mock };
+
+  beforeEach(() => {
+    businessRepository = { findById: jest.fn() };
+    websiteConfigRepository = { findByBusinessId: jest.fn() };
+
+    const configService = asMock<ConfigService>({
+      get: jest.fn().mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          ANTHROPIC_API_KEY: 'test-key',
+          AI_WEBSITE_MODEL: 'claude-test',
+          BASE_DOMAIN: 'servixos.com',
+        };
+        return values[key];
+      }),
+    });
+
+    service = new WebsiteGenerationService(
+      configService,
+      asMock<WebsiteConfigRepository>(websiteConfigRepository),
+      asMock<BusinessRepository>(businessRepository),
+    );
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('returns NotFoundException when business is not found', async () => {
+    // Arrange
+    businessRepository.findById.mockResolvedValue(null);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(baseConfig);
+
+    // Act
+    const result = await service.getMyWebsite(BUSINESS_ID.toString());
+
+    // Assert
+    expect(result).toBeInstanceOf(NotFoundException);
+    expect((result as NotFoundException).message).toBe(
+      WEBSITE_MESSAGES.ERROR.NOT_FOUND,
+    );
+  });
+
+  it('returns NotFoundException when website config does not exist', async () => {
+    // Arrange
+    businessRepository.findById.mockResolvedValue(baseBusiness);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(null);
+
+    // Act
+    const result = await service.getMyWebsite(BUSINESS_ID.toString());
+
+    // Assert
+    expect(result).toBeInstanceOf(NotFoundException);
+    expect((result as NotFoundException).message).toBe(
+      WEBSITE_MESSAGES.ERROR.NOT_FOUND,
+    );
+  });
+
+  it('returns full website data including unpublished state', async () => {
+    // Arrange
+    businessRepository.findById.mockResolvedValue(baseBusiness);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue({
+      ...baseConfig,
+      isPublished: false,
+    });
+
+    // Act
+    const result = await service.getMyWebsite(BUSINESS_ID.toString());
+
+    // Assert
+    const expected: MyWebsiteData = {
+      isPublished: false,
+      subdomain: SUBDOMAIN,
+      colorPrimary: baseConfig.colorPrimary,
+      colorSecondary: baseConfig.colorSecondary,
+      font: baseConfig.font,
+      aiContent: baseConfig.aiContent,
+      bookingForm: undefined,
+    };
+    expect(result).toEqual(expected);
+  });
+
+  it('falls back to businessId as subdomain when business has none', async () => {
+    // Arrange
+    const businessWithoutSubdomain = { ...baseBusiness, subdomain: undefined };
+    businessRepository.findById.mockResolvedValue(businessWithoutSubdomain);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(baseConfig);
+
+    // Act
+    const result = (await service.getMyWebsite(
+      BUSINESS_ID.toString(),
+    )) as MyWebsiteData;
+
+    // Assert
+    expect(result.subdomain).toBe(BUSINESS_ID.toString());
+  });
+
+  it('includes bookingForm when the config has one', async () => {
+    // Arrange
+    const bookingForm = {
+      title: 'Book a Service',
+      description: 'Fill in the form.',
+      fields: [
+        {
+          key: BookingFieldKey.CLIENT_NAME,
+          label: 'Full Name',
+          placeholder: 'John Doe',
+          required: true,
+        },
+      ],
+    };
+    businessRepository.findById.mockResolvedValue(baseBusiness);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue({
+      ...baseConfig,
+      bookingForm,
+    });
+
+    // Act
+    const result = (await service.getMyWebsite(
+      BUSINESS_ID.toString(),
+    )) as MyWebsiteData;
+
+    // Assert
+    expect(result.bookingForm).toEqual(bookingForm);
+  });
+});
 
 describe('WebsiteGenerationService.getPublicWebsite', () => {
   let service: WebsiteGenerationService;
