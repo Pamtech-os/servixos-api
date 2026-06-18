@@ -7,9 +7,11 @@ import {
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import type { AiContent } from '../schemas/website-config.schema';
+import { WEBSITE_MESSAGES } from 'src/common/constants/messages/website.messages';
+import type { AiContent, BookingForm } from '../schemas/website-config.schema';
 import { WebsiteConfigRepository } from '../repositories/website-config.repository';
 import { BusinessRepository } from '../../business/repositories/business.repository';
+import type { UpdateBookingFormDto } from '../dto/update-booking-form.dto';
 
 interface BusinessContext {
   name: string;
@@ -20,6 +22,25 @@ interface BusinessContext {
 export interface GeneratedWebsiteData {
   subdomain: string;
   url: string;
+}
+
+export interface PublicWebsiteData {
+  business: {
+    name: string;
+    categoryName: string;
+    description?: string;
+    phone?: string;
+    email?: string;
+    address?: string;
+    services: string[];
+  };
+  website: {
+    colorPrimary: string;
+    colorSecondary: string;
+    font: string;
+    aiContent?: AiContent;
+    bookingForm?: BookingForm;
+  };
 }
 
 @Injectable()
@@ -76,6 +97,60 @@ export class WebsiteGenerationService {
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
+  }
+
+  /**
+   * Returns the published website content and business profile for a given
+   * subdomain. Used by the public-facing frontend; no authentication required.
+   */
+  async getPublicWebsite(
+    subdomain: string,
+  ): Promise<PublicWebsiteData | NotFoundException> {
+    const business = await this.businessRepository.findBySubdomain(subdomain);
+    if (!business)
+      return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+    const config = await this.websiteConfigRepository.findByBusinessId(
+      business._id.toString(),
+    );
+    if (!config?.isPublished)
+      return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+    return {
+      business: {
+        name: business.name,
+        categoryName: business.categoryName,
+        description: business.description,
+        phone: business.phone,
+        email: business.email,
+        address: business.address,
+        services: business.services,
+      },
+      website: {
+        colorPrimary: config.colorPrimary,
+        colorSecondary: config.colorSecondary,
+        font: config.font,
+        aiContent: config.aiContent,
+        bookingForm: config.bookingForm,
+      },
+    };
+  }
+
+  /**
+   * Saves the business-configured booking form layout (title, description,
+   * field labels, placeholders, and required flags) to the website config.
+   */
+  async updateBookingForm(
+    businessId: string,
+    dto: UpdateBookingFormDto,
+  ): Promise<void | NotFoundException> {
+    const config =
+      await this.websiteConfigRepository.findByBusinessId(businessId);
+    if (!config) return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+    await this.websiteConfigRepository.updateByBusinessId(businessId, {
+      bookingForm: dto,
+    });
   }
 
   private async generateAiContent(

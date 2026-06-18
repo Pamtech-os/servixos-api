@@ -729,6 +729,9 @@ export class RequestsService implements OnModuleInit {
       clientPhone: dto.clientPhone,
       service: dto.service,
       requestedDate: new Date(dto.requestedDate),
+      ...(dto.requestedEndDate && {
+        requestedEndDate: new Date(dto.requestedEndDate),
+      }),
       message: dto.message,
     });
 
