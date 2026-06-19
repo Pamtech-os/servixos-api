@@ -133,6 +133,7 @@ export class StripeService {
   /**
    * Returns the client_secret of the PaymentIntent on an open invoice.
    * The frontend uses this to confirm payment (handles 3DS automatically).
+   * Throws if the invoice has no PaymentIntent (e.g. $0 invoice or no payment method).
    */
   async getInvoicePaymentClientSecret(
     invoiceId: string,
@@ -141,10 +142,17 @@ export class StripeService {
       expand: ['payment_intent'],
     })) as unknown as {
       id: string;
-      payment_intent: { client_secret: string | null };
+      payment_intent: { client_secret: string | null } | null;
     };
+
+    if (!invoice.payment_intent || !invoice.payment_intent.client_secret) {
+      throw new Error(
+        `Invoice ${invoiceId} has no collectable PaymentIntent — no payment method on file`,
+      );
+    }
+
     return {
-      clientSecret: invoice.payment_intent.client_secret!,
+      clientSecret: invoice.payment_intent.client_secret,
       invoiceId: invoice.id,
     };
   }

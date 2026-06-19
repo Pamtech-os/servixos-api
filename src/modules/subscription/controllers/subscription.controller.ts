@@ -89,7 +89,12 @@ export class SubscriptionController {
     const result = await this.subscriptionService.getPayNowClientSecret(
       user.businessId,
     );
-    if (result instanceof NotFoundException) throw result;
+    if (
+      result instanceof NotFoundException ||
+      result instanceof InternalServerErrorException
+    ) {
+      throw result;
+    }
     return result;
   }
 
