@@ -10,6 +10,8 @@ import {
 } from 'src/modules/website/services/website-generation.service';
 import { BookingFieldKey } from 'src/modules/website/schemas/website-config.schema';
 import { type UpdateBookingFormDto } from 'src/modules/website/dto/update-booking-form.dto';
+import { type UpdateDesignDto } from 'src/modules/website/dto/update-design.dto';
+import { type UpdateContentDto } from 'src/modules/website/dto/update-content.dto';
 import { WEBSITE_MESSAGES } from 'src/common/constants/messages/website.messages';
 import { asMock } from 'test/helpers/mock';
 
@@ -416,6 +418,223 @@ describe('WebsiteGenerationService.updateBookingForm', () => {
     expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
       BUSINESS_ID.toString(),
       { bookingForm: dto },
+    );
+  });
+});
+
+describe('WebsiteGenerationService.updateDesign', () => {
+  let service: WebsiteGenerationService;
+  let websiteConfigRepository: {
+    findByBusinessId: jest.Mock;
+    updateByBusinessId: jest.Mock;
+  };
+  let businessRepository: { updateById: jest.Mock };
+
+  function makeService() {
+    const configService = asMock<ConfigService>({
+      get: jest.fn().mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          ANTHROPIC_API_KEY: 'test-key',
+          AI_WEBSITE_MODEL: 'claude-test',
+          BASE_DOMAIN: 'servixos.com',
+        };
+        return values[key];
+      }),
+    });
+    return new WebsiteGenerationService(
+      configService,
+      asMock<WebsiteConfigRepository>(websiteConfigRepository),
+      asMock<BusinessRepository>(businessRepository),
+    );
+  }
+
+  beforeEach(() => {
+    websiteConfigRepository = {
+      findByBusinessId: jest.fn().mockResolvedValue(baseConfig),
+      updateByBusinessId: jest.fn().mockResolvedValue(null),
+    };
+    businessRepository = { updateById: jest.fn().mockResolvedValue(undefined) };
+    service = makeService();
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns NotFoundException when no config exists', async () => {
+    // Arrange
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(null);
+    const dto: UpdateDesignDto = { colorPrimary: '#ff0000' };
+
+    // Act
+    const result = await service.updateDesign(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  it('updates website config and business record with all design fields', async () => {
+    // Arrange
+    const dto: UpdateDesignDto = {
+      colorPrimary: '#ff0000',
+      colorSecondary: '#00ff00',
+      font: 'Roboto',
+    };
+
+    // Act
+    const result = await service.updateDesign(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(result).toBeUndefined();
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      { colorPrimary: '#ff0000', colorSecondary: '#00ff00', font: 'Roboto' },
+    );
+    expect(businessRepository.updateById).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      {
+        'colors.primary': '#ff0000',
+        'colors.secondary': '#00ff00',
+        font: 'Roboto',
+      },
+    );
+  });
+
+  it('updates only the provided design fields and skips undefined ones', async () => {
+    // Arrange
+    const dto: UpdateDesignDto = { colorPrimary: '#abc123' };
+
+    // Act
+    await service.updateDesign(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      { colorPrimary: '#abc123' },
+    );
+    expect(businessRepository.updateById).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      { 'colors.primary': '#abc123' },
+    );
+  });
+
+  it('skips business update when dto is empty', async () => {
+    // Arrange
+    const dto: UpdateDesignDto = {};
+
+    // Act
+    await service.updateDesign(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      {},
+    );
+    expect(businessRepository.updateById).not.toHaveBeenCalled();
+  });
+});
+
+describe('WebsiteGenerationService.updateContent', () => {
+  let service: WebsiteGenerationService;
+  let websiteConfigRepository: {
+    findByBusinessId: jest.Mock;
+    updateByBusinessId: jest.Mock;
+  };
+
+  function makeService() {
+    const configService = asMock<ConfigService>({
+      get: jest.fn().mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          ANTHROPIC_API_KEY: 'test-key',
+          AI_WEBSITE_MODEL: 'claude-test',
+          BASE_DOMAIN: 'servixos.com',
+        };
+        return values[key];
+      }),
+    });
+    return new WebsiteGenerationService(
+      configService,
+      asMock<WebsiteConfigRepository>(websiteConfigRepository),
+      asMock<BusinessRepository>({ findBySubdomain: jest.fn() }),
+    );
+  }
+
+  beforeEach(() => {
+    websiteConfigRepository = {
+      findByBusinessId: jest.fn().mockResolvedValue(baseConfig),
+      updateByBusinessId: jest.fn().mockResolvedValue(null),
+    };
+    service = makeService();
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns NotFoundException when no config exists', async () => {
+    // Arrange
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(null);
+    const dto: UpdateContentDto = { hero: { headline: 'New headline' } };
+
+    // Act
+    const result = await service.updateContent(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  it('builds a flat dot-notation update from provided sections only', async () => {
+    // Arrange
+    const dto: UpdateContentDto = {
+      hero: { headline: 'New headline', subheadline: 'Sub', ctaText: 'Go' },
+      about: { title: 'About', body: 'Body text' },
+    };
+
+    // Act
+    const result = await service.updateContent(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(result).toBeUndefined();
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      {
+        'aiContent.hero': dto.hero,
+        'aiContent.about': dto.about,
+      },
+    );
+  });
+
+  it('does not include omitted sections in the update', async () => {
+    // Arrange
+    const dto: UpdateContentDto = {
+      contact: { callToAction: 'Call us today' },
+    };
+
+    // Act
+    await service.updateContent(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    const calls = websiteConfigRepository.updateByBusinessId.mock.calls as [
+      string,
+      Record<string, unknown>,
+    ][];
+    const call = calls[0][1];
+    expect(Object.keys(call)).toEqual(['aiContent.contact']);
+    expect(call['aiContent.contact']).toEqual(dto.contact);
+  });
+
+  it('persists a full services array replacement', async () => {
+    // Arrange
+    const dto: UpdateContentDto = {
+      services: [
+        { name: 'Leak repair', description: 'Fast fix' },
+        { name: 'Installation', description: 'Professional install' },
+      ],
+    };
+
+    // Act
+    await service.updateContent(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      { 'aiContent.services': dto.services },
     );
   });
 });

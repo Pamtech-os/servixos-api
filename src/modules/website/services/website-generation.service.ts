@@ -12,6 +12,8 @@ import type { AiContent, BookingForm } from '../schemas/website-config.schema';
 import { WebsiteConfigRepository } from '../repositories/website-config.repository';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import type { UpdateBookingFormDto } from '../dto/update-booking-form.dto';
+import type { UpdateDesignDto } from '../dto/update-design.dto';
+import type { UpdateContentDto } from '../dto/update-content.dto';
 
 interface BusinessContext {
   name: string;
@@ -171,6 +173,86 @@ export class WebsiteGenerationService {
         bookingForm: config.bookingForm,
       },
     };
+  }
+
+  /**
+   * Saves design tokens (colors, font) to both the website config and the
+   * business record so all renderers stay in sync.
+   */
+  async updateDesign(
+    businessId: string,
+    dto: UpdateDesignDto,
+  ): Promise<void | NotFoundException | InternalServerErrorException> {
+    try {
+      const config =
+        await this.websiteConfigRepository.findByBusinessId(businessId);
+      if (!config)
+        return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+      const configUpdate: Record<string, unknown> = {};
+      const businessUpdate: Record<string, unknown> = {};
+
+      if (dto.colorPrimary !== undefined) {
+        configUpdate.colorPrimary = dto.colorPrimary;
+        businessUpdate['colors.primary'] = dto.colorPrimary;
+      }
+      if (dto.colorSecondary !== undefined) {
+        configUpdate.colorSecondary = dto.colorSecondary;
+        businessUpdate['colors.secondary'] = dto.colorSecondary;
+      }
+      if (dto.font !== undefined) {
+        configUpdate.font = dto.font;
+        businessUpdate.font = dto.font;
+      }
+
+      await Promise.all([
+        this.websiteConfigRepository.updateByBusinessId(
+          businessId,
+          configUpdate,
+        ),
+        Object.keys(businessUpdate).length > 0
+          ? this.businessRepository.updateById(businessId, businessUpdate)
+          : Promise.resolve(),
+      ]);
+    } catch (err) {
+      this.logger.error(
+        `updateDesign: unexpected error [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
+  /**
+   * Saves edits to individual aiContent sections. Only provided sections are
+   * updated — omitted sections remain unchanged in the database.
+   */
+  async updateContent(
+    businessId: string,
+    dto: UpdateContentDto,
+  ): Promise<void | NotFoundException | InternalServerErrorException> {
+    try {
+      const config =
+        await this.websiteConfigRepository.findByBusinessId(businessId);
+      if (!config)
+        return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+      // Build a flat $set map so only touched sections are overwritten
+      const update: Record<string, unknown> = {};
+      if (dto.hero !== undefined) update['aiContent.hero'] = dto.hero;
+      if (dto.about !== undefined) update['aiContent.about'] = dto.about;
+      if (dto.services !== undefined)
+        update['aiContent.services'] = dto.services;
+      if (dto.testimonialPlaceholder !== undefined)
+        update['aiContent.testimonialPlaceholder'] = dto.testimonialPlaceholder;
+      if (dto.contact !== undefined) update['aiContent.contact'] = dto.contact;
+
+      await this.websiteConfigRepository.updateByBusinessId(businessId, update);
+    } catch (err) {
+      this.logger.error(
+        `updateContent: unexpected error [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
   }
 
   /**

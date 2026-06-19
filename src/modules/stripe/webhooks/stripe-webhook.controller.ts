@@ -9,11 +9,13 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { Public } from 'src/common/decorators/public.decorator';
+import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 import { StripeService } from '../services/stripe.service';
 import { StripeWebhookService } from './stripe-webhook.service';
 import type { StripeWebhookEvent } from './stripe-webhook.service';
 
 @Public()
+@SkipSignature()
 @Controller('stripe')
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);
