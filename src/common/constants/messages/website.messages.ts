@@ -20,6 +20,8 @@ export const WEBSITE_MESSAGES = {
     BOOKING_CREATED: 'Booking request submitted successfully',
     BOOKING_FORM_SAVED: 'Booking form saved successfully',
     GENERATED: 'Website generation started',
+    DESIGN_SAVED: 'Design settings saved successfully',
+    CONTENT_SAVED: 'Website content saved successfully',
   },
   ERROR: {
     NOT_FOUND: 'Website configuration not found',
