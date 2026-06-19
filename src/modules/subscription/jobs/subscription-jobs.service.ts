@@ -315,6 +315,19 @@ export class SubscriptionJobsService implements OnModuleInit {
       const previousPlan = business.subscription.plan;
       const previousStatus = business.subscription.status;
 
+      // Stripe fires invoice.payment_succeeded with amount_paid=0 immediately
+      // when a trial subscription is created. Skip activation — the business
+      // should stay TRIALING until a real payment is collected.
+      if (
+        amountPaid === 0 &&
+        business.subscription.status === SubscriptionStatus.TRIALING
+      ) {
+        this.logger.log(
+          `handlePaymentSucceeded: skipping $0 trial invoice [businessId=${businessId}]`,
+        );
+        return;
+      }
+
       // Resolve new plan from the paid invoice's price
       let newPlan = previousPlan;
       if (priceId) {
