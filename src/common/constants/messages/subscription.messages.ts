@@ -23,6 +23,8 @@ export const SUBSCRIPTION_MESSAGES = {
     UPGRADE_NOT_ALLOWED: 'You can only upgrade to a higher-tier plan',
     SAME_PLAN: 'You are already on this plan',
     NO_OPEN_INVOICE: 'No outstanding invoice found',
+    PAY_NOW_FAILED:
+      'Unable to initiate payment. Please try again or contact support',
     DOWNGRADE_CONFLICT:
       'Cannot downgrade: your current usage exceeds the limits of the target plan',
     CLIENT_LIMIT_REACHED: (max: number) =>

@@ -262,35 +262,48 @@ export class SubscriptionService {
    */
   async getPayNowClientSecret(
     businessId: string,
-  ): Promise<ServiceResponse | NotFoundException> {
-    const business = await this.businessRepository.findById(businessId);
+  ): Promise<
+    ServiceResponse | NotFoundException | InternalServerErrorException
+  > {
+    try {
+      const business = await this.businessRepository.findById(businessId);
 
-    if (!business?.stripeCustomerId) {
-      return new NotFoundException(
-        SUBSCRIPTION_MESSAGES.ERROR.NO_STRIPE_CUSTOMER,
+      if (!business?.stripeCustomerId) {
+        return new NotFoundException(
+          SUBSCRIPTION_MESSAGES.ERROR.NO_STRIPE_CUSTOMER,
+        );
+      }
+
+      const invoice = await this.stripeService.getLatestOpenInvoice(
+        business.stripeCustomerId,
+      );
+
+      if (!invoice) {
+        return new NotFoundException(
+          SUBSCRIPTION_MESSAGES.ERROR.NO_OPEN_INVOICE,
+        );
+      }
+
+      const { clientSecret, invoiceId } =
+        await this.stripeService.getInvoicePaymentClientSecret(invoice.id);
+
+      return {
+        message: SUBSCRIPTION_MESSAGES.SUCCESS.PAYMENT_INITIATED,
+        data: {
+          clientSecret,
+          invoiceId,
+          amountDue: invoice.amount_due,
+          currency: invoice.currency,
+        },
+      };
+    } catch (err) {
+      this.logger.error(
+        `getPayNowClientSecret failed [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      return new InternalServerErrorException(
+        SUBSCRIPTION_MESSAGES.ERROR.PAY_NOW_FAILED,
       );
     }
-
-    const invoice = await this.stripeService.getLatestOpenInvoice(
-      business.stripeCustomerId,
-    );
-
-    if (!invoice) {
-      return new NotFoundException(SUBSCRIPTION_MESSAGES.ERROR.NO_OPEN_INVOICE);
-    }
-
-    const { clientSecret, invoiceId } =
-      await this.stripeService.getInvoicePaymentClientSecret(invoice.id);
-
-    return {
-      message: SUBSCRIPTION_MESSAGES.SUCCESS.PAYMENT_INITIATED,
-      data: {
-        clientSecret,
-        invoiceId,
-        amountDue: invoice.amount_due,
-        currency: invoice.currency,
-      },
-    };
   }
 
   /** Paginated subscription transaction history for the business. */
