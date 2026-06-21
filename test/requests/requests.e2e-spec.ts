@@ -358,6 +358,7 @@ describe('Requests (integration)', () => {
         // Arrange & Act
         const res = await req()
           .post(BASE)
+          .set('x-channel', 'mobile')
           .query({ businessId: seededUser.businessId })
           .send(BASE_REQUEST_BODY);
         // Assert
@@ -783,6 +784,7 @@ describe('Requests (integration)', () => {
         // Arrange & Act
         const res = await req()
           .get(BASE)
+          .set('x-channel', 'mobile')
           .set('Authorization', `Bearer ${seededUser.accessToken}`)
           .set('x-business-id', seededUser.businessId);
         // Assert

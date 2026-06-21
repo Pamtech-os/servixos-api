@@ -321,14 +321,17 @@ export class ClientActivitiesService {
       })),
     ];
 
-    activityRows.sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
-    );
+    // Pre-parse timestamps once (O(n)) so the comparator is a plain subtraction
+    // instead of constructing two Date objects per comparison (O(n log n) Date allocations).
+    const withTs = activityRows.map((row) => ({
+      ...row,
+      _ts: new Date(row.date).getTime(),
+    }));
+    withTs.sort((a, b) => b._ts - a._ts);
 
-    const sliced = activityRows.slice(
-      pagination.skip,
-      pagination.skip + pagination.limit,
-    );
+    const sliced = withTs
+      .slice(pagination.skip, pagination.skip + pagination.limit)
+      .map(({ _ts, ...row }) => row);
 
     return {
       data: sliced,

@@ -10,12 +10,17 @@ import { ConfigService } from '@nestjs/config';
 import type { Request } from 'express';
 import { Public } from 'src/common/decorators/public.decorator';
 import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
+import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
+import { SkipChannel } from 'src/common/decorators/channel.decorator';
+import { SkipThrottle } from '@nestjs/throttler';
 import { StripeService } from '../services/stripe.service';
 import { StripeWebhookService } from './stripe-webhook.service';
 import type { StripeWebhookEvent } from './stripe-webhook.service';
 
 @Public()
 @SkipSignature()
+@SkipChannel()
+@SkipThrottle()
 @Controller('stripe')
 export class StripeWebhookController {
   private readonly logger = new Logger(StripeWebhookController.name);
@@ -41,7 +46,7 @@ export class StripeWebhookController {
 
     if (!signature || typeof signature !== 'string') {
       this.logger.warn('Stripe webhook received without signature header');
-      throw new BadRequestException('Missing Stripe-Signature header');
+      throw new BadRequestException(COMMON_MESSAGES.ERROR.BAD_REQUEST);
     }
 
     let event: StripeWebhookEvent;
@@ -55,7 +60,7 @@ export class StripeWebhookController {
     } catch {
       // Never log the raw body — it may contain PCI-scoped card data
       this.logger.warn('Stripe webhook signature verification failed');
-      throw new BadRequestException('Invalid webhook signature');
+      throw new BadRequestException(COMMON_MESSAGES.ERROR.BAD_REQUEST);
     }
 
     // Dispatch asynchronously — never await so Stripe gets 200 immediately

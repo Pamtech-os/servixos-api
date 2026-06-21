@@ -2,6 +2,8 @@ import { NestFactory, Reflector } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { json, raw, urlencoded } from 'express';
 import helmet from 'helmet';
+import compression from 'compression';
+import cookieParser from 'cookie-parser';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from './app.module';
 import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
@@ -105,6 +107,12 @@ async function bootstrap(): Promise<void> {
   // Security headers
   app.use(helmet());
 
+  // Cookie parser — required for HTTP-only cookie auth
+  app.use(cookieParser());
+
+  // Gzip compression — applied before body parsers so it targets responses only
+  app.use(compression());
+
   // Body parsing — must sit before guards/pipes that inspect req.body.
   // json() handles application/json; urlencoded() handles HTML form posts.
   // Multipart/form-data (file uploads) is handled per-route via
@@ -147,6 +155,7 @@ async function bootstrap(): Promise<void> {
       'x-client-token',
       'x-timestamp',
       'x-signature',
+      'x-channel',
     ],
     credentials: true,
   });

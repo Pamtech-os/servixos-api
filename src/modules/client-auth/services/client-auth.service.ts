@@ -136,7 +136,7 @@ export class ClientAuthService {
     ClientTokenData | UnauthorizedException | InternalServerErrorException
   > {
     try {
-      const tokenHash = hashToken(dto.refreshToken);
+      const tokenHash = hashToken(dto.refreshToken ?? '');
       const stored = await this.authRepository.findValidRefreshToken(tokenHash);
 
       if (!stored) {
@@ -165,6 +165,12 @@ export class ClientAuthService {
         );
       }
 
+      const rawRefreshToken = generateSecureToken(32);
+      const newTokenHash = hashToken(rawRefreshToken);
+      const expiresAt = new Date(
+        Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+      );
+
       const accessToken = this.signAccessToken({
         sub: stored.userId.toString(),
         businessId: stored.businessId.toString(),
@@ -172,7 +178,18 @@ export class ClientAuthService {
         pinVerified: true,
       });
 
-      return { accessToken };
+      // Rotate: revoke old token and persist new one atomically
+      await Promise.all([
+        this.authRepository.revokeRefreshToken(tokenHash),
+        this.authRepository.createRefreshToken({
+          userId: stored.userId,
+          businessId: stored.businessId,
+          tokenHash: newTokenHash,
+          expiresAt,
+        }),
+      ]);
+
+      return { accessToken, refreshToken: rawRefreshToken };
     } catch (error) {
       this.logger.error(
         `clientRefreshToken: unexpected error: ${error instanceof Error ? error.stack : String(error)}`,
@@ -191,7 +208,7 @@ export class ClientAuthService {
         );
       }
 
-      const tokenHash = hashToken(dto.refreshToken);
+      const tokenHash = hashToken(dto.refreshToken ?? '');
       await this.authRepository.revokeRefreshToken(tokenHash);
       return null;
     } catch (error) {

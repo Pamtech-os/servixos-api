@@ -2,6 +2,7 @@ import { Controller, Get, NotFoundException } from '@nestjs/common';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { BusinessRepository } from '../repositories/business.repository';
+import { SETTINGS_MESSAGES } from 'src/common/constants/messages/settings.messages';
 import type { ServiceResponse } from 'src/common/dto/response.dto';
 
 @Controller()
@@ -16,10 +17,11 @@ export class BusinessController {
   async getMe(@CurrentUser() user: JwtUser): Promise<ServiceResponse> {
     const business = await this.businessRepository.findById(user.businessId);
 
-    if (!business) throw new NotFoundException('Business not found');
+    if (!business)
+      throw new NotFoundException(SETTINGS_MESSAGES.ERROR.PROFILE_NOT_FOUND);
 
     return {
-      message: 'Business profile retrieved successfully',
+      message: SETTINGS_MESSAGES.SUCCESS.PROFILE_RETRIEVED,
       data: {
         id: business._id,
         name: business.name,

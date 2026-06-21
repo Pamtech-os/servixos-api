@@ -10,6 +10,9 @@ import { InjectConnection } from '@nestjs/mongoose';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Connection, ConnectionStates } from 'mongoose';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { RedisThrottlerStorage } from './common/storage/redis-throttler.storage';
+import { RedisService } from './modules/redis/services/redis.service';
 
 import { databaseConfig } from './config/database.config';
 import { jwtConfig } from './config/jwt.config';
@@ -24,6 +27,7 @@ import { ResponseTransformInterceptor } from './common/interceptors/response-tra
 import { ActivityLogInterceptor } from './common/interceptors/activity-log.interceptor';
 // import { EncryptionInterceptor } from './common/interceptors/encryption.interceptor';
 // import { DecryptionMiddleware } from './common/middleware/decryption.middleware';
+import { ChannelGuard } from './common/guards/channel.guard';
 import { HmacGuard } from './common/guards/hmac.guard';
 // import { EncryptedRequestGuard } from './common/guards/encrypted-request.guard';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
@@ -85,10 +89,23 @@ import { SettingsModule } from './modules/settings/settings.module';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         uri: config.get<string>('DATABASE_URL'),
-        autoIndex: true,
+        // autoIndex only in non-production — on large collections ensureIndexes
+        // on every deploy adds startup latency and risks holding write locks.
+        autoIndex: config.get<string>('NODE_ENV') !== 'production',
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 45000,
         connectTimeoutMS: 10000,
+      }),
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [RedisService],
+      useFactory: (redis: RedisService) => ({
+        throttlers: [
+          // Default window: 100 requests per 60 seconds per IP.
+          // Individual auth endpoints tighten this via @Throttle().
+          { name: 'global', ttl: 60_000, limit: 100 },
+        ],
+        storage: new RedisThrottlerStorage(redis),
       }),
     }),
     AnalyticsModule,
@@ -128,10 +145,12 @@ import { SettingsModule } from './modules/settings/settings.module';
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
     // { provide: APP_INTERCEPTOR, useClass: EncryptionInterceptor },
     { provide: APP_INTERCEPTOR, useClass: ResponseTransformInterceptor },
     // ActivityLogInterceptor runs inner (after ResponseTransform) so it taps the raw handler output
     { provide: APP_INTERCEPTOR, useClass: ActivityLogInterceptor },
+    { provide: APP_GUARD, useClass: ChannelGuard },
     { provide: APP_GUARD, useClass: HmacGuard },
     // { provide: APP_GUARD, useClass: EncryptedRequestGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },

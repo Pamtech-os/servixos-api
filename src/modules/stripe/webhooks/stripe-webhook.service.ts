@@ -130,6 +130,17 @@ export class StripeWebhookService {
     event: StripeWebhookEvent,
   ): Promise<void> {
     const invoice = event.data.object as unknown as StripeInvoiceData;
+
+    // Skip $0 failure events — these are trial initialization invoices with no
+    // real amount. Only real subscription invoices (amount_due > 0) should
+    // trigger grace period.
+    if (invoice.amount_due === 0) {
+      this.logger.log(
+        `dispatchPaymentFailed: skipping $0 invoice [${invoice.id}]`,
+      );
+      return;
+    }
+
     await this.agendaService.now(JOBS.SUBSCRIPTION_PAYMENT_FAILED, {
       stripeEventId: event.id,
       customerId: invoice.customer ?? '',

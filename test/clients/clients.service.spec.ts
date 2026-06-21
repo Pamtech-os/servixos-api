@@ -16,6 +16,15 @@ import { RedisService } from 'src/modules/redis/services/redis.service';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
 import { asMock } from 'test/helpers/mock';
 
+jest.mock('src/common/utils/hash.util', () => ({
+  generateStrongPassword: jest.fn().mockReturnValue('Tmp!Pass1234'),
+  hashValue: jest.fn().mockResolvedValue('$2b$12$hashed'),
+  hashToken: jest.fn((token: string) => `mock-hash:${token}`),
+  generateSecureToken: jest.fn().mockReturnValue('secure-token'),
+  generateOtp: jest.fn().mockReturnValue('123456'),
+  compareValue: jest.fn().mockResolvedValue(true),
+}));
+
 const BUSINESS_ID = '664abc123456789012345678';
 const CLIENT_ID = '664abc000000000000000001';
 const bId = new Types.ObjectId(BUSINESS_ID);

@@ -16,6 +16,11 @@ import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { generateStrongPassword, hashValue } from 'src/common/utils/hash.util';
+import {
+  formatError,
+  formatErrorMessage,
+  isDuplicateKeyError,
+} from 'src/common/utils/error.util';
 import { EmployeeInvitationJobData } from 'src/modules/agenda/jobs/email.jobs';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
@@ -192,14 +197,14 @@ export class EmployeesService {
         .set(cacheKey, JSON.stringify(result), CACHE_TTL.EMPLOYEES_LIST)
         .catch((error: unknown) =>
           this.logger.warn(
-            `listEmployees: cache write failed [businessId=${businessId}] ${error instanceof Error ? error.message : String(error)}`,
+            `listEmployees: cache write failed [businessId=${businessId}] ${formatErrorMessage(error)}`,
           ),
         );
 
       return result;
     } catch (error) {
       this.logger.error(
-        `listEmployees: unexpected error [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `listEmployees: unexpected error [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -229,16 +234,14 @@ export class EmployeesService {
         return JSON.parse(cached) as EmployeeDetails;
       }
 
-      const employee = await this.employeesRepository.findById(
-        id,
-        new Types.ObjectId(businessId),
-      );
+      const [employee, business] = await Promise.all([
+        this.employeesRepository.findById(id, new Types.ObjectId(businessId)),
+        this.businessRepository.findById(businessId),
+      ]);
 
       if (!employee) {
         return new NotFoundException(EMPLOYEES_MESSAGES.ERROR.NOT_FOUND);
       }
-
-      const business = await this.businessRepository.findById(businessId);
       const nowLocal = toBusinessLocalTime(
         new Date(),
         business?.timezone ?? 'UTC',
@@ -271,7 +274,7 @@ export class EmployeesService {
       return result;
     } catch (error) {
       this.logger.error(
-        `getEmployee: unexpected error [id=${id}] ${error instanceof Error ? error.stack : String(error)}`,
+        `getEmployee: unexpected error [id=${id}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -379,7 +382,7 @@ export class EmployeesService {
         })
         .catch((error: unknown) =>
           this.logger.error(
-            `createEmployee: invitation job failed [email=${dto.email}] ${error instanceof Error ? error.stack : String(error)}`,
+            `createEmployee: invitation job failed [email=${dto.email}] ${formatError(error)}`,
           ),
         );
 
@@ -389,12 +392,12 @@ export class EmployeesService {
     } catch (error) {
       await this.abortQuietly(session);
 
-      if (this.isDuplicateKeyError(error)) {
+      if (isDuplicateKeyError(error)) {
         return new ConflictException(EMPLOYEES_MESSAGES.ERROR.EMAIL_TAKEN);
       }
 
       this.logger.error(
-        `createEmployee: unexpected error [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `createEmployee: unexpected error [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -507,12 +510,12 @@ export class EmployeesService {
     } catch (error) {
       await this.abortQuietly(session);
 
-      if (this.isDuplicateKeyError(error)) {
+      if (isDuplicateKeyError(error)) {
         return new ConflictException(EMPLOYEES_MESSAGES.ERROR.EMAIL_TAKEN);
       }
 
       this.logger.error(
-        `updateEmployee: unexpected error [id=${id}] ${error instanceof Error ? error.stack : String(error)}`,
+        `updateEmployee: unexpected error [id=${id}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -560,7 +563,7 @@ export class EmployeesService {
     } catch (error) {
       await this.abortQuietly(session);
       this.logger.error(
-        `deleteEmployee: unexpected error [id=${id}] ${error instanceof Error ? error.stack : String(error)}`,
+        `deleteEmployee: unexpected error [id=${id}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -619,7 +622,7 @@ export class EmployeesService {
       };
     } catch (error) {
       this.logger.error(
-        `getClockHistory: unexpected error [id=${id}] ${error instanceof Error ? error.stack : String(error)}`,
+        `getClockHistory: unexpected error [id=${id}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -722,7 +725,7 @@ export class EmployeesService {
       await this.redisService.incr(employeesListVersionKey(businessId));
     } catch (error) {
       this.logger.warn(
-        `invalidateEmployeesListCache: failed [businessId=${businessId}] ${error instanceof Error ? error.message : String(error)}`,
+        `invalidateEmployeesListCache: failed [businessId=${businessId}] ${formatErrorMessage(error)}`,
       );
     }
   }
@@ -731,14 +734,5 @@ export class EmployeesService {
     abortTransaction: () => Promise<void>;
   }): Promise<void> {
     await session.abortTransaction().catch(() => undefined);
-  }
-
-  private isDuplicateKeyError(error: unknown): boolean {
-    return (
-      typeof error === 'object' &&
-      error !== null &&
-      'code' in error &&
-      (error as { code: number }).code === 11000
-    );
   }
 }

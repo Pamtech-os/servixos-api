@@ -34,3 +34,11 @@ export function toBusinessLocalTime(utcDate: Date, timezone: string): Date {
     return utcDate;
   }
 }
+
+/** Formats a Date as a human-readable string, e.g. "June 20, 2026". */
+export const formatDisplayDate = (date: Date): string =>
+  date.toLocaleDateString('en-US', {
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });

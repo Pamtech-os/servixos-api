@@ -108,6 +108,7 @@ export class InvoicesRepository {
     const [data, total, statisticRows] = await Promise.all([
       this.invoiceModel
         .find(query)
+        .select('-lineItems')
         .populate({ path: 'clientId', select: 'name email' })
         .sort({ createdAt: -1 })
         .skip(pagination.skip)

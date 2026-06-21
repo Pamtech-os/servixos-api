@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { Types } from 'mongoose';
 import { SUBSCRIPTION_MESSAGES } from 'src/common/constants/messages/subscription.messages';
+import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { PLAN_ORDER } from 'src/common/constants/subscription-features.constants';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { StripeService } from '../../stripe/services/stripe.service';
@@ -74,7 +75,7 @@ export class SubscriptionService {
   ): Promise<ServiceResponse> {
     const business = await this.businessRepository.findById(businessId);
 
-    if (!business) throw new NotFoundException('Business not found');
+    if (!business) throw new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
 
     if (business.stripeSubscriptionId) {
       throw new ConflictException(
@@ -155,7 +156,8 @@ export class SubscriptionService {
   > {
     try {
       const business = await this.businessRepository.findById(businessId);
-      if (!business) throw new NotFoundException('Business not found');
+      if (!business)
+        throw new NotFoundException(COMMON_MESSAGES.ERROR.NOT_FOUND);
 
       const currentPlan = business.subscription.plan;
 
@@ -274,26 +276,43 @@ export class SubscriptionService {
         );
       }
 
-      const invoice = await this.stripeService.getLatestOpenInvoice(
-        business.stripeCustomerId,
-      );
+      // Prefer the invoice stored at grace period entry — it is always the
+      // correct failed invoice. Fall back to listing open invoices for
+      // businesses that entered grace period before this field was added.
+      const storedInvoiceId = business.subscription.pendingStripeInvoiceId;
 
-      if (!invoice) {
-        return new NotFoundException(
-          SUBSCRIPTION_MESSAGES.ERROR.NO_OPEN_INVOICE,
+      let stripeInvoiceId: string;
+      let amountDue: number;
+      let currency: string;
+
+      if (storedInvoiceId) {
+        stripeInvoiceId = storedInvoiceId;
+        amountDue = business.subscription.pendingAmountDue ?? 0;
+        currency = business.subscription.pendingCurrency ?? 'usd';
+      } else {
+        const invoice = await this.stripeService.getLatestOpenInvoice(
+          business.stripeCustomerId,
         );
+        if (!invoice || invoice.amount_due === 0) {
+          return new NotFoundException(
+            SUBSCRIPTION_MESSAGES.ERROR.NO_OPEN_INVOICE,
+          );
+        }
+        stripeInvoiceId = invoice.id;
+        amountDue = invoice.amount_due;
+        currency = invoice.currency;
       }
 
       const { clientSecret, invoiceId } =
-        await this.stripeService.getInvoicePaymentClientSecret(invoice.id);
+        await this.stripeService.getInvoicePaymentClientSecret(stripeInvoiceId);
 
       return {
         message: SUBSCRIPTION_MESSAGES.SUCCESS.PAYMENT_INITIATED,
         data: {
           clientSecret,
           invoiceId,
-          amountDue: invoice.amount_due,
-          currency: invoice.currency,
+          amountDue,
+          currency,
         },
       };
     } catch (err) {

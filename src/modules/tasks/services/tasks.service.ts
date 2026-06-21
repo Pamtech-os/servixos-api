@@ -15,7 +15,11 @@ import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
 import { TASKS_MESSAGES } from 'src/common/constants/messages/tasks.messages';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
-import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
+import {
+  toBusinessLocalTime,
+  formatDisplayDate,
+} from 'src/common/utils/timezone.util';
+import { formatError } from 'src/common/utils/error.util';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
@@ -166,7 +170,7 @@ export class TasksService implements OnModuleInit {
       return result;
     } catch (error) {
       this.logger.error(
-        `listTasks: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `listTasks: failed [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -188,7 +192,7 @@ export class TasksService implements OnModuleInit {
       return task;
     } catch (error) {
       this.logger.error(
-        `getTask: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `getTask: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -221,7 +225,7 @@ export class TasksService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error(
-        `getTaskActivities: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `getTaskActivities: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -306,7 +310,7 @@ export class TasksService implements OnModuleInit {
       return created;
     } catch (error) {
       this.logger.error(
-        `createTask: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `createTask: failed [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -414,7 +418,7 @@ export class TasksService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `updateTask: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `updateTask: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -456,7 +460,7 @@ export class TasksService implements OnModuleInit {
       return null;
     } catch (error) {
       this.logger.error(
-        `deleteTask: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `deleteTask: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -512,7 +516,7 @@ export class TasksService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `addComment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `addComment: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -574,7 +578,7 @@ export class TasksService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `addSubtask: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `addSubtask: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -655,7 +659,7 @@ export class TasksService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `updateSubtask: failed [id=${id}, subtaskId=${subtaskId}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `updateSubtask: failed [id=${id}, subtaskId=${subtaskId}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -724,7 +728,7 @@ export class TasksService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `addTaskAttachment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `addTaskAttachment: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -741,7 +745,7 @@ export class TasksService implements OnModuleInit {
       return null;
     } catch (error) {
       this.logger.error(
-        `bootstrapDefaultStages: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `bootstrapDefaultStages: failed [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -834,21 +838,25 @@ export class TasksService implements OnModuleInit {
         todayStart,
       );
 
-      for (const task of overdueTasks) {
+      if (overdueTasks.length === 0) continue;
+
+      // Batch all dedup-key lookups in a single Promise.all instead of
+      // one Redis round-trip per task — O(1) network calls regardless of task count.
+      const dedupKeys = overdueTasks.map(
+        (task) => `task_overdue_notified:${task._id.toString()}:${localDate}`,
+      );
+      const alreadySentFlags = await Promise.all(
+        dedupKeys.map((key) => this.redisService.get(key)),
+      );
+
+      for (let i = 0; i < overdueTasks.length; i++) {
+        const task = overdueTasks[i];
         const assignee = task.assigneeId;
         if (!assignee?.email) continue;
-
-        // Deduplicate: skip if we already notified this assignee about this task today
-        const dedupKey = `task_overdue_notified:${task._id.toString()}:${localDate}`;
-        const alreadySent = await this.redisService.get(dedupKey);
-        if (alreadySent) continue;
+        if (alreadySentFlags[i]) continue;
 
         const dueDateDisplay = task.dueDate
-          ? new Date(task.dueDate).toLocaleDateString('en-US', {
-              month: 'long',
-              day: 'numeric',
-              year: 'numeric',
-            })
+          ? formatDisplayDate(new Date(task.dueDate))
           : 'N/A';
 
         void this.agendaService.now(JOBS.EMAIL_TASK_OVERDUE, {
@@ -859,7 +867,7 @@ export class TasksService implements OnModuleInit {
         });
 
         // TTL slightly over 24 h to survive DST transitions
-        await this.redisService.set(dedupKey, '1', 25 * 60 * 60);
+        await this.redisService.set(dedupKeys[i], '1', 25 * 60 * 60);
       }
     }
   }
@@ -989,14 +997,9 @@ export class TasksService implements OnModuleInit {
     }
     if (dto.dueDate !== undefined) {
       if (dto.dueDate) {
-        const display = toBusinessLocalTime(
-          new Date(dto.dueDate),
-          timezone,
-        ).toLocaleDateString('en-US', {
-          month: 'long',
-          day: 'numeric',
-          year: 'numeric',
-        });
+        const display = formatDisplayDate(
+          toBusinessLocalTime(new Date(dto.dueDate), timezone),
+        );
         changes.push(`Due date set to ${display}`);
       } else {
         changes.push('Due date removed');

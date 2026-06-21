@@ -5,6 +5,8 @@ export const ADMIN_MESSAGES = {
     PASSWORD_MIN_LENGTH: 'Password must be at least 8 characters',
     FULL_NAME_REQUIRED: 'Full name is required',
     FULL_NAME_INVALID: 'Full name must be a valid string',
+    REFRESH_TOKEN_REQUIRED: 'Refresh token is required',
+    REFRESH_TOKEN_INVALID: 'Refresh token must be a valid string',
     ROLE_INVALID: 'Role must be one of: owner, employee',
     USER_IDS_REQUIRED: 'At least one user ID is required',
     SUBJECT_REQUIRED: 'Email subject is required',

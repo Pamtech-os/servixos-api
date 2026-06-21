@@ -123,6 +123,29 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.hset(key, field, value);
   }
 
+  /** HSET + EXPIRE in a single pipeline round-trip. */
+  async hsetex(
+    key: string,
+    field: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<void> {
+    await this.client
+      .pipeline()
+      .hset(key, field, value)
+      .expire(key, ttlSeconds)
+      .exec();
+  }
+
+  /** SADD + EXPIRE in a single pipeline round-trip. */
+  async saddex(key: string, member: string, ttlSeconds: number): Promise<void> {
+    await this.client
+      .pipeline()
+      .sadd(key, member)
+      .expire(key, ttlSeconds)
+      .exec();
+  }
+
   async hdel(key: string, field: string): Promise<void> {
     await this.client.hdel(key, field);
   }

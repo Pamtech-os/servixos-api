@@ -73,5 +73,6 @@ export function signRequest(
   return r
     .set('x-client-token', clientToken)
     .set('x-timestamp', timestamp)
-    .set('x-signature', signature);
+    .set('x-signature', signature)
+    .set('x-channel', 'mobile');
 }

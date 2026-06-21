@@ -230,7 +230,7 @@ export class AdminAuthService {
     AdminTokenData | UnauthorizedException | InternalServerErrorException
   > {
     try {
-      const tokenHash = hashToken(dto.refreshToken);
+      const tokenHash = hashToken(dto.refreshToken ?? '');
       const stored = await this.adminAuthRepository.findValidToken(tokenHash);
 
       if (!stored) {

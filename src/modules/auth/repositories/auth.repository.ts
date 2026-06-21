@@ -20,6 +20,7 @@ export class AuthRepository {
       businessId: Types.ObjectId;
       tokenHash: string;
       expiresAt: Date;
+      pinVerified?: boolean;
     },
     session?: ClientSession,
   ): Promise<RefreshToken> {
@@ -57,6 +58,13 @@ export class AuthRepository {
       { userId, revokedAt: null },
       { $set: { revokedAt: new Date() } },
       { session },
+    );
+  }
+
+  async markUserTokensPinVerified(userId: Types.ObjectId): Promise<void> {
+    await this.refreshTokenModel.updateMany(
+      { userId, revokedAt: null, expiresAt: { $gt: new Date() } },
+      { $set: { pinVerified: true } },
     );
   }
 }

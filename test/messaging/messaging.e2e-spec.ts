@@ -300,7 +300,9 @@ describe('Messaging (integration)', () => {
   describe('GET /api/messages/conversations', () => {
     it('should return 401 when no auth headers are provided', async () => {
       // Arrange & Act
-      const res = await req().get(`${BASE}/conversations`);
+      const res = await req()
+        .get(`${BASE}/conversations`)
+        .set('x-channel', 'mobile');
 
       // Assert
       expect(res.status).toBe(401);
@@ -384,7 +386,9 @@ describe('Messaging (integration)', () => {
   describe('GET /api/messages/:clientId', () => {
     it('should return 401 when no auth headers are provided', async () => {
       // Arrange & Act
-      const res = await req().get(`${BASE}/${new Types.ObjectId().toString()}`);
+      const res = await req()
+        .get(`${BASE}/${new Types.ObjectId().toString()}`)
+        .set('x-channel', 'mobile');
 
       // Assert
       expect(res.status).toBe(401);

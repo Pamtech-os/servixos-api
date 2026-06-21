@@ -222,7 +222,10 @@ export class AuthService {
         return new UnauthorizedException(AUTH_MESSAGES.ERROR.INVALID_PIN);
       }
 
-      await this.redisService.del(attemptsKey);
+      await Promise.all([
+        this.redisService.del(attemptsKey),
+        this.authRepository.markUserTokensPinVerified(user._id),
+      ]);
 
       const permissions = await this.resolvePermissions(
         user.userRole,
@@ -332,8 +335,9 @@ export class AuthService {
     dto: RefreshTokenDto,
   ): Promise<TokenData | UnauthorizedException | InternalServerErrorException> {
     try {
-      const tokenHash = hashToken(dto.refreshToken);
-      const stored = await this.authRepository.findValidRefreshToken(tokenHash);
+      const oldTokenHash = hashToken(dto.refreshToken ?? '');
+      const stored =
+        await this.authRepository.findValidRefreshToken(oldTokenHash);
 
       if (!stored) {
         this.logger.warn('refreshToken: token not found or expired');
@@ -352,6 +356,12 @@ export class AuthService {
         );
       }
 
+      const rawRefreshToken = generateSecureToken(32);
+      const newTokenHash = hashToken(rawRefreshToken);
+      const expiresAt = new Date(
+        Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+      );
+
       const permissions = await this.resolvePermissions(
         user.userRole,
         user.roleId,
@@ -360,11 +370,23 @@ export class AuthService {
         sub: stored.userId.toString(),
         businessId: stored.businessId.toString(),
         userRole: user.userRole,
-        pinVerified: false,
+        pinVerified: stored.pinVerified ?? false,
         permissions,
       });
 
-      return { accessToken };
+      // Rotate: revoke old token and persist new one atomically, carrying pinVerified forward
+      await Promise.all([
+        this.authRepository.revokeRefreshToken(oldTokenHash),
+        this.authRepository.createRefreshToken({
+          userId: stored.userId,
+          businessId: stored.businessId,
+          tokenHash: newTokenHash,
+          expiresAt,
+          pinVerified: stored.pinVerified ?? false,
+        }),
+      ]);
+
+      return { accessToken, refreshToken: rawRefreshToken };
     } catch (error) {
       this.logger.error(
         `refreshToken: unexpected error: ${error instanceof Error ? error.stack : String(error)}`,

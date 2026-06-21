@@ -412,6 +412,7 @@ describe('Auth (integration)', () => {
         // Arrange & Act
         const res = await req()
           .post('/api/auth/onboarding/account')
+          .set('x-channel', 'mobile')
           .send(makeAccountPayload(nextEmail()));
         // Assert
         expect(res.status).toBe(401);
@@ -421,6 +422,7 @@ describe('Auth (integration)', () => {
         // Arrange & Act
         const res = await req()
           .post('/api/auth/onboarding/account')
+          .set('x-channel', 'mobile')
           .set('x-client-token', clientToken)
           .set('x-timestamp', Date.now().toString())
           .set('x-signature', 'a'.repeat(64))
@@ -1535,11 +1537,13 @@ describe('Auth (integration)', () => {
 
   describe('POST /api/auth/refresh', () => {
     describe('input validation — 400', () => {
-      it('returns 400 when refreshToken is missing', async () => {
+      it('returns 401 when refreshToken is missing', async () => {
         // Arrange & Act
         const res = await authed(req().post('/api/auth/refresh').send({}));
         // Assert
-        expect(res.status).toBe(400);
+        // refreshToken is optional in the DTO (web clients send via cookie); mobile
+        // clients that omit it get 401, not a validation 400.
+        expect(res.status).toBe(401);
       });
     });
 

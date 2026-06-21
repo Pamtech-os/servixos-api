@@ -23,6 +23,7 @@ import {
   InvoiceStatus,
 } from 'src/modules/invoices/schemas/invoice.schema';
 import { StorageService } from 'src/modules/storage/storage.service';
+import { RedisService } from 'src/modules/redis/services/redis.service';
 import { asMock } from 'test/helpers/mock';
 
 const JOB_ID = '664abc000000000000000003';
@@ -144,6 +145,12 @@ describe('InvoicesService', () => {
       asMock<AgendaService>(agendaService),
       {} as EmailService,
       {} as StorageService,
+      asMock<RedisService>({
+        get: jest.fn().mockResolvedValue(null),
+        set: jest.fn().mockResolvedValue(undefined),
+        incr: jest.fn().mockResolvedValue(2),
+        del: jest.fn().mockResolvedValue(undefined),
+      }),
     );
 
     loggerErrorSpy = jest
