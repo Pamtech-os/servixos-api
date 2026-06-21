@@ -12,6 +12,7 @@ import {
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
+import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 import { WEBSITE_MESSAGES } from 'src/common/constants/messages/website.messages';
 import { UpdateBookingFormDto } from '../dto/update-booking-form.dto';
 import { UpdateDesignDto } from '../dto/update-design.dto';
@@ -45,6 +46,7 @@ export class WebsiteController {
   }
 
   @Public()
+  @SkipSignature()
   @Get('public/:subdomain')
   @HttpCode(HttpStatus.OK)
   async getPublic(@Param('subdomain') subdomain: string) {
