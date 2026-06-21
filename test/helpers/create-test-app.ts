@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { getStorageToken } from '@nestjs/throttler';
 import { AppModule } from 'src/app.module';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { ActivityLogsService } from 'src/modules/activity-logs/services/activity-logs.service';
@@ -31,6 +32,16 @@ export async function createTestApp(overrideEnv: {
   const moduleRef = await Test.createTestingModule({
     imports: [AppModule],
   })
+    .overrideProvider(getStorageToken())
+    .useValue({
+      increment: () =>
+        Promise.resolve({
+          totalHits: 0,
+          timeToExpire: 0,
+          isBlocked: false,
+          timeToBlockExpire: 0,
+        }),
+    })
     .overrideProvider(AgendaService)
     .useValue({
       define: jest.fn(),

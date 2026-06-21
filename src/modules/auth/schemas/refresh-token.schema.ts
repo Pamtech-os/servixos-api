@@ -20,6 +20,9 @@ export class RefreshToken {
   @prop({ required: true })
   expiresAt: Date;
 
+  @prop({ default: false })
+  pinVerified: boolean;
+
   @prop()
   revokedAt?: Date;
 }

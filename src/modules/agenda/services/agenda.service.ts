@@ -70,8 +70,18 @@ export class AgendaService implements OnModuleInit, OnModuleDestroy {
     await this.agenda.every(interval, jobName, data);
   }
 
-  define(jobName: AgendaJobName, processor: (job: Job) => Promise<void>): void {
-    this.agenda.define(jobName, processor);
+  define(
+    jobName: AgendaJobName,
+    processorOrOptions:
+      | ((job: Job) => Promise<void>)
+      | { concurrency?: number; lockLimit?: number; priority?: number },
+    processor?: (job: Job) => Promise<void>,
+  ): void {
+    if (typeof processorOrOptions === 'function') {
+      this.agenda.define(jobName, processorOrOptions);
+    } else {
+      this.agenda.define(jobName, processorOrOptions, processor);
+    }
   }
 
   /** Cancels all scheduled jobs matching the given query. Returns count of cancelled jobs. */

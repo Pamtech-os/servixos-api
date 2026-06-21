@@ -59,12 +59,12 @@ export class PresenceGateway
         avatarColor: getAvatarColor(userId),
       };
 
-      await this.redis.hset(
+      await this.redis.hsetex(
         `presence:${businessId}`,
         userId,
         JSON.stringify(presence),
+        CACHE_TTL.WS_PRESENCE,
       );
-      await this.redis.expire(`presence:${businessId}`, CACHE_TTL.WS_PRESENCE);
 
       await socket.join(`presence:${businessId}`);
 

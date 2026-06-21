@@ -14,6 +14,8 @@ import { PAYMENTS_MESSAGES } from 'src/common/constants/messages/payments.messag
 import { toTwoDecimal } from 'src/common/utils/number.util';
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
+import { formatError } from 'src/common/utils/error.util';
+import { calculateInvoiceStatus } from '../../invoices/utils/invoice-status.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
@@ -99,7 +101,7 @@ export class PaymentsService implements OnModuleInit {
       };
     } catch (error) {
       this.logger.error(
-        `listPayments: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `listPayments: failed [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -120,7 +122,7 @@ export class PaymentsService implements OnModuleInit {
       return payment;
     } catch (error) {
       this.logger.error(
-        `getPayment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `getPayment: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -192,12 +194,11 @@ export class PaymentsService implements OnModuleInit {
       }
 
       const nextPaid = toTwoDecimal(invoice.amountPaid + dto.amount);
-      const nextInvoiceStatus =
-        nextPaid + EPSILON >= invoice.totalAmount
-          ? InvoiceStatus.PAID
-          : nextPaid > 0
-            ? InvoiceStatus.PARTIAL
-            : InvoiceStatus.PENDING;
+      const nextInvoiceStatus = calculateInvoiceStatus(
+        nextPaid,
+        invoice.totalAmount,
+        EPSILON,
+      );
       const paymentStatus =
         dto.status ??
         (nextInvoiceStatus === InvoiceStatus.PAID
@@ -240,7 +241,7 @@ export class PaymentsService implements OnModuleInit {
     } catch (error) {
       await session.abortTransaction();
       this.logger.error(
-        `createPayment: failed [businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `createPayment: failed [businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -358,9 +359,11 @@ export class PaymentsService implements OnModuleInit {
       if (updated.invoiceId)
         affectedInvoiceIds.add(updated.invoiceId.toString());
 
-      for (const invoiceId of affectedInvoiceIds) {
-        await this.recalculateInvoicePaymentState(invoiceId, bId, session);
-      }
+      await Promise.all(
+        [...affectedInvoiceIds].map((invoiceId) =>
+          this.recalculateInvoicePaymentState(invoiceId, bId, session),
+        ),
+      );
 
       await session.commitTransaction();
 
@@ -368,15 +371,17 @@ export class PaymentsService implements OnModuleInit {
       if (existing.clientId)
         affectedClientIds.add(existing.clientId.toString());
       if (updated.clientId) affectedClientIds.add(updated.clientId.toString());
-      for (const cid of affectedClientIds) {
-        await this.refreshClientBalance(new Types.ObjectId(cid), bId);
-      }
+      await Promise.all(
+        [...affectedClientIds].map((cid) =>
+          this.refreshClientBalance(new Types.ObjectId(cid), bId),
+        ),
+      );
 
       return updated;
     } catch (error) {
       await session.abortTransaction();
       this.logger.error(
-        `updatePayment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `updatePayment: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -427,7 +432,7 @@ export class PaymentsService implements OnModuleInit {
     } catch (error) {
       await session.abortTransaction();
       this.logger.error(
-        `deletePayment: failed [id=${id}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `deletePayment: failed [id=${id}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } finally {
@@ -450,7 +455,7 @@ export class PaymentsService implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(
-        `getSumDirectForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `getSumDirectForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -540,7 +545,7 @@ export class PaymentsService implements OnModuleInit {
       await this.recalculateInvoicePaymentState(payload.invoiceId, bId);
     } catch (error) {
       this.logger.error(
-        `handleAutoCreatePaymentForPaidInvoice: failed ${error instanceof Error ? error.stack : String(error)}`,
+        `handleAutoCreatePaymentForPaidInvoice: failed ${formatError(error)}`,
       );
       throw error;
     }
@@ -566,12 +571,11 @@ export class PaymentsService implements OnModuleInit {
     );
     const amountPaid = toTwoDecimal(Math.min(totalPaid, invoice.totalAmount));
 
-    const status =
-      amountPaid + EPSILON >= invoice.totalAmount
-        ? InvoiceStatus.PAID
-        : amountPaid > 0
-          ? InvoiceStatus.PARTIAL
-          : InvoiceStatus.PENDING;
+    const status = calculateInvoiceStatus(
+      amountPaid,
+      invoice.totalAmount,
+      EPSILON,
+    );
 
     await this.invoicesRepository.updateById(
       invoiceId,

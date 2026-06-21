@@ -366,18 +366,24 @@ export class AnalyticsRepository {
       { $sort: { totalSpent: -1 } },
       { $limit: limit },
       {
+        // Filter out soft-deleted clients inside the $lookup pipeline so
+        // MongoDB loads only non-deleted client docs before the unwind.
         $lookup: {
           from: 'clients',
-          localField: '_id',
-          foreignField: '_id',
+          let: { clientId: '$_id' },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ['$_id', '$$clientId'] },
+                deletedAt: null,
+              },
+            },
+          ],
           as: 'clientInfo',
         },
       },
-      // Skip payments whose client record was soft-deleted (empty lookup result)
+      // Skip payments whose client was soft-deleted (empty lookup result)
       { $unwind: { path: '$clientInfo', preserveNullAndEmptyArrays: false } },
-      {
-        $match: { 'clientInfo.deletedAt': null },
-      },
       {
         $project: {
           _id: 0,

@@ -150,9 +150,9 @@ export class MessagingGateway
       // and announcements without any explicit client-side join call.
       await socket.join(teamRoom(businessId));
 
-      await this.redis.sadd(`presence:chat:${businessId}`, userId);
-      await this.redis.expire(
+      await this.redis.saddex(
         `presence:chat:${businessId}`,
+        userId,
         CACHE_TTL.WS_PRESENCE,
       );
 

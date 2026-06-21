@@ -86,7 +86,7 @@ describe('MessagingGateway', () => {
   };
   let wsAuthGuard: { authenticate: jest.Mock };
   let redis: {
-    sadd: jest.Mock;
+    saddex: jest.Mock;
     expire: jest.Mock;
     srem: jest.Mock;
     sismember: jest.Mock;
@@ -124,7 +124,7 @@ describe('MessagingGateway', () => {
     };
     wsAuthGuard = { authenticate: jest.fn().mockResolvedValue(undefined) };
     redis = {
-      sadd: jest.fn().mockResolvedValue(undefined),
+      saddex: jest.fn().mockResolvedValue(undefined),
       expire: jest.fn().mockResolvedValue(undefined),
       srem: jest.fn().mockResolvedValue(undefined),
       sismember: jest.fn().mockResolvedValue(false),
@@ -156,7 +156,7 @@ describe('MessagingGateway', () => {
     it('should authenticate, join the team room, and emit CONNECTED on success', async () => {
       // Arrange
       const socket = makeSocket();
-      redis.sadd.mockResolvedValue(undefined);
+      redis.saddex.mockResolvedValue(undefined);
 
       // Act
       await gateway.handleConnection(asSocket(socket));
@@ -178,9 +178,10 @@ describe('MessagingGateway', () => {
       await gateway.handleConnection(asSocket(socket));
 
       // Assert
-      expect(redis.sadd).toHaveBeenCalledWith(
+      expect(redis.saddex).toHaveBeenCalledWith(
         `presence:chat:${businessId}`,
         userId,
+        expect.any(Number),
       );
     });
 

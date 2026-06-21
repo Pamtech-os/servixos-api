@@ -108,6 +108,7 @@ export interface ActionRequiredJobData {
 
 /** Grace period duration in days */
 const GRACE_PERIOD_DAYS = 5;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class SubscriptionJobsService implements OnModuleInit {
@@ -256,9 +257,7 @@ export class SubscriptionJobsService implements OnModuleInit {
 
         if (trialEndsAt) {
           // Schedule trial-ending reminder 7 days before trial ends
-          const reminderAt = new Date(
-            trialEndsAt.getTime() - 7 * 24 * 60 * 60 * 1000,
-          );
+          const reminderAt = new Date(trialEndsAt.getTime() - 7 * MS_PER_DAY);
           if (reminderAt > new Date()) {
             await this.agendaService.schedule<{
               businessId: string;
@@ -346,6 +345,9 @@ export class SubscriptionJobsService implements OnModuleInit {
         'subscription.currentPeriodEnd': currentPeriodEnd,
         'subscription.gracePeriodEndsAt': null,
         'subscription.trialEndsAt': null,
+        'subscription.pendingStripeInvoiceId': null,
+        'subscription.pendingAmountDue': null,
+        'subscription.pendingCurrency': null,
         stripeSubscriptionId: subscriptionId,
       });
 
@@ -370,8 +372,7 @@ export class SubscriptionJobsService implements OnModuleInit {
           : TransactionType.PAYMENT_SUCCEEDED,
         status: TransactionStatus.SUCCESS,
         plan: newPlan,
-        billingInterval:
-          (business.billingInterval as 'monthly' | 'yearly') ?? 'monthly',
+        billingInterval: this.getBillingInterval(business),
         amountUsd: amountPaid,
         currency,
         stripeEventId,
@@ -387,18 +388,19 @@ export class SubscriptionJobsService implements OnModuleInit {
         previousPlan !== newPlan ||
         previousStatus !== SubscriptionStatus.ACTIVE
       ) {
-        await this.planChangeModel.create({
-          businessId: business._id,
-          businessName: business.name,
-          fromPlan: previousPlan,
-          toPlan: newPlan,
-          type:
-            previousStatus === SubscriptionStatus.TRIALING
-              ? PlanChangeType.CONVERSION
-              : isUpgrade
-                ? PlanChangeType.UPGRADE
-                : PlanChangeType.CONVERSION,
-        });
+        const changeType =
+          previousStatus === SubscriptionStatus.TRIALING
+            ? PlanChangeType.CONVERSION
+            : isUpgrade
+              ? PlanChangeType.UPGRADE
+              : PlanChangeType.CONVERSION;
+        await this.recordPlanChange(
+          business._id,
+          business.name,
+          previousPlan,
+          newPlan,
+          changeType,
+        );
       }
 
       // Determine email type
@@ -463,7 +465,7 @@ export class SubscriptionJobsService implements OnModuleInit {
       }
 
       const gracePeriodEndsAt = new Date(
-        Date.now() + GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+        Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
       );
 
       const businessId = business._id.toString();
@@ -471,6 +473,9 @@ export class SubscriptionJobsService implements OnModuleInit {
       await this.businessRepository.updateById(businessId, {
         'subscription.status': SubscriptionStatus.GRACE_PERIOD,
         'subscription.gracePeriodEndsAt': gracePeriodEndsAt,
+        'subscription.pendingStripeInvoiceId': invoiceId,
+        'subscription.pendingAmountDue': amountDue,
+        'subscription.pendingCurrency': currency,
       });
 
       await this.subscriptionRepository.createTransaction({
@@ -478,8 +483,7 @@ export class SubscriptionJobsService implements OnModuleInit {
         type: TransactionType.PAYMENT_FAILED,
         status: TransactionStatus.FAILED,
         plan: business.subscription.plan,
-        billingInterval:
-          (business.billingInterval as 'monthly' | 'yearly') ?? 'monthly',
+        billingInterval: this.getBillingInterval(business),
         amountUsd: amountDue,
         currency,
         stripeEventId,
@@ -512,22 +516,12 @@ export class SubscriptionJobsService implements OnModuleInit {
       });
 
       // Schedule daily grace period reminders (days 1–4; day 0 is the payment failed email)
-      for (let day = 1; day < GRACE_PERIOD_DAYS; day++) {
-        const sendAt = new Date(Date.now() + day * 24 * 60 * 60 * 1000);
-        await this.agendaService.schedule<GracePeriodReminderJobData>(
-          sendAt,
-          JOBS.SUBSCRIPTION_GRACE_PERIOD_REMINDER,
-          {
-            businessId,
-            businessName: business.name,
-            ownerEmail: business.email ?? '',
-            plan: business.subscription.plan,
-            daysLeft: GRACE_PERIOD_DAYS - day,
-            amountDue,
-            currency,
-          },
-        );
-      }
+      await this.scheduleGracePeriodReminders(
+        businessId,
+        business,
+        amountDue,
+        currency,
+      );
     } catch (err) {
       this.logger.error(
         `handlePaymentFailed failed [event=${stripeEventId}]: ${err instanceof Error ? err.stack : String(err)}`,
@@ -563,8 +557,7 @@ export class SubscriptionJobsService implements OnModuleInit {
         type: TransactionType.ACCOUNT_LOCKED,
         status: TransactionStatus.SUCCESS,
         plan,
-        billingInterval:
-          (business.billingInterval as 'monthly' | 'yearly') ?? 'monthly',
+        billingInterval: this.getBillingInterval(business),
       });
 
       await this.agendaService.now(JOBS.EMAIL_ACCOUNT_LOCKED, {
@@ -630,29 +623,20 @@ export class SubscriptionJobsService implements OnModuleInit {
     const trialEndDate = new Date(trialEnd * 1000);
     const businessId = business._id.toString();
 
-    // 3-day reminder (now — Stripe fires this event 3 days before trial end)
-    await this.agendaService.now(JOBS.EMAIL_TRIAL_ENDING, {
-      businessId,
-      ownerEmail: business.email ?? '',
-      businessName: business.name,
-      plan: business.subscription.plan,
-      trialEndsAt: trialEndDate.toISOString(),
-      daysLeft: 3,
-      appUrl: this.appUrl,
-    });
+    // 3-day reminder (Stripe fires this event 3 days before trial end)
+    await this.agendaService.now(
+      JOBS.EMAIL_TRIAL_ENDING,
+      this.buildTrialEndingPayload(businessId, business, trialEndDate, 3),
+    );
 
     // 1-day-before reminder
-    const oneDayBefore = new Date(trialEndDate.getTime() - 24 * 60 * 60 * 1000);
+    const oneDayBefore = new Date(trialEndDate.getTime() - MS_PER_DAY);
     if (oneDayBefore > new Date()) {
-      await this.agendaService.schedule(oneDayBefore, JOBS.EMAIL_TRIAL_ENDING, {
-        businessId,
-        ownerEmail: business.email ?? '',
-        businessName: business.name,
-        plan: business.subscription.plan,
-        trialEndsAt: trialEndDate.toISOString(),
-        daysLeft: 1,
-        appUrl: this.appUrl,
-      });
+      await this.agendaService.schedule(
+        oneDayBefore,
+        JOBS.EMAIL_TRIAL_ENDING,
+        this.buildTrialEndingPayload(businessId, business, trialEndDate, 1),
+      );
     }
   }
 
@@ -678,18 +662,17 @@ export class SubscriptionJobsService implements OnModuleInit {
       type: TransactionType.CANCELED,
       status: TransactionStatus.SUCCESS,
       plan: business.subscription.plan,
-      billingInterval:
-        (business.billingInterval as 'monthly' | 'yearly') ?? 'monthly',
+      billingInterval: this.getBillingInterval(business),
       stripeSubscriptionId: subscriptionId,
     });
 
-    await this.planChangeModel.create({
-      businessId: business._id,
-      businessName: business.name,
-      fromPlan: business.subscription.plan,
-      toPlan: 'none',
-      type: PlanChangeType.CHURN,
-    });
+    await this.recordPlanChange(
+      business._id,
+      business.name,
+      business.subscription.plan,
+      'none',
+      PlanChangeType.CHURN,
+    );
 
     this.logger.log(`Subscription canceled [businessId=${businessId}]`);
   }
@@ -704,13 +687,11 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `Your ${this.planLabel(plan)} plan is now active!`,
-      html: subscriptionActivatedTemplate(businessName, plan, appUrl),
-    });
+    await this.sendEmail(
+      ownerEmail,
+      `Your ${this.planLabel(plan)} plan is now active!`,
+      subscriptionActivatedTemplate(businessName, plan, appUrl),
+    );
   }
 
   private async handleEmailSubscriptionUpgraded(job: Job): Promise<void> {
@@ -723,18 +704,11 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `You've upgraded to ${this.planLabel(plan)}!`,
-      html: subscriptionUpgradedTemplate(
-        businessName,
-        previousPlan,
-        plan,
-        appUrl,
-      ),
-    });
+    await this.sendEmail(
+      ownerEmail,
+      `You've upgraded to ${this.planLabel(plan)}!`,
+      subscriptionUpgradedTemplate(businessName, previousPlan, plan, appUrl),
+    );
   }
 
   private async handleEmailTrialEnding(job: Job): Promise<void> {
@@ -747,13 +721,11 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `Your free trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
-      html: trialEndingTemplate(businessName, plan, daysLeft, appUrl),
-    });
+    await this.sendEmail(
+      ownerEmail,
+      `Your free trial ends in ${daysLeft} day${daysLeft === 1 ? '' : 's'}`,
+      trialEndingTemplate(businessName, plan, daysLeft, appUrl),
+    );
   }
 
   private async handleEmailPaymentFailed(job: Job): Promise<void> {
@@ -775,12 +747,10 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `Action required: Payment failed for your ${this.planLabel(plan)} plan`,
-      html: paymentFailedTemplate(
+    await this.sendEmail(
+      ownerEmail,
+      `Action required: Payment failed for your ${this.planLabel(plan)} plan`,
+      paymentFailedTemplate(
         businessName,
         plan,
         gracePeriodEndsAt,
@@ -788,7 +758,7 @@ export class SubscriptionJobsService implements OnModuleInit {
         currency,
         appUrl,
       ),
-    });
+    );
   }
 
   private async handleEmailGracePeriodReminder(job: Job): Promise<void> {
@@ -810,12 +780,10 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `Reminder: ${daysLeft} day${daysLeft === 1 ? '' : 's'} left before your account is locked`,
-      html: gracePeriodReminderTemplate(
+    await this.sendEmail(
+      ownerEmail,
+      `Reminder: ${daysLeft} day${daysLeft === 1 ? '' : 's'} left before your account is locked`,
+      gracePeriodReminderTemplate(
         businessName,
         plan,
         daysLeft,
@@ -823,7 +791,7 @@ export class SubscriptionJobsService implements OnModuleInit {
         currency,
         appUrl,
       ),
-    });
+    );
   }
 
   private async handleEmailAccountLocked(job: Job): Promise<void> {
@@ -834,13 +802,11 @@ export class SubscriptionJobsService implements OnModuleInit {
       appUrl: string;
     };
     if (!ownerEmail) return;
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: ownerEmail,
-      subject: `Your ${this.planLabel(plan)} account has been locked`,
-      html: accountLockedTemplate(businessName, plan, appUrl),
-    });
+    await this.sendEmail(
+      ownerEmail,
+      `Your ${this.planLabel(plan)} account has been locked`,
+      accountLockedTemplate(businessName, plan, appUrl),
+    );
   }
 
   /**
@@ -888,19 +854,17 @@ export class SubscriptionJobsService implements OnModuleInit {
 
     if (!business.email) return;
 
-    await this.emailService.send({
-      from: this.mailFrom,
-      name: this.mailFromName,
-      to: business.email,
-      subject: 'Action required: complete your payment authentication',
-      html: actionRequiredTemplate(
+    await this.sendEmail(
+      business.email,
+      'Action required: complete your payment authentication',
+      actionRequiredTemplate(
         business.name,
         business.subscription.plan,
         amount,
         currency,
         this.appUrl,
       ),
-    });
+    );
 
     this.logger.log(
       `3DS action-required email sent [business=${business._id.toString()}]`,
@@ -911,6 +875,90 @@ export class SubscriptionJobsService implements OnModuleInit {
 
   private planLabel(plan: SubscriptionPlan): string {
     return plan.charAt(0).toUpperCase() + plan.slice(1);
+  }
+
+  private getBillingInterval(business: {
+    billingInterval?: string;
+  }): 'monthly' | 'yearly' {
+    return (business.billingInterval as 'monthly' | 'yearly') ?? 'monthly';
+  }
+
+  private async sendEmail(
+    to: string,
+    subject: string,
+    html: string,
+  ): Promise<void> {
+    await this.emailService.send({
+      from: this.mailFrom,
+      name: this.mailFromName,
+      to,
+      subject,
+      html,
+    });
+  }
+
+  private buildTrialEndingPayload(
+    businessId: string,
+    business: {
+      email?: string;
+      name: string;
+      subscription: { plan: SubscriptionPlan };
+    },
+    trialEndDate: Date,
+    daysLeft: number,
+  ) {
+    return {
+      businessId,
+      ownerEmail: business.email ?? '',
+      businessName: business.name,
+      plan: business.subscription.plan,
+      trialEndsAt: trialEndDate.toISOString(),
+      daysLeft,
+      appUrl: this.appUrl,
+    };
+  }
+
+  private async recordPlanChange(
+    businessId: Types.ObjectId,
+    businessName: string,
+    fromPlan: SubscriptionPlan | string,
+    toPlan: SubscriptionPlan | string,
+    type: PlanChangeType,
+  ): Promise<void> {
+    await this.planChangeModel.create({
+      businessId,
+      businessName,
+      fromPlan,
+      toPlan,
+      type,
+    });
+  }
+
+  private async scheduleGracePeriodReminders(
+    businessId: string,
+    business: {
+      name: string;
+      email?: string;
+      subscription: { plan: SubscriptionPlan };
+    },
+    amountDue: number,
+    currency: string,
+  ): Promise<void> {
+    for (let day = 1; day < GRACE_PERIOD_DAYS; day++) {
+      await this.agendaService.schedule<GracePeriodReminderJobData>(
+        new Date(Date.now() + day * MS_PER_DAY),
+        JOBS.SUBSCRIPTION_GRACE_PERIOD_REMINDER,
+        {
+          businessId,
+          businessName: business.name,
+          ownerEmail: business.email ?? '',
+          plan: business.subscription.plan,
+          daysLeft: GRACE_PERIOD_DAYS - day,
+          amountDue,
+          currency,
+        },
+      );
+    }
   }
 
   /** Cancels any pending lock-account jobs for a business that has recovered. */

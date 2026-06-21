@@ -16,4 +16,5 @@ export interface ClientLoginData {
 
 export interface ClientTokenData {
   accessToken: string;
+  refreshToken?: string;
 }

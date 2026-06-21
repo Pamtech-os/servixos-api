@@ -111,7 +111,9 @@ describe('GET /api/business-categories (integration)', () => {
   describe('HMAC signature guard', () => {
     it('returns 401 when HMAC headers are missing', async () => {
       // Arrange & Act
-      const res = await req().get('/api/business-categories');
+      const res = await req()
+        .get('/api/business-categories')
+        .set('x-channel', 'mobile');
       // Assert
       expect(res.status).toBe(401);
     });
@@ -120,6 +122,7 @@ describe('GET /api/business-categories (integration)', () => {
       // Arrange & Act
       const res = await req()
         .get('/api/business-categories')
+        .set('x-channel', 'mobile')
         .set('x-client-token', clientToken)
         .set('x-timestamp', Date.now().toString())
         .set('x-signature', 'a'.repeat(64));
@@ -133,6 +136,7 @@ describe('GET /api/business-categories (integration)', () => {
       // Act
       const res = await req()
         .get('/api/business-categories')
+        .set('x-channel', 'mobile')
         .set('x-client-token', clientToken)
         .set('x-timestamp', staleTs)
         .set('x-signature', 'anything');
@@ -153,6 +157,7 @@ describe('GET /api/business-categories (integration)', () => {
       // Act
       const res = await req()
         .get('/api/business-categories')
+        .set('x-channel', 'mobile')
         .set('x-client-token', fakeToken)
         .set('x-timestamp', timestamp)
         .set('x-signature', sig);

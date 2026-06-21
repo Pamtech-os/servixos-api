@@ -56,6 +56,18 @@ class Subscription {
   /** True once a payment method has been confirmed via setup_intent.succeeded webhook. */
   @prop({ default: false })
   hasPaymentMethod: boolean;
+
+  /** Stripe invoice ID that triggered the current grace period; used by pay-now flow. */
+  @prop({ trim: true })
+  pendingStripeInvoiceId?: string;
+
+  /** Amount due (in cents) from the failed invoice; mirrors the Stripe invoice at grace period entry. */
+  @prop()
+  pendingAmountDue?: number;
+
+  /** Currency of the pending amount (e.g. 'usd'). */
+  @prop({ trim: true })
+  pendingCurrency?: string;
 }
 
 export { Subscription };

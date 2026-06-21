@@ -15,6 +15,8 @@ import { INVOICES_MESSAGES } from 'src/common/constants/messages/invoices.messag
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
+import { formatError, formatErrorMessage } from 'src/common/utils/error.util';
+import { calculateInvoiceStatus } from '../utils/invoice-status.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
@@ -40,6 +42,26 @@ import { JobsRepository } from '../../jobs/repositories/jobs.repository';
 import { RequestsRepository } from '../../requests/repositories/requests.repository';
 import { ContractStatus } from '../../contracts/schemas/contract.schema';
 import { ContractsRepository } from '../../contracts/repositories/contracts.repository';
+import { RedisService } from '../../redis/services/redis.service';
+import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
+
+// ─── Cache key helpers ────────────────────────────────────────────────────────
+const invoicesListVersionKey = (businessId: string): string =>
+  `${businessId}:invoices:list:version`;
+
+const invoicesListCacheKey = (
+  businessId: string,
+  version: string,
+  search: string,
+  clientId: string,
+  status: string,
+  page: number,
+  limit: number,
+): string =>
+  `${businessId}:invoices:list:v${version}:s${search}:c${clientId}:st${status}:p${page}:l${limit}`;
+
+const invoiceDetailCacheKey = (businessId: string, id: string): string =>
+  `${businessId}:invoices:${id}`;
 
 interface PaginatedInvoices {
   statistics: InvoiceListStatistics;
@@ -67,6 +89,7 @@ export class InvoicesService implements OnModuleInit {
     private readonly agendaService: AgendaService,
     private readonly emailService: EmailService,
     private readonly storageService: StorageService,
+    private readonly redisService: RedisService,
   ) {}
 
   onModuleInit(): void {
@@ -82,6 +105,20 @@ export class InvoicesService implements OnModuleInit {
   ): Promise<PaginatedInvoices | InternalServerErrorException> {
     try {
       const pagination = resolvePagination(dto.page, dto.limit ?? 6);
+      const version = await this.getListVersion(businessId);
+      const cacheKey = invoicesListCacheKey(
+        businessId,
+        version,
+        dto.search ?? '',
+        dto.clientId ?? '',
+        dto.status ?? '',
+        pagination.page,
+        pagination.limit,
+      );
+
+      const cached = await this.redisService.get(cacheKey);
+      if (cached) return JSON.parse(cached) as PaginatedInvoices;
+
       const { data, total, statistics } = await this.invoicesRepository.findAll(
         new Types.ObjectId(businessId),
         {
@@ -92,14 +129,24 @@ export class InvoicesService implements OnModuleInit {
         pagination,
       );
 
-      return {
+      const result: PaginatedInvoices = {
         statistics,
         data,
         meta: buildMeta(pagination.page, pagination.limit, total),
       };
+
+      await this.redisService
+        .set(cacheKey, JSON.stringify(result), CACHE_TTL.INVOICES_LIST)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `listInvoices: cache write failed [businessId=${businessId}]: ${formatErrorMessage(err)}`,
+          ),
+        );
+
+      return result;
     } catch (error) {
       this.logger.error(
-        `listInvoices: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `listInvoices: failed [businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -110,6 +157,10 @@ export class InvoicesService implements OnModuleInit {
     businessId: string,
   ): Promise<Invoice | NotFoundException | InternalServerErrorException> {
     try {
+      const cacheKey = invoiceDetailCacheKey(businessId, id);
+      const cached = await this.redisService.get(cacheKey);
+      if (cached) return JSON.parse(cached) as Invoice;
+
       const invoice = await this.invoicesRepository.findById(
         id,
         new Types.ObjectId(businessId),
@@ -119,10 +170,18 @@ export class InvoicesService implements OnModuleInit {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.NOT_FOUND);
       }
 
+      await this.redisService
+        .set(cacheKey, JSON.stringify(invoice), CACHE_TTL.INVOICE_DETAIL)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `getInvoice: cache write failed [id=${id}]: ${formatErrorMessage(err)}`,
+          ),
+        );
+
       return invoice;
     } catch (error) {
       this.logger.error(
-        `getInvoice: failed [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `getInvoice: failed [id=${id}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -234,6 +293,7 @@ export class InvoicesService implements OnModuleInit {
             timezone: business.timezone,
           });
           await this.refreshClientBalance(client._id, bId);
+          void this.invalidateInvoicesListCache(businessId);
           return invoice;
         } catch (err) {
           const isDuplicate =
@@ -250,7 +310,7 @@ export class InvoicesService implements OnModuleInit {
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     } catch (error) {
       this.logger.error(
-        `createInvoice: failed [businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `createInvoice: failed [businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -290,14 +350,12 @@ export class InvoicesService implements OnModuleInit {
           nextTaxRate,
         );
         update.totalAmount = totalAmount;
-
-        if (existing.amountPaid >= totalAmount) {
+        update.status = calculateInvoiceStatus(
+          existing.amountPaid,
+          totalAmount,
+        );
+        if (update.status === InvoiceStatus.PAID) {
           update.amountPaid = totalAmount;
-          update.status = InvoiceStatus.PAID;
-        } else if (existing.amountPaid > 0) {
-          update.status = InvoiceStatus.PARTIAL;
-        } else {
-          update.status = InvoiceStatus.PENDING;
         }
       }
 
@@ -315,6 +373,10 @@ export class InvoicesService implements OnModuleInit {
       }
 
       await this.refreshClientBalance(existing.clientId, bId);
+      void this.invalidateInvoicesListCache(businessId);
+      void this.redisService
+        .del(invoiceDetailCacheKey(businessId, id))
+        .catch(() => undefined);
 
       if (
         dto.status === InvoiceStatus.PAID &&
@@ -330,7 +392,7 @@ export class InvoicesService implements OnModuleInit {
           )
           .catch((err: unknown) =>
             this.logger.error(
-              `updateInvoice: queue auto-payment failed [invoiceId=${id}]: ${err instanceof Error ? err.message : String(err)}`,
+              `updateInvoice: queue auto-payment failed [invoiceId=${id}]: ${formatErrorMessage(err)}`,
             ),
           );
       }
@@ -338,7 +400,7 @@ export class InvoicesService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `updateInvoice: failed [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `updateInvoice: failed [id=${id}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -355,13 +417,35 @@ export class InvoicesService implements OnModuleInit {
         return new NotFoundException(INVOICES_MESSAGES.ERROR.NOT_FOUND);
       }
       await this.refreshClientBalance(deleted.clientId, bId);
+      void this.invalidateInvoicesListCache(businessId);
+      void this.redisService
+        .del(invoiceDetailCacheKey(businessId, id))
+        .catch(() => undefined);
       return null;
     } catch (error) {
       this.logger.error(
-        `deleteInvoice: failed [id=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `deleteInvoice: failed [id=${id}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
+  }
+
+  private async getListVersion(businessId: string): Promise<string> {
+    const key = invoicesListVersionKey(businessId);
+    const version = await this.redisService.get(key);
+    if (version) return version;
+    await this.redisService.set(key, '1', CACHE_TTL.INVOICES_LIST_VERSION);
+    return '1';
+  }
+
+  private async invalidateInvoicesListCache(businessId: string): Promise<void> {
+    await this.redisService
+      .incr(invoicesListVersionKey(businessId))
+      .catch((err: unknown) =>
+        this.logger.warn(
+          `invalidateInvoicesListCache: failed [businessId=${businessId}]: ${formatErrorMessage(err)}`,
+        ),
+      );
   }
 
   async getInvoicePdf(
@@ -387,7 +471,7 @@ export class InvoicesService implements OnModuleInit {
       return { pdfUrl: ensured.pdfUrl as string };
     } catch (error) {
       this.logger.error(
-        `getInvoicePdf: failed [invoiceId=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `getInvoicePdf: failed [invoiceId=${id}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(
         INVOICES_MESSAGES.ERROR.PDF_FAILED,
@@ -420,7 +504,7 @@ export class InvoicesService implements OnModuleInit {
       return { invoiceId: id, queued: true };
     } catch (error) {
       this.logger.error(
-        `sendInvoice: failed [invoiceId=${id}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `sendInvoice: failed [invoiceId=${id}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(
         INVOICES_MESSAGES.ERROR.SEND_FAILED,
@@ -441,7 +525,7 @@ export class InvoicesService implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(
-        `getPaidSummaryForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `getPaidSummaryForJob: failed [jobId=${jobId}, businessId=${businessId}]: ${formatError(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -464,7 +548,7 @@ export class InvoicesService implements OnModuleInit {
       );
     } catch (err) {
       this.logger.error(
-        `refreshClientBalance: failed [clientId=${clientId.toString()}, businessId=${businessId.toString()}]: ${err instanceof Error ? err.message : String(err)}`,
+        `refreshClientBalance: failed [clientId=${clientId.toString()}, businessId=${businessId.toString()}]: ${formatErrorMessage(err)}`,
       );
     }
   }
@@ -534,9 +618,7 @@ export class InvoicesService implements OnModuleInit {
         { sentAt },
       );
     } catch (error) {
-      this.logger.error(
-        `handleInvoiceSendJob: failed ${error instanceof Error ? error.stack : String(error)}`,
-      );
+      this.logger.error(`handleInvoiceSendJob: failed ${formatError(error)}`);
       throw error;
     }
   }
@@ -572,7 +654,7 @@ export class InvoicesService implements OnModuleInit {
       return updated;
     } catch (error) {
       this.logger.error(
-        `ensureInvoicePdf: failed [invoiceId=${invoice._id.toString()}, businessId=${businessId}] ${error instanceof Error ? error.stack : String(error)}`,
+        `ensureInvoicePdf: failed [invoiceId=${invoice._id.toString()}, businessId=${businessId}] ${formatError(error)}`,
       );
       return new InternalServerErrorException(
         INVOICES_MESSAGES.ERROR.PDF_FAILED,
