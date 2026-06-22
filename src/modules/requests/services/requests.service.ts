@@ -9,6 +9,7 @@ import {
 import type { MessagePayload } from '../../messaging/messaging.events';
 import type { Conversation } from '../../messaging/schemas/conversation.schema';
 import { MessagingService } from '../../messaging/services/messaging.service';
+import { NotificationsService } from '../../notifications/services/notifications.service';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { Job } from 'agenda';
@@ -121,6 +122,7 @@ export class RequestsService implements OnModuleInit {
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
     private readonly messagingService: MessagingService,
+    private readonly notificationsService: NotificationsService,
   ) {
     this.anthropic = new Anthropic({
       apiKey: config.get<string>('ANTHROPIC_API_KEY'),
@@ -737,6 +739,15 @@ export class RequestsService implements OnModuleInit {
 
     // Cache invalidation should never block request submission latency.
     void this.invalidateRequestsListCache(businessId.toString());
+
+    void this.notificationsService.onNewServiceRequest({
+      businessId: businessId.toString(),
+      businessName,
+      clientName: dto.clientName,
+      service: dto.service,
+      requestedDate: new Date(dto.requestedDate),
+      message: dto.message,
+    });
 
     void this.enqueueClientProvisioningJob({
       businessId: businessId.toString(),

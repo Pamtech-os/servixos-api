@@ -22,11 +22,14 @@ export const WEBSITE_MESSAGES = {
     GENERATED: 'Website generation started',
     DESIGN_SAVED: 'Design settings saved successfully',
     CONTENT_SAVED: 'Website content saved successfully',
+    LOGO_SAVED: 'Website logo updated successfully',
   },
   ERROR: {
     NOT_FOUND: 'Website configuration not found',
     PUBLISH_FAILED: 'Unable to publish website at this time',
     INVALID_FIELD: 'Invalid booking form field configuration',
     BOOKING_FAILED: 'Unable to submit booking request at this time',
+    LOGO_MISSING: 'No logo file provided',
+    INVALID_IMAGE_TYPE: 'Logo must be a JPEG or PNG image',
   },
 } as const;

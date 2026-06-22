@@ -26,6 +26,7 @@ import {
   ServiceRequest,
 } from 'src/modules/requests/schemas/service-request.schema';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { NotificationsService } from 'src/modules/notifications/services/notifications.service';
 import { asMock } from 'test/helpers/mock';
 
 describe('RequestsService', () => {
@@ -111,6 +112,9 @@ describe('RequestsService', () => {
       asMock<AgendaService>(agendaService),
       asMock<RedisService>(redisService),
       {} as never,
+      asMock<NotificationsService>({
+        onNewServiceRequest: jest.fn().mockResolvedValue(undefined),
+      }),
     );
 
     const logger = Reflect.get(service, 'logger') as Logger;

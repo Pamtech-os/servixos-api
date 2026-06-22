@@ -8,7 +8,10 @@ import {
   Param,
   Patch,
   Post,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
@@ -86,6 +89,24 @@ export class WebsiteController {
     );
     if (result instanceof HttpException) throw result;
     return { message: WEBSITE_MESSAGES.SUCCESS.CONTENT_SAVED, data: null };
+  }
+
+  /** Replaces the website logo with a newly uploaded image. */
+  @Patch('logo')
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  @HttpCode(HttpStatus.OK)
+  async updateLogo(
+    @CurrentUser() user: JwtUser,
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    const result = await this.websiteGenerationService.updateLogo(
+      user.businessId,
+      file,
+    );
+    if (result instanceof HttpException) throw result;
+    return { message: WEBSITE_MESSAGES.SUCCESS.LOGO_SAVED, data: result };
   }
 
   @Patch('booking-form')
