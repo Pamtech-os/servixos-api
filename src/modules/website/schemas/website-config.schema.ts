@@ -106,6 +106,12 @@ export class WebsiteConfig {
   @prop({ type: () => AiContent, _id: false })
   aiContent?: AiContent;
 
+  @prop({ trim: true })
+  logoUrl?: string;
+
+  @prop({ trim: true })
+  logoPublicId?: string;
+
   @prop({ type: () => BookingForm, _id: false })
   bookingForm?: BookingForm;
 }

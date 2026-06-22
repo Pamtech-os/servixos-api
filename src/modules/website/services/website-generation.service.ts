@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -11,9 +12,16 @@ import { WEBSITE_MESSAGES } from 'src/common/constants/messages/website.messages
 import type { AiContent, BookingForm } from '../schemas/website-config.schema';
 import { WebsiteConfigRepository } from '../repositories/website-config.repository';
 import { BusinessRepository } from '../../business/repositories/business.repository';
+import { StorageService } from '../../storage/storage.service';
 import type { UpdateBookingFormDto } from '../dto/update-booking-form.dto';
 import type { UpdateDesignDto } from '../dto/update-design.dto';
 import type { UpdateContentDto } from '../dto/update-content.dto';
+
+const ALLOWED_LOGO_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+]);
 
 interface BusinessContext {
   name: string;
@@ -40,6 +48,7 @@ export interface PublicWebsiteData {
     colorPrimary: string;
     colorSecondary: string;
     font: string;
+    logoUrl?: string;
     aiContent?: AiContent;
     bookingForm?: BookingForm;
   };
@@ -51,6 +60,7 @@ export interface MyWebsiteData {
   colorPrimary: string;
   colorSecondary: string;
   font: string;
+  logoUrl?: string;
   aiContent?: AiContent;
   bookingForm?: BookingForm;
 }
@@ -66,6 +76,7 @@ export class WebsiteGenerationService {
     config: ConfigService,
     private readonly websiteConfigRepository: WebsiteConfigRepository,
     private readonly businessRepository: BusinessRepository,
+    private readonly storageService: StorageService,
   ) {
     this.anthropic = new Anthropic({
       apiKey: config.get<string>('ANTHROPIC_API_KEY'),
@@ -133,6 +144,7 @@ export class WebsiteGenerationService {
       colorPrimary: config.colorPrimary,
       colorSecondary: config.colorSecondary,
       font: config.font,
+      logoUrl: config.logoUrl,
       aiContent: config.aiContent,
       bookingForm: config.bookingForm,
     };
@@ -169,6 +181,7 @@ export class WebsiteGenerationService {
         colorPrimary: config.colorPrimary,
         colorSecondary: config.colorSecondary,
         font: config.font,
+        logoUrl: config.logoUrl,
         aiContent: config.aiContent,
         bookingForm: config.bookingForm,
       },
@@ -272,6 +285,62 @@ export class WebsiteGenerationService {
     });
   }
 
+  /**
+   * Replaces the website logo with a newly uploaded image. The previous logo
+   * is deleted from storage after the new one is saved.
+   */
+  async updateLogo(
+    businessId: string,
+    file?: Express.Multer.File,
+  ): Promise<
+    | { logoUrl: string }
+    | BadRequestException
+    | NotFoundException
+    | InternalServerErrorException
+  > {
+    try {
+      if (!file) {
+        return new BadRequestException(WEBSITE_MESSAGES.ERROR.LOGO_MISSING);
+      }
+
+      if (!ALLOWED_LOGO_MIME_TYPES.has(file.mimetype)) {
+        return new BadRequestException(
+          WEBSITE_MESSAGES.ERROR.INVALID_IMAGE_TYPE,
+        );
+      }
+
+      const config =
+        await this.websiteConfigRepository.findByBusinessId(businessId);
+      if (!config)
+        return new NotFoundException(WEBSITE_MESSAGES.ERROR.NOT_FOUND);
+
+      const { url, publicId } = await this.storageService.uploadStream(
+        file,
+        `servixos/logos/${businessId}`,
+      );
+
+      const previousPublicId = config.logoPublicId;
+
+      await this.websiteConfigRepository.updateByBusinessId(businessId, {
+        logoUrl: url,
+        logoPublicId: publicId,
+      });
+
+      if (previousPublicId) {
+        void this.storageService
+          .delete(previousPublicId)
+          .catch(() => undefined);
+      }
+
+      return { logoUrl: url };
+    } catch (err) {
+      this.logger.error(
+        `updateLogo: unexpected error [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,
+      );
+      return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
+    }
+  }
+
   private async generateAiContent(
     context: BusinessContext,
   ): Promise<AiContent | null> {
@@ -302,7 +371,7 @@ export class WebsiteGenerationService {
       ? ` Business description: ${context.description}.`
       : '';
 
-    return `Generate professional website content for a ${context.categoryName} business named "${context.name}".${desc}
+    return `Generate professional and modern website content for a ${context.categoryName} business named "${context.name}".${desc}
 
 Return ONLY a valid JSON object (no markdown, no explanation) with this structure:
 {

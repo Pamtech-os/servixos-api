@@ -17,6 +17,7 @@ import {
   adminInvitationTemplate,
 } from '../../email/templates/admin-custom-email.template';
 import { adminOtpTemplate } from '../../email/templates/admin-otp.template';
+import { newServiceRequestTemplate } from '../../email/templates/new-service-request.template';
 import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
@@ -110,6 +111,16 @@ export interface AdminOtpJobData {
   to: string;
   firstName: string;
   otp: string;
+}
+
+export interface NewServiceRequestJobData {
+  to: string;
+  firstName: string;
+  businessName: string;
+  clientName: string;
+  service: string;
+  requestedDate: string;
+  message?: string;
 }
 
 export function defineEmailJobs(
@@ -319,6 +330,35 @@ export function defineEmailJobs(
       html: adminOtpTemplate(firstName, otp),
     });
   });
+
+  agenda.define(
+    JOBS.EMAIL_NEW_SERVICE_REQUEST,
+    { concurrency: 10 },
+    async (job: Job) => {
+      const {
+        to,
+        firstName,
+        businessName,
+        clientName,
+        service,
+        requestedDate,
+        message,
+      } = job.attrs.data as NewServiceRequestJobData;
+      await emailService.send({
+        to,
+        name: firstName,
+        subject: 'New service request — Servix OS',
+        html: newServiceRequestTemplate(
+          firstName,
+          clientName,
+          service,
+          requestedDate,
+          businessName,
+          message,
+        ),
+      });
+    },
+  );
 
   agenda.define(
     JOBS.EMAIL_TEAM_ANNOUNCEMENT,

@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { WebsiteConfigRepository } from 'src/modules/website/repositories/website-config.repository';
+import { StorageService } from 'src/modules/storage/storage.service';
 import {
   WebsiteGenerationService,
   type MyWebsiteData,
@@ -73,6 +74,7 @@ describe('WebsiteGenerationService.getMyWebsite', () => {
       configService,
       asMock<WebsiteConfigRepository>(websiteConfigRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<StorageService>({ uploadStream: jest.fn(), delete: jest.fn() }),
     );
   });
 
@@ -203,6 +205,7 @@ describe('WebsiteGenerationService.getPublicWebsite', () => {
       configService,
       asMock<WebsiteConfigRepository>(websiteConfigRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<StorageService>({ uploadStream: jest.fn(), delete: jest.fn() }),
     );
   });
 
@@ -383,6 +386,7 @@ describe('WebsiteGenerationService.updateBookingForm', () => {
       configService,
       asMock<WebsiteConfigRepository>(websiteConfigRepository),
       asMock<BusinessRepository>({ findBySubdomain: jest.fn() }),
+      asMock<StorageService>({ uploadStream: jest.fn(), delete: jest.fn() }),
     );
   });
 
@@ -445,6 +449,7 @@ describe('WebsiteGenerationService.updateDesign', () => {
       configService,
       asMock<WebsiteConfigRepository>(websiteConfigRepository),
       asMock<BusinessRepository>(businessRepository),
+      asMock<StorageService>({ uploadStream: jest.fn(), delete: jest.fn() }),
     );
   }
 
@@ -554,6 +559,7 @@ describe('WebsiteGenerationService.updateContent', () => {
       configService,
       asMock<WebsiteConfigRepository>(websiteConfigRepository),
       asMock<BusinessRepository>({ findBySubdomain: jest.fn() }),
+      asMock<StorageService>({ uploadStream: jest.fn(), delete: jest.fn() }),
     );
   }
 
@@ -636,5 +642,140 @@ describe('WebsiteGenerationService.updateContent', () => {
       BUSINESS_ID.toString(),
       { 'aiContent.services': dto.services },
     );
+  });
+});
+
+describe('WebsiteGenerationService.updateLogo', () => {
+  let service: WebsiteGenerationService;
+  let websiteConfigRepository: {
+    findByBusinessId: jest.Mock;
+    updateByBusinessId: jest.Mock;
+  };
+  let storageService: { uploadStream: jest.Mock; delete: jest.Mock };
+
+  const makeFile = (mimetype = 'image/jpeg'): Express.Multer.File =>
+    ({
+      mimetype,
+      originalname: 'logo.jpg',
+      buffer: Buffer.from('fake'),
+      size: 1024,
+    }) as Express.Multer.File;
+
+  beforeEach(() => {
+    websiteConfigRepository = {
+      findByBusinessId: jest.fn().mockResolvedValue(baseConfig),
+      updateByBusinessId: jest.fn().mockResolvedValue(null),
+    };
+    storageService = {
+      uploadStream: jest.fn().mockResolvedValue({
+        url: 'https://cdn.example.com/logo.jpg',
+        publicId: 'logos/abc',
+      }),
+      delete: jest.fn().mockResolvedValue(undefined),
+    };
+
+    const configService = asMock<ConfigService>({
+      get: jest.fn().mockImplementation((key: string) => {
+        const values: Record<string, string> = {
+          ANTHROPIC_API_KEY: 'test-key',
+          AI_WEBSITE_MODEL: 'claude-test',
+          BASE_DOMAIN: 'servixos.com',
+        };
+        return values[key];
+      }),
+    });
+
+    service = new WebsiteGenerationService(
+      configService,
+      asMock<WebsiteConfigRepository>(websiteConfigRepository),
+      asMock<BusinessRepository>({ findById: jest.fn() }),
+      asMock<StorageService>(storageService),
+    );
+  });
+
+  afterEach(() => jest.restoreAllMocks());
+
+  it('returns BadRequestException when no file is provided', async () => {
+    // Arrange — no file
+
+    // Act
+    const result = await service.updateLogo(BUSINESS_ID.toString(), undefined);
+
+    // Assert
+    const { BadRequestException } = await import('@nestjs/common');
+    expect(result).toBeInstanceOf(BadRequestException);
+  });
+
+  it('returns BadRequestException when file MIME type is not allowed', async () => {
+    // Arrange
+    const file = makeFile('image/gif');
+
+    // Act
+    const result = await service.updateLogo(BUSINESS_ID.toString(), file);
+
+    // Assert
+    const { BadRequestException } = await import('@nestjs/common');
+    expect(result).toBeInstanceOf(BadRequestException);
+  });
+
+  it('returns NotFoundException when no website config exists', async () => {
+    // Arrange
+    websiteConfigRepository.findByBusinessId.mockResolvedValue(null);
+    const file = makeFile();
+
+    // Act
+    const result = await service.updateLogo(BUSINESS_ID.toString(), file);
+
+    // Assert
+    expect(result).toBeInstanceOf(NotFoundException);
+  });
+
+  it('uploads file, saves logoUrl and logoPublicId, returns logoUrl', async () => {
+    // Arrange
+    const file = makeFile('image/png');
+
+    // Act
+    const result = await service.updateLogo(BUSINESS_ID.toString(), file);
+
+    // Assert
+    expect(storageService.uploadStream).toHaveBeenCalledWith(
+      file,
+      `servixos/logos/${BUSINESS_ID.toString()}`,
+    );
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      {
+        logoUrl: 'https://cdn.example.com/logo.jpg',
+        logoPublicId: 'logos/abc',
+      },
+    );
+    expect(result).toEqual({ logoUrl: 'https://cdn.example.com/logo.jpg' });
+  });
+
+  it('deletes the previous logo from storage when one exists', async () => {
+    // Arrange
+    websiteConfigRepository.findByBusinessId.mockResolvedValue({
+      ...baseConfig,
+      logoPublicId: 'logos/old-logo',
+    });
+    const file = makeFile();
+
+    // Act
+    await service.updateLogo(BUSINESS_ID.toString(), file);
+
+    // Assert — allow micro-task queue to flush the fire-and-forget delete
+    await Promise.resolve();
+    expect(storageService.delete).toHaveBeenCalledWith('logos/old-logo');
+  });
+
+  it('does not call delete when the config has no previous logo', async () => {
+    // Arrange — baseConfig has no logoPublicId
+    const file = makeFile();
+
+    // Act
+    await service.updateLogo(BUSINESS_ID.toString(), file);
+
+    // Assert
+    expect(storageService.delete).not.toHaveBeenCalled();
   });
 });

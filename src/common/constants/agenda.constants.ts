@@ -18,6 +18,7 @@ export const JOBS = {
   EMAIL_TEAM_ANNOUNCEMENT: 'email:team:announcement',
   TASK_OVERDUE_NOTIFICATION: 'task:overdue:notification',
   CLIENT_REQUESTS_CLEANUP: 'client:requests:cleanup',
+  EMAIL_NEW_SERVICE_REQUEST: 'email:new-service-request',
   REVIEW_SUBMITTED: 'review:submitted',
   EMAIL_ADMIN_CUSTOM: 'email:admin:custom',
   EMAIL_ADMIN_INVITATION: 'email:admin:invitation',
