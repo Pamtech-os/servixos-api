@@ -18,7 +18,7 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e": "jest --runInBand --config ./test/jest-e2e.json",
     "test:all": "npm test && npm run test:e2e",
     "prepare": "node -e \"try { require('husky').install() } catch (e) {}\""
   },
@@ -124,6 +124,7 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
+    "maxWorkers": 2,
     "setupFilesAfterEnv": [
       "<rootDir>/test/setup.ts"
     ]
