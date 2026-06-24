@@ -16,6 +16,7 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { Public } from 'src/common/decorators/public.decorator';
 import { SkipChannel } from 'src/common/decorators/channel.decorator';
+import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 import { REQUESTS_MESSAGES } from 'src/common/constants/messages/requests.messages';
 import { CreateRequestDto } from '../dto/create-request.dto';
 import { ListRequestsDto } from '../dto/list-requests.dto';
@@ -81,6 +82,7 @@ export class RequestsController {
 
   @Public()
   @SkipChannel()
+  @SkipSignature()
   @Post()
   @HttpCode(HttpStatus.CREATED)
   async createRequest(

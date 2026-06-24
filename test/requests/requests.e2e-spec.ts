@@ -353,31 +353,6 @@ describe('Requests (integration)', () => {
   // ─────────────────────────────────────────────────────────────────────────────
 
   describe('POST /api/requests', () => {
-    describe('HMAC signature guard', () => {
-      it('returns 401 when HMAC headers are missing', async () => {
-        // Arrange & Act
-        const res = await req()
-          .post(BASE)
-          .set('x-channel', 'mobile')
-          .query({ businessId: seededUser.businessId })
-          .send(BASE_REQUEST_BODY);
-        // Assert
-        expect(res.status).toBe(401);
-      });
-
-      it('returns 401 when the signature is invalid', async () => {
-        // Arrange & Act
-        const res = await authed(
-          req()
-            .post(BASE)
-            .query({ businessId: seededUser.businessId })
-            .send(BASE_REQUEST_BODY),
-        ).set('x-signature', 'a'.repeat(64));
-        // Assert
-        expect(res.status).toBe(401);
-      });
-    });
-
     describe('input validation — 400', () => {
       it.each<[string, Partial<typeof BASE_REQUEST_BODY>]>([
         ['clientName', { clientName: undefined }],
