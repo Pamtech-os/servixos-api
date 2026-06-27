@@ -39,6 +39,7 @@ export const JOBS = {
   EMAIL_PAYMENT_FAILED: 'email:payment:failed',
   EMAIL_GRACE_PERIOD_REMINDER: 'email:grace:reminder',
   EMAIL_ACCOUNT_LOCKED: 'email:account:locked',
+  EMAIL_TRIAL_PAYMENT_FAILED: 'email:trial:payment:failed',
   SUBSCRIPTION_CARD_SAVED: 'subscription:card:saved',
   SUBSCRIPTION_ACTION_REQUIRED: 'subscription:action:required',
   EMAIL_ACTION_REQUIRED: 'email:action:required',

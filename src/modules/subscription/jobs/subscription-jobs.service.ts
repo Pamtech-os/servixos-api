@@ -30,6 +30,7 @@ import { trialEndingTemplate } from '../../email/templates/trial-ending.template
 import { paymentFailedTemplate } from '../../email/templates/payment-failed.template';
 import { gracePeriodReminderTemplate } from '../../email/templates/grace-period-reminder.template';
 import { accountLockedTemplate } from '../../email/templates/account-locked.template';
+import { trialPaymentFailedTemplate } from '../../email/templates/trial-payment-failed.template';
 import { actionRequiredTemplate } from '../../email/templates/action-required.template';
 
 // ─── Job data interfaces (exported for type safety) ──────────────────────────
@@ -176,6 +177,9 @@ export class SubscriptionJobsService implements OnModuleInit {
     );
     this.agendaService.define(JOBS.EMAIL_ACCOUNT_LOCKED, (job) =>
       this.handleEmailAccountLocked(job),
+    );
+    this.agendaService.define(JOBS.EMAIL_TRIAL_PAYMENT_FAILED, (job) =>
+      this.handleEmailTrialPaymentFailed(job),
     );
     this.agendaService.define(JOBS.SUBSCRIPTION_CARD_SAVED, (job) =>
       this.handleCardSaved(job as Job<CardSavedJobData>),
@@ -431,7 +435,11 @@ export class SubscriptionJobsService implements OnModuleInit {
 
   /**
    * Called when a Stripe invoice payment fails.
-   * Puts the business into GRACE_PERIOD for 5 days, then schedules account lock.
+   *
+   * - TRIALING → Stripe auto-charged at trial end and the charge failed.
+   *   Lock the account immediately — no grace period for trial conversion.
+   *   Stripe will still retry; a successful retry fires invoice.payment_succeeded → ACTIVE.
+   * - ACTIVE → enter GRACE_PERIOD for 5 days, then lock.
    */
   private async handlePaymentFailed(
     job: Job<PaymentFailedJobData>,
@@ -464,11 +472,49 @@ export class SubscriptionJobsService implements OnModuleInit {
         return;
       }
 
+      const businessId = business._id.toString();
+
+      // Trial payment failure — lock immediately, no grace period
+      if (business.subscription.status === SubscriptionStatus.TRIALING) {
+        await this.businessRepository.updateById(businessId, {
+          'subscription.status': SubscriptionStatus.LOCKED,
+          'subscription.pendingStripeInvoiceId': invoiceId,
+          'subscription.pendingAmountDue': amountDue,
+          'subscription.pendingCurrency': currency,
+        });
+
+        await this.subscriptionRepository.createTransaction({
+          businessId: business._id,
+          type: TransactionType.PAYMENT_FAILED,
+          status: TransactionStatus.FAILED,
+          plan: business.subscription.plan,
+          billingInterval: this.getBillingInterval(business),
+          amountUsd: amountDue,
+          currency,
+          stripeEventId,
+          stripeSubscriptionId: subscriptionId,
+          stripeInvoiceId: invoiceId,
+        });
+
+        await this.agendaService.now(JOBS.EMAIL_TRIAL_PAYMENT_FAILED, {
+          businessName: business.name,
+          ownerEmail: business.email ?? '',
+          plan: business.subscription.plan,
+          amountDue,
+          currency,
+          appUrl: this.appUrl,
+        });
+
+        this.logger.log(
+          `Trial expired with failed charge — account locked immediately [businessId=${businessId}]`,
+        );
+        return;
+      }
+
+      // Active subscription renewal failure — enter grace period
       const gracePeriodEndsAt = new Date(
         Date.now() + GRACE_PERIOD_DAYS * MS_PER_DAY,
       );
-
-      const businessId = business._id.toString();
 
       await this.businessRepository.updateById(businessId, {
         'subscription.status': SubscriptionStatus.GRACE_PERIOD,
@@ -806,6 +852,30 @@ export class SubscriptionJobsService implements OnModuleInit {
       ownerEmail,
       `Your ${this.planLabel(plan)} account has been locked`,
       accountLockedTemplate(businessName, plan, appUrl),
+    );
+  }
+
+  private async handleEmailTrialPaymentFailed(job: Job): Promise<void> {
+    const { ownerEmail, businessName, plan, amountDue, currency, appUrl } = job
+      .attrs.data as {
+      ownerEmail: string;
+      businessName: string;
+      plan: SubscriptionPlan;
+      amountDue: number;
+      currency: string;
+      appUrl: string;
+    };
+    if (!ownerEmail) return;
+    await this.sendEmail(
+      ownerEmail,
+      `Your free trial has ended — payment required`,
+      trialPaymentFailedTemplate(
+        businessName,
+        plan,
+        amountDue,
+        currency,
+        appUrl,
+      ),
     );
   }
 

@@ -48,6 +48,10 @@ export class BusinessController {
           trialEndsAt: business.subscription.trialEndsAt,
           currentPeriodEnd: business.subscription.currentPeriodEnd,
           gracePeriodEndsAt: business.subscription.gracePeriodEndsAt,
+          pendingAmountDue: business.subscription.pendingAmountDue ?? null,
+          pendingCurrency: business.subscription.pendingCurrency ?? null,
+          pendingStripeInvoiceId:
+            business.subscription.pendingStripeInvoiceId ?? null,
         },
       },
     };
