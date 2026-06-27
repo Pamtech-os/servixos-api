@@ -16,7 +16,7 @@ export function newServiceRequestTemplate(
     : '';
 
   const body = `
-      <div style="background:linear-gradient(135deg,hsl(158,64%,40%) 0%,hsl(187,78%,41%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
+      <div style="background:linear-gradient(135deg,hsl(217,91%,60%) 0%,hsl(270,70%,60%) 100%);padding:34px 30px;text-align:center;border-radius:16px;margin:0 24px;">
         <p style="font-size:34px;margin:0 0 10px;line-height:1;">🛎️</p>
         <h1 style="color:#ffffff;font-size:20px;font-weight:700;margin:0 0 8px;letter-spacing:-0.02em;">
           New service request
@@ -31,7 +31,7 @@ export function newServiceRequestTemplate(
           Hi <strong style="color:hsl(220,25%,10%);">${ownerFirstName}</strong>, you have a new service request waiting for your review.
         </p>
 
-        <div style="background:#f0fdf8;border:1.5px solid hsl(158,64%,80%);border-radius:14px;padding:20px 18px;margin:0 0 18px;">
+        <div style="background:#f5f8ff;border:1.5px solid hsl(217,91%,88%);border-radius:14px;padding:20px 18px;margin:0 0 18px;">
           <p style="margin:0 0 12px;font-size:11px;font-weight:600;color:hsl(220,10%,50%);letter-spacing:1px;text-transform:uppercase;">
             Request details
           </p>
