@@ -73,7 +73,7 @@ export class WebsiteController {
       dto,
     );
     if (result instanceof HttpException) throw result;
-    return { message: WEBSITE_MESSAGES.SUCCESS.DESIGN_SAVED, data: null };
+    return { message: WEBSITE_MESSAGES.SUCCESS.DESIGN_SAVED, data: result };
   }
 
   /** Saves edits to website content sections (hero, about, services, etc). */
