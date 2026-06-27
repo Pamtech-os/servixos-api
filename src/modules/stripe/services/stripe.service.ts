@@ -133,17 +133,34 @@ export class StripeService {
   /**
    * Returns the client_secret of the PaymentIntent on an open invoice.
    * The frontend uses this to confirm payment (handles 3DS automatically).
-   * Throws if the invoice has no PaymentIntent (e.g. $0 invoice or no payment method).
+   *
+   * If the invoice has no PaymentIntent yet (card was attached to the customer
+   * after the billing attempt, or was never set as the invoice default), we
+   * force a payment attempt via invoices.pay(). This creates the PaymentIntent
+   * so the frontend can confirm any required 3DS challenge. If the charge
+   * succeeds immediately the webhook will unlock the account server-side.
    */
   async getInvoicePaymentClientSecret(
     invoiceId: string,
   ): Promise<{ clientSecret: string; invoiceId: string }> {
-    const invoice = (await this.stripe.invoices.retrieve(invoiceId, {
-      expand: ['payment_intent'],
-    })) as unknown as {
+    type ExpandedInvoice = {
       id: string;
       payment_intent: { client_secret: string | null } | null;
     };
+
+    let invoice = (await this.stripe.invoices.retrieve(invoiceId, {
+      expand: ['payment_intent'],
+    })) as unknown as ExpandedInvoice;
+
+    // No PaymentIntent exists — the card on file wasn't the billing default
+    // when Stripe first attempted to charge. Force an attempt now so Stripe
+    // creates (or resumes) the PaymentIntent against the existing card.
+    if (!invoice.payment_intent) {
+      await this.stripe.invoices.pay(invoiceId, { off_session: true });
+      invoice = (await this.stripe.invoices.retrieve(invoiceId, {
+        expand: ['payment_intent'],
+      })) as unknown as ExpandedInvoice;
+    }
 
     if (!invoice.payment_intent || !invoice.payment_intent.client_secret) {
       throw new Error(

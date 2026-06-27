@@ -190,12 +190,17 @@ export class WebsiteGenerationService {
 
   /**
    * Saves design tokens (colors, font) to both the website config and the
-   * business record so all renderers stay in sync.
+   * business record so all renderers stay in sync. Returns the saved tokens
+   * so the caller can update its state without an extra round-trip.
    */
   async updateDesign(
     businessId: string,
     dto: UpdateDesignDto,
-  ): Promise<void | NotFoundException | InternalServerErrorException> {
+  ): Promise<
+    | { colorPrimary: string; colorSecondary: string; font: string }
+    | NotFoundException
+    | InternalServerErrorException
+  > {
     try {
       const config =
         await this.websiteConfigRepository.findByBusinessId(businessId);
@@ -218,7 +223,7 @@ export class WebsiteGenerationService {
         businessUpdate.font = dto.font;
       }
 
-      await Promise.all([
+      const [updated] = await Promise.all([
         this.websiteConfigRepository.updateByBusinessId(
           businessId,
           configUpdate,
@@ -227,6 +232,12 @@ export class WebsiteGenerationService {
           ? this.businessRepository.updateById(businessId, businessUpdate)
           : Promise.resolve(),
       ]);
+
+      return {
+        colorPrimary: updated?.colorPrimary ?? config.colorPrimary,
+        colorSecondary: updated?.colorSecondary ?? config.colorSecondary,
+        font: updated?.font ?? config.font,
+      };
     } catch (err) {
       this.logger.error(
         `updateDesign: unexpected error [businessId=${businessId}]: ${err instanceof Error ? err.stack : String(err)}`,

@@ -483,12 +483,21 @@ describe('WebsiteGenerationService.updateDesign', () => {
       colorSecondary: '#00ff00',
       font: 'Roboto',
     };
+    websiteConfigRepository.updateByBusinessId.mockResolvedValue({
+      colorPrimary: '#ff0000',
+      colorSecondary: '#00ff00',
+      font: 'Roboto',
+    });
 
     // Act
     const result = await service.updateDesign(BUSINESS_ID.toString(), dto);
 
     // Assert
-    expect(result).toBeUndefined();
+    expect(result).toEqual({
+      colorPrimary: '#ff0000',
+      colorSecondary: '#00ff00',
+      font: 'Roboto',
+    });
     expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
       BUSINESS_ID.toString(),
       { colorPrimary: '#ff0000', colorSecondary: '#00ff00', font: 'Roboto' },
