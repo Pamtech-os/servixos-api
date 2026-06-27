@@ -4,6 +4,7 @@ import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { BusinessRepository } from '../repositories/business.repository';
 import { SETTINGS_MESSAGES } from 'src/common/constants/messages/settings.messages';
 import type { ServiceResponse } from 'src/common/dto/response.dto';
+import { AllowLocked } from 'src/common/decorators/allow-locked.decorator';
 
 @Controller()
 export class BusinessController {
@@ -13,6 +14,7 @@ export class BusinessController {
    * Returns the full business profile including the current subscription plan,
    * status, features, and billing details.
    */
+  @AllowLocked()
   @Get('me')
   async getMe(@CurrentUser() user: JwtUser): Promise<ServiceResponse> {
     const business = await this.businessRepository.findById(user.businessId);
