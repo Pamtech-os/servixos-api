@@ -33,9 +33,11 @@ export class SubscriptionController {
   /**
    * Creates a Stripe SetupIntent clientSecret.
    * The frontend passes this to Stripe.js to collect a card without charging.
+   * @AllowLocked lets locked businesses update their card before paying the outstanding invoice.
    */
   @Post('setup-intent')
   @HttpCode(HttpStatus.OK)
+  @AllowLocked()
   createSetupIntent(@CurrentUser() user: JwtUser) {
     return this.subscriptionService.createSetupIntent(user.businessId);
   }
