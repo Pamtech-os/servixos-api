@@ -885,7 +885,7 @@ export class SubscriptionJobsService implements OnModuleInit {
    * can reflect the "card on file" state without polling Stripe.
    */
   private async handleCardSaved(job: Job<CardSavedJobData>): Promise<void> {
-    const { customerId } = job.attrs.data!;
+    const { customerId, paymentMethodId } = job.attrs.data!;
 
     const business =
       await this.businessRepository.findByStripeCustomerId(customerId);
@@ -895,6 +895,8 @@ export class SubscriptionJobsService implements OnModuleInit {
       );
       return;
     }
+
+    await this.stripeService.attachPaymentMethod(customerId, paymentMethodId);
 
     await this.businessRepository.updateById(business._id.toString(), {
       'subscription.hasPaymentMethod': true,
