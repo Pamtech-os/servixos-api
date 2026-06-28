@@ -192,6 +192,29 @@ describe('SubscriptionService', () => {
       );
     });
 
+    it('returns clientSecret for a LOCKED business so they can update their card', async () => {
+      // Arrange
+      businessRepository.findById.mockResolvedValue({
+        ...baseBusiness,
+        subscription: {
+          ...baseBusiness.subscription,
+          status: SubscriptionStatus.LOCKED,
+        },
+      });
+      stripeService.createSetupIntent.mockResolvedValue({
+        clientSecret: 'seti_secret_locked',
+      });
+
+      // Act
+      const result = await service.createSetupIntent(BUSINESS_ID);
+
+      // Assert
+      expect(result.data).toEqual({ clientSecret: 'seti_secret_locked' });
+      expect(stripeService.createSetupIntent).toHaveBeenCalledWith(
+        STRIPE_CUSTOMER_ID,
+      );
+    });
+
     it('throws NotFoundException when business is not found', async () => {
       // Arrange
       businessRepository.findById.mockResolvedValue(null);
