@@ -125,6 +125,14 @@ export class Business {
   })
   notifications: NotificationPreferences;
 
+  /** Month the current revenue target applies to, e.g. '2026-08'. Set via the "Set revenue target" AI suggestion. */
+  @prop()
+  revenueTargetMonth?: string;
+
+  /** Target revenue amount for `revenueTargetMonth`. */
+  @prop()
+  revenueTargetAmount?: number;
+
   @prop({ default: 'UTC' })
   timezone: string;
 

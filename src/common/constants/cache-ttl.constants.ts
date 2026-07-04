@@ -47,8 +47,18 @@ export const CACHE_TTL = {
   PERMISSIONS_LIST: 60 * 60, // 1 hour
   WEBSITE_CONFIG: 60 * 10, // 10 minutes
 
-  // AI Insights (expensive to generate)
+  // AI Insights — keyed by a data fingerprint, so this is a housekeeping
+  // ceiling, not the mechanism that avoids repeat AI calls (see AiInsightsService).
   AI_INSIGHTS: 60 * 60, // 1 hour
+
+  // AI Advisor — keyed by a data fingerprint, so this is a housekeeping
+  // ceiling, not the mechanism that avoids repeat AI calls (see AiAdvisorService).
+  AI_ADVISOR_RESPONSE: 60 * 60 * 24, // 24 hours
+
+  // AI Suggestions — marks a suggestion as applied/dismissed for its current
+  // data fingerprint so it drops out of the list; a long TTL since a resolved
+  // suggestion should stay hidden until the underlying data actually changes.
+  AI_SUGGESTION_RESOLVED: 60 * 60 * 24 * 30, // 30 days
 
   // Activity logs (append-only, paginated — short cache)
   ACTIVITY_LOGS: 60, // 1 minute

@@ -37,6 +37,9 @@ import { PermissionsGuard } from './common/guards/permissions.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
 
 import { AnalyticsModule } from './modules/analytics/analytics.module';
+import { AiInsightsModule } from './modules/ai-insights/ai-insights.module';
+import { AiAdvisorModule } from './modules/ai-advisor/ai-advisor.module';
+import { AiSuggestionsModule } from './modules/ai-suggestions/ai-suggestions.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ClientAuthModule } from './modules/client-auth/client-auth.module';
 import { ClientPortalModule } from './modules/client-portal/client-portal.module';
@@ -109,6 +112,9 @@ import { SettingsModule } from './modules/settings/settings.module';
       }),
     }),
     AnalyticsModule,
+    AiInsightsModule,
+    AiAdvisorModule,
+    AiSuggestionsModule,
     PdfModule,
     StorageModule,
     RedisModule,
