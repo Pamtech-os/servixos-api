@@ -224,10 +224,14 @@ export class ContractsService {
       }
 
       const now = toBusinessLocalTime(new Date(), existing.timezone ?? 'UTC');
+      const htmlChanged = dto.html !== undefined && dto.html !== existing.html;
       const update: Partial<Contract> = {
         ...(dto.status !== undefined && { status: dto.status }),
         ...(dto.signedAt !== undefined && { signedAt: new Date(dto.signedAt) }),
         ...(dto.html !== undefined && { html: dto.html }),
+        // Edited content invalidates the PDF rendered from the old HTML,
+        // forcing a fresh render before the next preview or send.
+        ...(htmlChanged && { pdfUrl: '', cloudinaryPublicId: '' }),
       };
 
       if (dto.status === ContractStatus.SENT && !existing.sentAt) {
@@ -245,6 +249,10 @@ export class ContractsService {
       );
       if (!updated) {
         return new NotFoundException(CONTRACTS_MESSAGES.ERROR.NOT_FOUND);
+      }
+
+      if (htmlChanged && existing.cloudinaryPublicId) {
+        void this.destroyContractAsset(existing.cloudinaryPublicId);
       }
 
       await this.invalidateContractsListCache(businessId);
