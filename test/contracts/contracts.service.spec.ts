@@ -46,6 +46,10 @@ describe('ContractsService', () => {
     delByPattern: jest.fn(),
   };
 
+  const storageService = {
+    delete: jest.fn().mockResolvedValue(undefined),
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -55,7 +59,7 @@ describe('ContractsService', () => {
       asMock<JobsRepository>(jobsRepository),
       asMock<EmailService>(emailService),
       asMock<RedisService>(redisService),
-      {} as StorageService,
+      asMock<StorageService>(storageService),
       {} as PdfService,
     );
   });
@@ -96,5 +100,74 @@ describe('ContractsService', () => {
     });
 
     expect(result).toBeInstanceOf(BadRequestException);
+  });
+
+  it('clears the cached pdf and destroys its cloudinary asset when html is edited', async () => {
+    // Arrange
+    contractsRepository.findById.mockResolvedValue({
+      _id: new Types.ObjectId(CONTRACT_ID),
+      timezone: 'UTC',
+      html: '<html>old</html>',
+      pdfUrl: 'https://cdn.example.com/old.pdf',
+      cloudinaryPublicId: 'contracts/old-public-id',
+    });
+    contractsRepository.updateById.mockResolvedValue({
+      _id: new Types.ObjectId(CONTRACT_ID),
+      html: '<html>new</html>',
+      pdfUrl: '',
+      cloudinaryPublicId: '',
+    });
+
+    // Act
+    await service.updateContract(CONTRACT_ID, BUSINESS_ID, {
+      html: '<html>new</html>',
+    });
+
+    // Assert
+    expect(contractsRepository.updateById).toHaveBeenCalledWith(
+      CONTRACT_ID,
+      expect.any(Types.ObjectId),
+      expect.objectContaining({
+        html: '<html>new</html>',
+        pdfUrl: '',
+        cloudinaryPublicId: '',
+      }),
+    );
+    expect(storageService.delete).toHaveBeenCalledWith(
+      'contracts/old-public-id',
+    );
+  });
+
+  it('leaves the cached pdf untouched when html is not part of the update', async () => {
+    // Arrange
+    contractsRepository.findById.mockResolvedValue({
+      _id: new Types.ObjectId(CONTRACT_ID),
+      timezone: 'UTC',
+      html: '<html>unchanged</html>',
+      pdfUrl: 'https://cdn.example.com/unchanged.pdf',
+      cloudinaryPublicId: 'contracts/unchanged-public-id',
+      signedAt: new Date('2026-01-01T00:00:00.000Z'),
+    });
+    contractsRepository.updateById.mockResolvedValue({
+      _id: new Types.ObjectId(CONTRACT_ID),
+      status: ContractStatus.SIGNED,
+    });
+
+    // Act
+    await service.updateContract(CONTRACT_ID, BUSINESS_ID, {
+      status: ContractStatus.SIGNED,
+    });
+
+    // Assert
+    const [, , updateArg] = contractsRepository.updateById.mock.calls[0] as [
+      string,
+      Types.ObjectId,
+      Record<string, unknown>,
+    ];
+    expect(updateArg).toEqual(
+      expect.objectContaining({ status: ContractStatus.SIGNED }),
+    );
+    expect(Object.keys(updateArg)).not.toContain('pdfUrl');
+    expect(storageService.delete).not.toHaveBeenCalled();
   });
 });

@@ -23,6 +23,7 @@ import { toTwoDecimal } from 'src/common/utils/number.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from '../../agenda/services/agenda.service';
 import { BusinessRepository } from '../../business/repositories/business.repository';
+import type { Business } from '../../business/schemas/business.schema';
 import { ClientsRepository } from '../../clients/repositories/clients.repository';
 import { contractClientTemplate } from '../../email/templates/contract-client.template';
 import { EmailService } from '../../email/services/email.service';
@@ -542,7 +543,7 @@ export class JobsService implements OnModuleInit {
       }
 
       const title = `${job.title} Service Contract`;
-      const html = await this.generateContractHtml(job, client, business.name);
+      const html = await this.generateContractHtml(job, client, business);
 
       let pdfUrl: string | null = null;
       let cloudinaryPublicId: string | undefined;
@@ -730,6 +731,35 @@ export class JobsService implements OnModuleInit {
         job._id.toString(),
       );
 
+      // The stored PDF may be missing if the initial render failed, or stale
+      // if the business edited the HTML afterward (which clears pdfUrl) —
+      // re-render from the current HTML so the client always gets the latest.
+      if (!contract.pdfUrl) {
+        try {
+          const pdfBuffer = await this.pdfService.renderHtmlToPdf(
+            contract.html,
+          );
+          const uploaded = await this.uploadContractPdf(
+            pdfBuffer,
+            contract.title,
+          );
+          contract.pdfUrl = uploaded.secureUrl;
+          contract.cloudinaryPublicId = uploaded.publicId;
+          await this.contractsRepository.updateById(
+            contract._id.toString(),
+            businessId,
+            {
+              pdfUrl: uploaded.secureUrl,
+              cloudinaryPublicId: uploaded.publicId,
+            },
+          );
+        } catch (pdfError) {
+          this.logger.error(
+            `handleContractSendJob: PDF regeneration failed [contractId=${contract._id.toString()}] ${pdfError instanceof Error ? pdfError.message : String(pdfError)}`,
+          );
+        }
+      }
+
       const attachments = await this.buildContractAttachment(contract);
 
       await this.emailService.send({
@@ -819,25 +849,28 @@ export class JobsService implements OnModuleInit {
   private async generateContractHtml(
     job: Job,
     client: JobClientPreview,
-    businessName: string,
+    business: Business,
   ): Promise<string> {
     try {
       const priceLine =
         typeof job.price === 'number'
-          ? `Price: ${toTwoDecimal(job.price)}`
-          : 'Price: To be agreed';
+          ? `Total price: ${toTwoDecimal(job.price)}; Deposit (50%) due before work begins: ${toTwoDecimal(job.price / 2)}; Balance (50%) due upon completion: ${toTwoDecimal(job.price / 2)}`
+          : 'Total price: To be agreed; payment split 50% deposit before work begins, 50% balance upon completion';
 
       const systemPrompt = `You are a professional legal document generator for service businesses. Generate a complete, well-formatted HTML service contract.
 
 Requirements:
 - Return ONLY valid HTML starting with <!doctype html> — no markdown fences, no explanations
 - Use inline CSS; body font-family Arial sans-serif, padding 24px, color #111827
-- Include: contract title, parties (business and client), service details, payment terms, standard service agreement clauses (scope, payment, confidentiality, limitation of liability, governing law), and a signature block
-- Signature block: two-column grid — "Client Signature" and "Business Representative Signature", each with a horizontal line above the label
+- Include, in this order: contract title; a "Parties" section listing the Service Provider (business name and any provided contact details) and the Client (name and email) as the two contracting parties; service details (title, description, scheduled date, location, notes); a "Payment Terms" section stating a 50% deposit is due before work begins and the remaining 50% balance is due upon completion; a "Client Satisfaction" clause stating that if the client is not satisfied with the completed work, the client has full right to withhold and retain the remaining balance payment, and the business forfeits any claim to that balance; standard service agreement clauses (scope, confidentiality, limitation of liability, governing law); and a signature block
+- Signature block: two-column grid — "Client Signature" and "Business Representative Signature", each with a horizontal line above the label and a "Date: ______" line beneath it; note that the client signs electronically when the contract is delivered to them
 - Professional, legally appropriate language; no placeholder content`;
 
       const userContent = [
-        `Business: ${businessName}`,
+        `Business (Service Provider): ${business.name}`,
+        business.email ? `Business Email: ${business.email}` : null,
+        business.phone ? `Business Phone: ${business.phone}` : null,
+        business.address ? `Business Address: ${business.address}` : null,
         `Client: ${client.name} (${client.email})`,
         `Service: ${job.title}`,
         job.description ? `Description: ${job.description}` : null,
@@ -869,7 +902,7 @@ Requirements:
 
       const block = message.content[0];
       if (block.type !== 'text') {
-        return this.buildContractHtml(job, client, businessName);
+        return this.buildContractHtml(job, client, business);
       }
 
       const html = block.text
@@ -879,7 +912,7 @@ Requirements:
         .trim();
 
       if (!html.toLowerCase().includes('<html')) {
-        return this.buildContractHtml(job, client, businessName);
+        return this.buildContractHtml(job, client, business);
       }
 
       return html;
@@ -887,19 +920,26 @@ Requirements:
       this.logger.warn(
         `generateContractHtml: AI generation failed, using fallback [jobId=${job._id.toString()}]: ${error instanceof Error ? error.message : String(error)}`,
       );
-      return this.buildContractHtml(job, client, businessName);
+      return this.buildContractHtml(job, client, business);
     }
   }
 
   private buildContractHtml(
     job: Job,
     client: JobClientPreview,
-    businessName: string,
+    business: Business,
   ): string {
-    const priceLine =
-      typeof job.price === 'number'
-        ? `<p><strong>Price:</strong> ${toTwoDecimal(job.price)}</p>`
-        : '<p><strong>Price:</strong> To be agreed</p>';
+    const hasPrice = typeof job.price === 'number';
+    const deposit = hasPrice ? toTwoDecimal(job.price! / 2) : null;
+    const balance = deposit;
+    const paymentLines = hasPrice
+      ? `
+      <p><strong>Total Price:</strong> ${toTwoDecimal(job.price!)}</p>
+      <p><strong>Deposit (50%), due before work begins:</strong> ${deposit}</p>
+      <p><strong>Balance (50%), due upon completion:</strong> ${balance}</p>`
+      : `
+      <p><strong>Total Price:</strong> To be agreed</p>
+      <p>Payment is split 50% deposit due before work begins and 50% balance due upon completion.</p>`;
 
     return `
 <!doctype html>
@@ -910,37 +950,71 @@ Requirements:
     <style>
       body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
       h1 { margin-bottom: 8px; }
+      h2 { margin-top: 28px; margin-bottom: 8px; font-size: 16px; }
       .muted { color: #4b5563; }
       .card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin: 16px 0; }
+      .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
       .sign { margin-top: 36px; display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
       .line { border-top: 1px solid #111827; margin-top: 28px; padding-top: 8px; }
+      .date-line { border-top: 1px solid #111827; margin-top: 20px; padding-top: 6px; }
     </style>
   </head>
   <body>
     <h1>Service Contract</h1>
-    <p class="muted">Generated for ${businessName}</p>
+    <p class="muted">Between the Service Provider and the Client named below</p>
 
+    <h2>Parties</h2>
+    <div class="parties">
+      <div class="card">
+        <p><strong>Service Provider</strong></p>
+        <p>${business.name}</p>
+        ${business.email ? `<p>${business.email}</p>` : ''}
+        ${business.phone ? `<p>${business.phone}</p>` : ''}
+        ${business.address ? `<p>${business.address}</p>` : ''}
+      </div>
+      <div class="card">
+        <p><strong>Client</strong></p>
+        <p>${client.name}</p>
+        <p>${client.email}</p>
+      </div>
+    </div>
+
+    <h2>Service Details</h2>
     <div class="card">
-      <p><strong>Client:</strong> ${client.name} (${client.email})</p>
       <p><strong>Service:</strong> ${job.title}</p>
       ${job.description ? `<p><strong>Description:</strong> ${job.description}</p>` : ''}
       <p><strong>Scheduled Date:</strong> ${job.scheduledDate.toISOString()}</p>
       ${job.location ? `<p><strong>Location:</strong> ${job.location}</p>` : ''}
-      ${priceLine}
       ${job.notes ? `<p><strong>Notes:</strong> ${job.notes}</p>` : ''}
     </div>
 
+    <h2>Payment Terms</h2>
+    <div class="card">
+      ${paymentLines}
+    </div>
+
+    <h2>Client Satisfaction</h2>
     <p>
-      This agreement confirms that ${businessName} will perform the service listed above
-      according to mutually agreed terms and timelines.
+      If the Client is not satisfied with the completed work, the Client has full right to
+      withhold and retain the remaining balance payment described above, and the Service
+      Provider forfeits any claim to that balance.
     </p>
 
+    <p>
+      This agreement confirms that ${business.name} will perform the service listed above
+      according to the terms and timelines described in this contract.
+    </p>
+
+    <h2>Signatures</h2>
+    <p class="muted">The Client signs electronically when this contract is delivered to them.</p>
     <div class="sign">
       <div>
         <div class="line">Client Signature</div>
+        <div class="date-line">Date</div>
       </div>
       <div>
         <div class="line">Business Representative Signature</div>
+        <div class="date-line">Date</div>
       </div>
     </div>
   </body>

@@ -410,3 +410,144 @@ describe('JobsService (start/complete)', () => {
     });
   });
 });
+
+describe('JobsService (contract send)', () => {
+  let service: JobsService;
+  let jobsRepository: { findById: jest.Mock };
+  let businessRepository: { findById: jest.Mock };
+  let clientsRepository: { findById: jest.Mock };
+  let contractsRepository: {
+    findById: jest.Mock;
+    updateById: jest.Mock;
+  };
+  let redisService: { set: jest.Mock };
+  let emailService: { send: jest.Mock };
+  let storageService: { uploadBuffer: jest.Mock };
+  let pdfService: { renderHtmlToPdf: jest.Mock };
+  let fetchSpy: jest.SpyInstance;
+
+  const business = {
+    _id: new Types.ObjectId(BUSINESS_ID),
+    name: 'Acme Services',
+    deletedAt: undefined,
+  };
+
+  const client = {
+    _id: new Types.ObjectId(CLIENT_ID),
+    name: 'Jane Client',
+    email: 'jane@example.com',
+  };
+
+  const draftContract = {
+    _id: new Types.ObjectId(CONTRACT_ID),
+    title: 'AC Repair Service Contract',
+    html: '<html>contract</html>',
+    pdfUrl: '',
+    cloudinaryPublicId: '',
+  };
+
+  beforeEach(() => {
+    jobsRepository = {
+      findById: jest.fn().mockResolvedValue(baseJob(JobStatus.IN_PROGRESS)),
+    };
+    businessRepository = { findById: jest.fn().mockResolvedValue(business) };
+    clientsRepository = { findById: jest.fn().mockResolvedValue(client) };
+    contractsRepository = {
+      findById: jest.fn().mockResolvedValue(draftContract),
+      updateById: jest.fn().mockResolvedValue(draftContract),
+    };
+    redisService = { set: jest.fn().mockResolvedValue(undefined) };
+    emailService = { send: jest.fn().mockResolvedValue(undefined) };
+    storageService = {
+      uploadBuffer: jest.fn().mockResolvedValue({
+        url: 'https://cdn.example.com/rendered.pdf',
+        publicId: 'contracts/rendered-public-id',
+      }),
+    };
+    pdfService = {
+      renderHtmlToPdf: jest.fn().mockResolvedValue(Buffer.from('%PDF-1.4')),
+    };
+
+    fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
+      ok: true,
+      arrayBuffer: () => Promise.resolve(Buffer.from('%PDF-1.4')),
+    } as unknown as Response);
+
+    const config = { get: jest.fn().mockReturnValue(undefined) };
+    const agendaService = { define: jest.fn() };
+
+    service = new JobsService(
+      asMock<ConfigService>(config),
+      asMock<JobsRepository>(jobsRepository),
+      asMock<ContractsRepository>(contractsRepository),
+      asMock<ClientsRepository>(clientsRepository),
+      asMock<BusinessRepository>(businessRepository),
+      asMock<AgendaService>(agendaService),
+      asMock<RedisService>(redisService),
+      asMock<EmailService>(emailService),
+      {} as InvoicesService,
+      {} as PaymentsService,
+      asMock<StorageService>(storageService),
+      asMock<PdfService>(pdfService),
+    );
+  });
+
+  afterEach(() => {
+    fetchSpy.mockRestore();
+  });
+
+  it('renders and uploads a fresh pdf when the contract has none, then sends it', async () => {
+    // Arrange
+    const payload = {
+      businessId: BUSINESS_ID,
+      jobId: JOB_ID,
+      contractId: CONTRACT_ID,
+    };
+
+    // Act
+    await (
+      service as unknown as {
+        handleContractSendJob: (data: typeof payload) => Promise<void>;
+      }
+    ).handleContractSendJob(payload);
+
+    // Assert
+    expect(pdfService.renderHtmlToPdf).toHaveBeenCalledWith(draftContract.html);
+    expect(storageService.uploadBuffer).toHaveBeenCalledTimes(1);
+    expect(contractsRepository.updateById).toHaveBeenCalledWith(
+      CONTRACT_ID,
+      expect.any(Types.ObjectId),
+      {
+        pdfUrl: 'https://cdn.example.com/rendered.pdf',
+        cloudinaryPublicId: 'contracts/rendered-public-id',
+      },
+    );
+    expect(emailService.send).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips pdf regeneration and reuses the stored url when the contract already has one', async () => {
+    // Arrange
+    contractsRepository.findById.mockResolvedValue({
+      ...draftContract,
+      pdfUrl: 'https://cdn.example.com/existing.pdf',
+      cloudinaryPublicId: 'contracts/existing-public-id',
+    });
+    const payload = {
+      businessId: BUSINESS_ID,
+      jobId: JOB_ID,
+      contractId: CONTRACT_ID,
+    };
+
+    // Act
+    await (
+      service as unknown as {
+        handleContractSendJob: (data: typeof payload) => Promise<void>;
+      }
+    ).handleContractSendJob(payload);
+
+    // Assert
+    expect(pdfService.renderHtmlToPdf).not.toHaveBeenCalled();
+    expect(storageService.uploadBuffer).not.toHaveBeenCalled();
+    expect(emailService.send).toHaveBeenCalledTimes(1);
+  });
+});

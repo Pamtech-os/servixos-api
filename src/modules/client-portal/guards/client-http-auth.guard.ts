@@ -6,9 +6,11 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
+import { COOKIE_NAMES } from 'src/common/constants/cookie.constants';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 import { CLIENT_AUTH_MESSAGES } from 'src/common/constants/messages/client-auth.messages';
 import { JwtUser } from 'src/common/decorators/current-user.decorator';
+import { Channel } from 'src/common/enums/channel.enum';
 import { BusinessRepository } from '../../business/repositories/business.repository';
 import { ClientsRepository } from '../../clients/repositories/clients.repository';
 import { UsersRepository } from '../../users/repositories/users.repository';
@@ -26,7 +28,7 @@ export class ClientHttpAuthGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<ClientRequest>();
-    const token = this.extractBearerToken(request.headers.authorization);
+    const token = this.extractToken(request);
 
     if (!token) {
       throw new UnauthorizedException(CLIENT_AUTH_MESSAGES.ERROR.UNAUTHORIZED);
@@ -86,6 +88,22 @@ export class ClientHttpAuthGuard implements CanActivate {
     };
 
     return true;
+  }
+
+  /**
+   * web    → httpOnly cookie only (JS cannot access it)
+   * mobile → Authorization Bearer header only
+   */
+  private extractToken(request: ClientRequest): string | null {
+    if (request.channel === Channel.WEB) {
+      return (
+        (request.cookies?.[COOKIE_NAMES.CLIENT_ACCESS_TOKEN] as
+          | string
+          | undefined) ?? null
+      );
+    }
+
+    return this.extractBearerToken(request.headers.authorization);
   }
 
   private extractBearerToken(authorization?: string): string | null {
