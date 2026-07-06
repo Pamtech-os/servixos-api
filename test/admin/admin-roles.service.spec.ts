@@ -31,6 +31,7 @@ const makeAdmin = (overrides: Record<string, unknown> = {}) => ({
   lastName: 'Doe',
   email: 'jane@admin.com',
   isActive: true,
+  isDefault: false,
   ...overrides,
 });
 
@@ -373,8 +374,9 @@ describe('AdminRolesService', () => {
   // ─── inviteAdmin ─────────────────────────────────────────────────────────────
 
   describe('inviteAdmin', () => {
-    it('should create an invited admin and queue invitation email', async () => {
+    it('should create an invited admin and queue invitation email when requested by the super admin', async () => {
       // Arrange
+      adminRepo.findById.mockResolvedValue(makeAdmin({ isDefault: true }));
       adminRepo.findByEmail.mockResolvedValue(null);
       jest
         .spyOn(hashUtil, 'generateStrongPassword')
@@ -382,7 +384,7 @@ describe('AdminRolesService', () => {
       jest.spyOn(hashUtil, 'hashValue').mockResolvedValue('hashed-password');
 
       // Act
-      const result = await service.inviteAdmin({
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
         firstName: 'Alice',
         lastName: 'Smith',
         email: 'alice@admin.com',
@@ -407,12 +409,46 @@ describe('AdminRolesService', () => {
       );
     });
 
+    it('should return ForbiddenException when the requesting admin is not the super admin', async () => {
+      // Arrange
+      adminRepo.findById.mockResolvedValue(makeAdmin({ isDefault: false }));
+
+      // Act
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
+        firstName: 'Alice',
+        lastName: 'Smith',
+        email: 'alice@admin.com',
+      });
+
+      // Assert
+      expect(result).toBeInstanceOf(ForbiddenException);
+      expect(adminRepo.findByEmail).not.toHaveBeenCalled();
+      expect(adminRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('should return ForbiddenException when the requesting admin no longer exists', async () => {
+      // Arrange
+      adminRepo.findById.mockResolvedValue(null);
+
+      // Act
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
+        firstName: 'Alice',
+        lastName: 'Smith',
+        email: 'alice@admin.com',
+      });
+
+      // Assert
+      expect(result).toBeInstanceOf(ForbiddenException);
+      expect(adminRepo.create).not.toHaveBeenCalled();
+    });
+
     it('should return ConflictException when email is already registered', async () => {
       // Arrange
+      adminRepo.findById.mockResolvedValue(makeAdmin({ isDefault: true }));
       adminRepo.findByEmail.mockResolvedValue(makeAdmin());
 
       // Act
-      const result = await service.inviteAdmin({
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
         firstName: 'Alice',
         lastName: 'Smith',
         email: 'jane@admin.com',
@@ -425,11 +461,12 @@ describe('AdminRolesService', () => {
 
     it('should return NotFoundException when roleId does not exist', async () => {
       // Arrange
+      adminRepo.findById.mockResolvedValue(makeAdmin({ isDefault: true }));
       adminRepo.findByEmail.mockResolvedValue(null);
       rolesRepo.findById.mockResolvedValue(null);
 
       // Act
-      const result = await service.inviteAdmin({
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
         firstName: 'Bob',
         lastName: 'Jones',
         email: 'bob@admin.com',
@@ -442,6 +479,7 @@ describe('AdminRolesService', () => {
 
     it('should create admin without a role when roleId is omitted', async () => {
       // Arrange
+      adminRepo.findById.mockResolvedValue(makeAdmin({ isDefault: true }));
       adminRepo.findByEmail.mockResolvedValue(null);
       jest
         .spyOn(hashUtil, 'generateStrongPassword')
@@ -449,7 +487,7 @@ describe('AdminRolesService', () => {
       jest.spyOn(hashUtil, 'hashValue').mockResolvedValue('hashed-password');
 
       // Act
-      const result = await service.inviteAdmin({
+      const result = await service.inviteAdmin(ADMIN_ID.toString(), {
         firstName: 'Bob',
         lastName: 'Jones',
         email: 'bob@admin.com',

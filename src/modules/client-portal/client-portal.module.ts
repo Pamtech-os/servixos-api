@@ -18,6 +18,7 @@ import { ClientContractsController } from './controllers/client-contracts.contro
 import { ClientDashboardController } from './controllers/client-dashboard.controller';
 import { ClientFilesController } from './controllers/client-files.controller';
 import { ClientInvoicesController } from './controllers/client-invoices.controller';
+import { ClientJobsController } from './controllers/client-jobs.controller';
 import { ClientMessagesController } from './controllers/client-messages.controller';
 import { ClientProfileController } from './controllers/client-profile.controller';
 import { ClientReviewsController } from './controllers/client-reviews.controller';
@@ -30,6 +31,7 @@ import { ClientContractsService } from './services/client-contracts.service';
 import { ClientDashboardService } from './services/client-dashboard.service';
 import { ClientFilesService } from './services/client-files.service';
 import { ClientInvoicesService } from './services/client-invoices.service';
+import { ClientJobsService } from './services/client-jobs.service';
 import { ClientMessagesService } from './services/client-messages.service';
 import { ClientProfileService } from './services/client-profile.service';
 import { ClientReviewsService } from './services/client-reviews.service';
@@ -61,6 +63,7 @@ import { ClientReviewsService } from './services/client-reviews.service';
   controllers: [
     ClientDashboardController,
     ClientInvoicesController,
+    ClientJobsController,
     ClientContractsController,
     ClientFilesController,
     ClientMessagesController,
@@ -75,6 +78,7 @@ import { ClientReviewsService } from './services/client-reviews.service';
     WsJwtClientAuthGuard,
     ClientDashboardService,
     ClientInvoicesService,
+    ClientJobsService,
     ClientContractsService,
     ClientFilesService,
     ClientMessagesService,

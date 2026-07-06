@@ -84,6 +84,24 @@ export class JobsRepository {
     return this.sanitizeJob(job);
   }
 
+  async findByIdForClient(
+    id: string,
+    businessId: Types.ObjectId,
+    clientId: Types.ObjectId,
+  ): Promise<Job | null> {
+    const job = await this.jobModel
+      .findOne({
+        _id: id,
+        businessId,
+        clientId,
+        deletedAt: null,
+      })
+      .lean<JobWithMetadata>()
+      .exec();
+
+    return this.sanitizeJob(job);
+  }
+
   async findBySourceRequestId(
     businessId: Types.ObjectId,
     sourceRequestId: Types.ObjectId,

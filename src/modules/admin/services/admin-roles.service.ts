@@ -142,9 +142,17 @@ export class AdminRolesService {
     }
   }
 
-  /** Invite a new admin team member — creates account and sends invitation email. */
-  async inviteAdmin(dto: InviteAdminDto) {
+  /**
+   * Invite a new admin team member — creates account and sends invitation email.
+   * Restricted to the seeded default (super) admin so admin accounts can't self-propagate.
+   */
+  async inviteAdmin(requestingAdminId: string, dto: InviteAdminDto) {
     try {
+      const requestingAdmin = await this.adminRepo.findById(requestingAdminId);
+      if (!requestingAdmin?.isDefault) {
+        return new ForbiddenException(ADMIN_MESSAGES.ERROR.SUPER_ADMIN_ONLY);
+      }
+
       const existing = await this.adminRepo.findByEmail(dto.email);
       if (existing)
         return new ConflictException(

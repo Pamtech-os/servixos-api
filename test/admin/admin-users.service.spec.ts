@@ -1,21 +1,16 @@
 import {
-  ConflictException,
   InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Types } from 'mongoose';
 import * as hashUtil from 'src/common/utils/hash.util';
 import { AdminUsersService } from 'src/modules/admin/services/admin-users.service';
-import { UserRole } from 'src/modules/users/schemas/user.schema';
 import { AdminUsersRepository } from 'src/modules/admin/repositories/admin-users.repository';
 import { UsersRepository } from 'src/modules/users/repositories/users.repository';
-import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
 import { asMock } from 'test/helpers/mock';
 
 const USER_ID = new Types.ObjectId();
-const BUSINESS_ID = new Types.ObjectId();
 
 const makeUser = (overrides: Record<string, unknown> = {}) => ({
   _id: USER_ID,
@@ -24,13 +19,6 @@ const makeUser = (overrides: Record<string, unknown> = {}) => ({
   email: 'john@example.com',
   isActive: true,
   ...overrides,
-});
-
-const makeBusiness = () => ({
-  _id: BUSINESS_ID,
-  name: 'Acme Corp',
-  ownerEmail: 'owner@acme.com',
-  ownerFirstName: 'Bob',
 });
 
 describe('AdminUsersService', () => {
@@ -49,9 +37,7 @@ describe('AdminUsersService', () => {
     create: jest.Mock;
     updateById: jest.Mock;
   };
-  let businessRepo: { findByName: jest.Mock };
   let agendaService: { now: jest.Mock };
-  let config: { get: jest.Mock };
 
   beforeEach(() => {
     adminUsersRepo = {
@@ -74,16 +60,12 @@ describe('AdminUsersService', () => {
       create: jest.fn().mockResolvedValue({}),
       updateById: jest.fn().mockResolvedValue(undefined),
     };
-    businessRepo = { findByName: jest.fn() };
     agendaService = { now: jest.fn().mockResolvedValue(undefined) };
-    config = { get: jest.fn().mockReturnValue('http://localhost:3000') };
 
     service = new AdminUsersService(
       asMock<AdminUsersRepository>(adminUsersRepo),
       asMock<UsersRepository>(usersRepo),
-      asMock<BusinessRepository>(businessRepo),
       asMock<AgendaService>(agendaService),
-      asMock<ConfigService>(config),
     );
   });
 
@@ -263,91 +245,6 @@ describe('AdminUsersService', () => {
 
       // Assert
       expect(result).toEqual({ modifiedCount: 0 });
-    });
-  });
-
-  // ─── inviteUser ──────────────────────────────────────────────────────────────
-
-  describe('inviteUser', () => {
-    it('should create a user account and dispatch invitation email', async () => {
-      // Arrange
-      usersRepo.findByEmail.mockResolvedValue(null);
-      jest
-        .spyOn(hashUtil, 'generateStrongPassword')
-        .mockReturnValue('TmpPass1!');
-      jest.spyOn(hashUtil, 'hashValue').mockResolvedValue('hashed');
-
-      // Act
-      const result = await service.inviteUser({
-        fullName: 'Alice Smith',
-        email: 'alice@example.com',
-        role: UserRole.OWNER,
-      });
-
-      // Assert
-      expect(result).toBeNull();
-      expect(usersRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({
-          email: 'alice@example.com',
-          isEmailVerified: true,
-          mustChangePassword: true,
-          passwordHash: 'hashed',
-        }),
-      );
-    });
-
-    it('should resolve businessId when businessName is provided', async () => {
-      // Arrange
-      usersRepo.findByEmail.mockResolvedValue(null);
-      businessRepo.findByName.mockResolvedValue(makeBusiness());
-      jest.spyOn(hashUtil, 'generateStrongPassword').mockReturnValue('Tmp1!');
-      jest.spyOn(hashUtil, 'hashValue').mockResolvedValue('hashed');
-
-      // Act
-      await service.inviteUser({
-        fullName: 'Bob Owner',
-        email: 'bob@acme.com',
-        role: UserRole.OWNER,
-        businessName: 'Acme Corp',
-      });
-
-      // Assert
-      expect(usersRepo.create).toHaveBeenCalledWith(
-        expect.objectContaining({ businessId: BUSINESS_ID }),
-      );
-    });
-
-    it('should return ConflictException when email is already registered', async () => {
-      // Arrange
-      usersRepo.findByEmail.mockResolvedValue(makeUser());
-
-      // Act
-      const result = await service.inviteUser({
-        fullName: 'John Doe',
-        email: 'john@example.com',
-        role: UserRole.OWNER,
-      });
-
-      // Assert
-      expect(result).toBeInstanceOf(ConflictException);
-      expect(usersRepo.create).not.toHaveBeenCalled();
-    });
-
-    it('should return NotFoundException when businessName is not found', async () => {
-      // Arrange
-      usersRepo.findByEmail.mockResolvedValue(null);
-      businessRepo.findByName.mockResolvedValue(null);
-
-      // Act
-      const result = await service.inviteUser({
-        fullName: 'Eve Owner',
-        email: 'eve@start.com',
-        role: UserRole.OWNER,
-        businessName: 'Unknown Corp',
-      });
-
-      // Assert
-      expect(result).toBeInstanceOf(NotFoundException);
     });
   });
 

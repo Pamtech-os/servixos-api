@@ -7,6 +7,8 @@ export const CLIENT_CACHE_KEYS = {
     `client:contracts:${clientId}:${query}`,
   contract: (clientId: string, id: string) =>
     `client:contract:${clientId}:${id}`,
+  jobs: (clientId: string, query: string) => `client:jobs:${clientId}:${query}`,
+  job: (clientId: string, id: string) => `client:job:${clientId}:${id}`,
   files: (clientId: string, query: string) =>
     `client:files:${clientId}:${query}`,
   fileDownload: (clientId: string, id: string) =>

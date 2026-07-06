@@ -16,6 +16,8 @@ import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 import { ADMIN_MESSAGES } from 'src/common/constants/messages/admin.messages';
 import { AdminRolesService } from '../services/admin-roles.service';
 import { JwtAdminAuthGuard } from '../guards/jwt-admin-auth.guard';
+import { CurrentAdmin } from '../decorators/current-admin.decorator';
+import type { AdminJwtPayload } from '../types/admin.types';
 import {
   CreateRoleDto,
   UpdateRoleDto,
@@ -76,8 +78,11 @@ export class AdminRolesController {
   }
 
   @Post('team/invite')
-  async inviteAdmin(@Body() dto: InviteAdminDto) {
-    const result = await this.adminRolesService.inviteAdmin(dto);
+  async inviteAdmin(
+    @CurrentAdmin() admin: AdminJwtPayload,
+    @Body() dto: InviteAdminDto,
+  ) {
+    const result = await this.adminRolesService.inviteAdmin(admin.sub, dto);
     if (result instanceof HttpException) throw result;
     return { message: ADMIN_MESSAGES.SUCCESS.ADMIN_INVITED, data: result };
   }

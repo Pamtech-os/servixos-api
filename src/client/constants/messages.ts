@@ -50,6 +50,15 @@ export const CLIENT_MESSAGES = {
       SIGNATURE_REQUIRED: 'A signature is required to sign this contract',
     },
   },
+  JOB: {
+    SUCCESS: {
+      RETRIEVED: 'Jobs retrieved successfully',
+      FOUND: 'Job retrieved successfully',
+    },
+    ERROR: {
+      NOT_FOUND: 'Job not found',
+    },
+  },
   FILE: {
     SUCCESS: {
       RETRIEVED: 'Files retrieved successfully',

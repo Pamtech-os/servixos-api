@@ -136,7 +136,10 @@ describe('ClientContractsService', () => {
     expect(data.status).toBe('signed');
 
     expect(redisService.del).toHaveBeenCalledTimes(2);
-    expect(redisService.delByPattern).toHaveBeenCalledTimes(2);
+    expect(redisService.delByPattern).toHaveBeenCalledTimes(3);
+    expect(redisService.delByPattern).toHaveBeenCalledWith(
+      `${BUSINESS_ID}:contracts:list:*`,
+    );
     expect(agendaService.now).toHaveBeenCalledTimes(1);
   });
 
