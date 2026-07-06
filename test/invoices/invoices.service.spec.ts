@@ -24,6 +24,7 @@ import {
 } from 'src/modules/invoices/schemas/invoice.schema';
 import { StorageService } from 'src/modules/storage/storage.service';
 import { RedisService } from 'src/modules/redis/services/redis.service';
+import { PdfService } from 'src/modules/pdf/pdf.service';
 import { asMock } from 'test/helpers/mock';
 
 const JOB_ID = '664abc000000000000000003';
@@ -151,6 +152,7 @@ describe('InvoicesService', () => {
         incr: jest.fn().mockResolvedValue(2),
         del: jest.fn().mockResolvedValue(undefined),
       }),
+      {} as PdfService,
     );
 
     loggerErrorSpy = jest

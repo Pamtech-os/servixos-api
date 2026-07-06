@@ -37,6 +37,22 @@ export interface ClientContractDetail extends ClientContractListItem {
   signedAt?: string | null;
 }
 
+export interface ClientJobListItem {
+  id: string;
+  title: string;
+  description?: string;
+  scheduledDate: string;
+  location?: string;
+  price?: number;
+  status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
+}
+
+export interface ClientJobDetail extends ClientJobListItem {
+  notes?: string;
+  startedAt?: string;
+  completedAt?: string;
+}
+
 export interface ClientFileListItem {
   id: string;
   filename: string;

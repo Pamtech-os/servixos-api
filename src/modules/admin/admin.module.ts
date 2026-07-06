@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
-import { BusinessModule } from '../business/business.module';
 import { UsersModule } from '../users/users.module';
 import { AdminAuthController } from './controllers/admin-auth.controller';
 import { AdminDashboardController } from './controllers/admin-dashboard.controller';
@@ -51,7 +50,6 @@ import { JwtAdminStrategy } from './strategies/jwt-admin.strategy';
       }),
     }),
     UsersModule,
-    BusinessModule,
   ],
   controllers: [
     AdminAuthController,

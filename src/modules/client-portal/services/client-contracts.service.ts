@@ -262,6 +262,12 @@ export class ClientContractsService {
         this.redisService
           .delByPattern(`client:activities:${clientId}:*`)
           .catch(() => 0),
+        // Also bust the business-portal list cache (see
+        // ContractsService.invalidateContractsListCache) so the business
+        // sees the signed status immediately instead of waiting out the TTL.
+        this.redisService
+          .delByPattern(`${businessId}:contracts:list:*`)
+          .catch(() => 0),
       ]);
 
       return {

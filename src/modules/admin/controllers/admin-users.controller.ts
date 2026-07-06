@@ -17,7 +17,6 @@ import { ADMIN_MESSAGES } from 'src/common/constants/messages/admin.messages';
 import { AdminUsersService } from '../services/admin-users.service';
 import { JwtAdminAuthGuard } from '../guards/jwt-admin-auth.guard';
 import { QueryAdminUsersDto } from '../dto/query-users.dto';
-import { InviteUserDto } from '../dto/invite-user.dto';
 import {
   BulkSendEmailDto,
   BulkToggleSuspendDto,
@@ -62,14 +61,6 @@ export class AdminUsersController {
     const result = await this.adminUsersService.bulkToggleSuspend(dto);
     if (result instanceof HttpException) throw result;
     return { message: ADMIN_MESSAGES.SUCCESS.USERS_UPDATED, data: result };
-  }
-
-  @Post('invite')
-  @HttpCode(HttpStatus.CREATED)
-  async inviteUser(@Body() dto: InviteUserDto) {
-    const result = await this.adminUsersService.inviteUser(dto);
-    if (result instanceof HttpException) throw result;
-    return { message: ADMIN_MESSAGES.SUCCESS.USER_INVITED };
   }
 
   @Post('send-email')
