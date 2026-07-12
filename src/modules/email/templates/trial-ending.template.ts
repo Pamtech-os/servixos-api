@@ -28,7 +28,7 @@ export function trialEndingTemplate(
       <div style="background:#ffffff;border-radius:16px;margin:16px 24px;padding:28px 28px 24px;">
         <p style="font-size:14px;color:hsl(220,25%,10%);font-weight:600;margin:0 0 8px;">Hi ${businessName},</p>
         <p style="font-size:13px;color:hsl(220,10%,40%);line-height:1.65;margin:0 0 20px;">
-          Your 30-day free trial on the <strong>${planLabel(plan)} plan</strong> is coming to an end.
+          Your 7-day free trial on the <strong>${planLabel(plan)} plan</strong> is coming to an end.
           Add a payment method before your trial expires to avoid any interruption to your service.
         </p>
 

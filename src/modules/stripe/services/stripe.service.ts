@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Stripe from 'stripe';
+import { TRIAL_PERIOD_DAYS } from 'src/common/constants/subscription-features.constants';
 
 @Injectable()
 export class StripeService {
@@ -56,7 +57,7 @@ export class StripeService {
   }
 
   /**
-   * Creates a Stripe Subscription with a 30-day free trial.
+   * Creates a Stripe Subscription with a 7-day free trial.
    * No payment is collected until the trial ends.
    */
   async createSubscription(
@@ -69,7 +70,7 @@ export class StripeService {
       {
         customer: customerId,
         items: [{ price: priceId }],
-        trial_period_days: 30,
+        trial_period_days: TRIAL_PERIOD_DAYS,
         payment_settings: { save_default_payment_method: 'on_subscription' },
         metadata,
         expand: ['latest_invoice.payment_intent'],

@@ -193,7 +193,7 @@ export class SubscriptionJobsService implements OnModuleInit {
 
   /**
    * Creates a Stripe Customer for a newly registered business and creates
-   * a Stripe Subscription with a 30-day free trial on the chosen plan.
+   * a Stripe Subscription with a 7-day free trial on the chosen plan.
    */
   private async handleSetupStripeCustomer(
     job: Job<SetupStripeCustomerJobData>,
@@ -229,7 +229,6 @@ export class SubscriptionJobsService implements OnModuleInit {
         : null;
 
       let stripeSubscriptionId: string | undefined;
-      let trialEndsAt: Date | undefined;
 
       if (priceId) {
         const subscription = await this.stripeService.createSubscription(
@@ -239,7 +238,6 @@ export class SubscriptionJobsService implements OnModuleInit {
           `initial-sub:${businessId}`,
         );
         stripeSubscriptionId = subscription.id;
-        trialEndsAt = new Date((subscription.trial_end ?? 0) * 1000);
       }
 
       await this.businessRepository.updateById(businessId, {
@@ -258,20 +256,6 @@ export class SubscriptionJobsService implements OnModuleInit {
           billingInterval,
           stripeSubscriptionId,
         });
-
-        if (trialEndsAt) {
-          // Schedule trial-ending reminder 7 days before trial ends
-          const reminderAt = new Date(trialEndsAt.getTime() - 7 * MS_PER_DAY);
-          if (reminderAt > new Date()) {
-            await this.agendaService.schedule<{
-              businessId: string;
-              daysLeft: number;
-            }>(reminderAt, JOBS.EMAIL_TRIAL_ENDING, {
-              businessId,
-              daysLeft: 7,
-            });
-          }
-        }
       }
 
       this.logger.log(

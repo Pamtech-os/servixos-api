@@ -3,7 +3,7 @@ export const SUBSCRIPTION_MESSAGES = {
     PLANS_RETRIEVED: 'Plans retrieved successfully',
     SETUP_INTENT_CREATED: 'Setup intent created successfully',
     SUBSCRIBED:
-      'Subscription created successfully. Your 30-day free trial has started',
+      'Subscription created successfully. Your 7-day free trial has started',
     UPGRADED: 'Plan upgraded successfully',
     CANCELED: 'Subscription canceled successfully',
     PAYMENT_INITIATED: 'Payment initiated successfully',
