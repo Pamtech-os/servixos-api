@@ -10,6 +10,9 @@ export const PLAN_ORDER: Record<SubscriptionPlan, number> = {
   [SubscriptionPlan.PRO]: 2,
 };
 
+/** Length of the free trial granted to every new business on signup. */
+export const TRIAL_PERIOD_DAYS = 7;
+
 export const FEATURE_PLAN_MAP: Record<string, SubscriptionPlan> = {
   // ── Starter (baseline — all plans inherit these) ───────────────────────────
   'jobs.manage': SubscriptionPlan.STARTER,

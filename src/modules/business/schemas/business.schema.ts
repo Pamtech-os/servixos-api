@@ -8,7 +8,7 @@ export enum SubscriptionPlan {
 }
 
 export enum SubscriptionStatus {
-  TRIALING = 'trialing', // 1-month free trial, no payment required
+  TRIALING = 'trialing', // 7-day free trial, no payment required
   ACTIVE = 'active', // paid and current
   GRACE_PERIOD = 'grace_period', // payment failed — 5-day window to recover
   LOCKED = 'locked', // trial expired or grace period exhausted
@@ -33,7 +33,7 @@ class Subscription {
   @prop({ enum: SubscriptionStatus, default: SubscriptionStatus.TRIALING })
   status: SubscriptionStatus;
 
-  /** Set to now + 1 month on registration; null once a paid plan activates. */
+  /** Set to now + 7 days on registration; null once a paid plan activates. */
   @prop()
   trialEndsAt?: Date;
 

@@ -66,7 +66,7 @@ export class SubscriptionService {
   }
 
   /**
-   * Creates a Stripe Subscription with a 30-day free trial.
+   * Creates a Stripe Subscription with a 7-day free trial.
    * Optionally attaches a payment method before creating the subscription.
    */
   async subscribe(

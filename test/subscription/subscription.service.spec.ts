@@ -234,7 +234,7 @@ describe('SubscriptionService', () => {
       billingInterval: 'monthly' as const,
     };
 
-    it('creates a Stripe subscription with 30-day trial and returns trialEndsAt', async () => {
+    it('creates a Stripe subscription with a free trial and returns trialEndsAt', async () => {
       // Arrange
       businessRepository.findById.mockResolvedValue({
         ...baseBusiness,

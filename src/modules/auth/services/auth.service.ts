@@ -12,7 +12,10 @@ import { Connection, Types } from 'mongoose';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 import { BUSINESS_CATEGORIES_MESSAGES } from 'src/common/constants/messages/business-categories.messages';
 import { COMMON_MESSAGES } from 'src/common/constants/messages/common.messages';
-import { getFeaturesForPlan } from 'src/common/constants/subscription-features.constants';
+import {
+  getFeaturesForPlan,
+  TRIAL_PERIOD_DAYS,
+} from 'src/common/constants/subscription-features.constants';
 import {
   SubscriptionPlan,
   SubscriptionStatus,
@@ -721,7 +724,7 @@ export class AuthService {
       }
 
       const trialEndsAt = new Date();
-      trialEndsAt.setMonth(trialEndsAt.getMonth() + 1);
+      trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
 
       const { businessId } = await this.runBusinessOnboardingTransaction(
         dto,
@@ -757,7 +760,7 @@ export class AuthService {
           ),
         );
 
-      // Async: create Stripe customer + subscription with 30-day trial
+      // Async: create Stripe customer + subscription with a 7-day trial
       void this.agendaService
         .now(JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER, {
           businessId: businessId.toString(),

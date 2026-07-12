@@ -43,7 +43,7 @@ export class SubscriptionController {
   }
 
   /**
-   * Creates a Stripe Subscription with a 30-day free trial on the chosen plan.
+   * Creates a Stripe Subscription with a 7-day free trial on the chosen plan.
    * An optional paymentMethodId attaches the card upfront for seamless conversion.
    */
   @Post('subscribe')
