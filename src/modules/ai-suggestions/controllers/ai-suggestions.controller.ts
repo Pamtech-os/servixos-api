@@ -1,4 +1,5 @@
 import {
+  Body,
   Controller,
   Get,
   HttpCode,
@@ -13,6 +14,7 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 import type { JwtUser } from 'src/common/decorators/current-user.decorator';
 import { RequirePlan } from 'src/common/decorators/require-plan.decorator';
 import { SubscriptionGuard } from 'src/common/guards/subscription.guard';
+import { ExecuteSuggestionDto } from '../dto/execute-suggestion.dto';
 import { SuggestionIdParamDto } from '../dto/suggestion-id-param.dto';
 import { AiSuggestionsService } from '../services/ai-suggestions.service';
 
@@ -29,7 +31,7 @@ import { AiSuggestionsService } from '../services/ai-suggestions.service';
 export class AiSuggestionsController {
   constructor(private readonly aiSuggestionsService: AiSuggestionsService) {}
 
-  /** GET /ai/suggestions — returns the current suggestion list and count. */
+  /** GET /ai/suggestions — returns the current suggestion cards and count. */
   @Get()
   @RequirePlan('ai.suggestions')
   @HttpCode(HttpStatus.OK)
@@ -45,12 +47,27 @@ export class AiSuggestionsController {
     };
   }
 
+  /** GET /ai/suggestions/tracked — executed suggestions with their observed outcomes. */
+  @Get('tracked')
+  @RequirePlan('ai.suggestions')
+  @HttpCode(HttpStatus.OK)
+  async getTracked(@CurrentUser() user: JwtUser) {
+    const result = await this.aiSuggestionsService.listTracked(user.businessId);
+    if (result instanceof HttpException) throw result;
+
+    return {
+      message: AI_MESSAGES.SUCCESS.TRACKED_SUGGESTIONS_RETRIEVED,
+      data: result,
+    };
+  }
+
   /**
    * POST /ai/suggestions/:id/apply
    *
-   * Applies the suggestion's one-click action (e.g. sends follow-up emails,
-   * marks stale jobs complete, sets a revenue target, queues invoice
-   * reminders, or bumps upcoming job pricing) and removes it from the list.
+   * Executes the suggestion's action (send a payment reminder or follow-up,
+   * set a revenue target, or reprice upcoming jobs). When the suggestion has
+   * a draft, `draftValue` carries the user's edited version and takes
+   * precedence over the original.
    */
   @Post(':id/apply')
   @RequirePlan('ai.suggestions')
@@ -58,20 +75,22 @@ export class AiSuggestionsController {
   async apply(
     @CurrentUser() user: JwtUser,
     @Param() params: SuggestionIdParamDto,
+    @Body() dto: ExecuteSuggestionDto,
   ) {
-    const result = await this.aiSuggestionsService.applySuggestion(
+    const result = await this.aiSuggestionsService.executeSuggestion(
       user.businessId,
       params.id,
+      dto.draftValue,
     );
     if (result instanceof HttpException) throw result;
 
     return {
-      message: AI_MESSAGES.SUCCESS.SUGGESTION_APPLIED,
+      message: AI_MESSAGES.SUCCESS.SUGGESTION_EXECUTED,
       data: result,
     };
   }
 
-  /** POST /ai/suggestions/:id/dismiss — hides a suggestion without applying it. */
+  /** POST /ai/suggestions/:id/dismiss — hides a suggestion without executing it. */
   @Post(':id/dismiss')
   @RequirePlan('ai.suggestions')
   @HttpCode(HttpStatus.OK)
