@@ -5,29 +5,29 @@ import {
 import { AI_MESSAGES } from 'src/common/constants/messages/ai.messages';
 import { AiSuggestionsController } from 'src/modules/ai-suggestions/controllers/ai-suggestions.controller';
 import { AiSuggestionsService } from 'src/modules/ai-suggestions/services/ai-suggestions.service';
-import {
-  SuggestionId,
-  SuggestionTag,
-} from 'src/modules/ai-suggestions/types/ai-suggestions.types';
+import { SuggestionCategory } from 'src/modules/ai-suggestions/types/ai-suggestions.types';
 import { asMock } from 'test/helpers/mock';
 
 type JwtUserLike = { businessId: string };
 
 const BID = 'biz_0000000000000000000001';
+const SUGGESTION_ID = '665f1c2b9d3e4a0012345678';
 const USER = { businessId: BID } as JwtUserLike as never;
 
 describe('AiSuggestionsController', () => {
   let controller: AiSuggestionsController;
   let service: {
     listSuggestions: jest.Mock;
-    applySuggestion: jest.Mock;
+    listTracked: jest.Mock;
+    executeSuggestion: jest.Mock;
     dismissSuggestion: jest.Mock;
   };
 
   beforeEach(() => {
     service = {
       listSuggestions: jest.fn(),
-      applySuggestion: jest.fn(),
+      listTracked: jest.fn(),
+      executeSuggestion: jest.fn(),
       dismissSuggestion: jest.fn(),
     };
     controller = new AiSuggestionsController(
@@ -49,121 +49,158 @@ describe('AiSuggestionsController', () => {
 
     it('should return the suggestions message constant and service data', async () => {
       // Arrange
-      const data = {
-        count: 1,
-        suggestions: [
-          {
-            id: SuggestionId.OPTIMIZE_PRICING,
-            text: 'Optimize pricing',
-            tag: SuggestionTag.HIGH_IMPACT,
-          },
-        ],
-      };
+      const data = { count: 0, suggestions: [] };
       service.listSuggestions.mockResolvedValue(data);
 
       // Act
       const result = await controller.getSuggestions(USER);
 
       // Assert
-      expect(result.message).toBe(AI_MESSAGES.SUCCESS.SUGGESTIONS_GENERATED);
-      expect(result.data).toEqual(data);
+      expect(result).toEqual({
+        message: AI_MESSAGES.SUCCESS.SUGGESTIONS_GENERATED,
+        data,
+      });
+    });
+
+    it('should throw when the service returns an HttpException', async () => {
+      // Arrange
+      service.listSuggestions.mockResolvedValue(
+        new InternalServerErrorException(AI_MESSAGES.ERROR.SUGGESTIONS_FAILED),
+      );
+
+      // Act
+      const act = controller.getSuggestions(USER);
+
+      // Assert
+      await expect(act).rejects.toBeInstanceOf(InternalServerErrorException);
+    });
+  });
+
+  describe('getTracked', () => {
+    it('should return the tracked message constant and service data', async () => {
+      // Arrange
+      const data = {
+        tracked: [
+          {
+            id: SUGGESTION_ID,
+            category: SuggestionCategory.CASH_FLOW,
+            title: 'Invoice INV-2026-0001 is 12 days overdue',
+            executeLabel: 'Send reminder',
+            executedAt: '2026-10-23T10:15:00.000Z',
+            outcome: null,
+          },
+        ],
+      };
+      service.listTracked.mockResolvedValue(data);
+
+      // Act
+      const result = await controller.getTracked(USER);
+
+      // Assert
+      expect(result).toEqual({
+        message: AI_MESSAGES.SUCCESS.TRACKED_SUGGESTIONS_RETRIEVED,
+        data,
+      });
+    });
+
+    it('should throw when the service returns an HttpException', async () => {
+      // Arrange
+      service.listTracked.mockResolvedValue(
+        new InternalServerErrorException(AI_MESSAGES.ERROR.SUGGESTIONS_FAILED),
+      );
+
+      // Act
+      const act = controller.getTracked(USER);
+
+      // Assert
+      await expect(act).rejects.toBeInstanceOf(InternalServerErrorException);
     });
   });
 
   describe('apply', () => {
-    it('should delegate to service with the correct businessId and suggestion id', async () => {
+    it('should pass the edited draftValue through to the service', async () => {
       // Arrange
-      service.applySuggestion.mockResolvedValue({
-        id: SuggestionId.OPTIMIZE_PRICING,
-        summary: 'done',
-        remaining: 0,
+      service.executeSuggestion.mockResolvedValue({
+        id: SUGGESTION_ID,
+        remaining: 2,
+        executedAt: '2026-10-23T10:15:00.000Z',
       });
 
       // Act
-      await controller.apply(USER, { id: SuggestionId.OPTIMIZE_PRICING });
+      await controller.apply(
+        USER,
+        { id: SUGGESTION_ID },
+        { draftValue: 'Hi Adaeze, edited' },
+      );
 
       // Assert
-      expect(service.applySuggestion).toHaveBeenCalledWith(
+      expect(service.executeSuggestion).toHaveBeenCalledWith(
         BID,
-        SuggestionId.OPTIMIZE_PRICING,
+        SUGGESTION_ID,
+        'Hi Adaeze, edited',
       );
     });
 
-    it('should return the applied message constant and service data', async () => {
+    it('should return the executed message constant and service data', async () => {
       // Arrange
       const data = {
-        id: SuggestionId.OPTIMIZE_PRICING,
-        summary: 'Increased pricing by 10% on 3 upcoming jobs.',
-        remaining: 4,
+        id: SUGGESTION_ID,
+        remaining: 2,
+        executedAt: '2026-10-23T10:15:00.000Z',
       };
-      service.applySuggestion.mockResolvedValue(data);
+      service.executeSuggestion.mockResolvedValue(data);
 
       // Act
-      const result = await controller.apply(USER, {
-        id: SuggestionId.OPTIMIZE_PRICING,
-      });
+      const result = await controller.apply(USER, { id: SUGGESTION_ID }, {});
 
       // Assert
-      expect(result.message).toBe(AI_MESSAGES.SUCCESS.SUGGESTION_APPLIED);
-      expect(result.data).toEqual(data);
+      expect(result).toEqual({
+        message: AI_MESSAGES.SUCCESS.SUGGESTION_EXECUTED,
+        data,
+      });
     });
 
-    it('should re-throw when the service returns a NotFoundException', async () => {
+    it('should throw NotFoundException when the suggestion is unavailable', async () => {
       // Arrange
-      service.applySuggestion.mockResolvedValue(
+      service.executeSuggestion.mockResolvedValue(
         new NotFoundException(AI_MESSAGES.ERROR.SUGGESTION_NOT_FOUND),
       );
 
-      // Act & Assert
-      await expect(
-        controller.apply(USER, { id: SuggestionId.OPTIMIZE_PRICING }),
-      ).rejects.toBeInstanceOf(NotFoundException);
-    });
+      // Act
+      const act = controller.apply(USER, { id: SUGGESTION_ID }, {});
 
-    it('should re-throw when the service returns an InternalServerErrorException', async () => {
-      // Arrange
-      service.applySuggestion.mockResolvedValue(
-        new InternalServerErrorException(AI_MESSAGES.ERROR.SUGGESTIONS_FAILED),
-      );
-
-      // Act & Assert
-      await expect(
-        controller.apply(USER, { id: SuggestionId.OPTIMIZE_PRICING }),
-      ).rejects.toBeInstanceOf(InternalServerErrorException);
+      // Assert
+      await expect(act).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
   describe('dismiss', () => {
-    it('should delegate to service with the correct businessId and suggestion id', async () => {
-      // Arrange
-      service.dismissSuggestion.mockResolvedValue({
-        id: SuggestionId.CLIENT_FOLLOW_UPS,
-        remaining: 2,
-      });
-
-      // Act
-      await controller.dismiss(USER, { id: SuggestionId.CLIENT_FOLLOW_UPS });
-
-      // Assert
-      expect(service.dismissSuggestion).toHaveBeenCalledWith(
-        BID,
-        SuggestionId.CLIENT_FOLLOW_UPS,
-      );
-    });
-
     it('should return the dismissed message constant and service data', async () => {
       // Arrange
-      const data = { id: SuggestionId.CLIENT_FOLLOW_UPS, remaining: 2 };
+      const data = { id: SUGGESTION_ID, remaining: 1 };
       service.dismissSuggestion.mockResolvedValue(data);
 
       // Act
-      const result = await controller.dismiss(USER, {
-        id: SuggestionId.CLIENT_FOLLOW_UPS,
-      });
+      const result = await controller.dismiss(USER, { id: SUGGESTION_ID });
 
       // Assert
-      expect(result.message).toBe(AI_MESSAGES.SUCCESS.SUGGESTION_DISMISSED);
-      expect(result.data).toEqual(data);
+      expect(result).toEqual({
+        message: AI_MESSAGES.SUCCESS.SUGGESTION_DISMISSED,
+        data,
+      });
+    });
+
+    it('should throw NotFoundException when the suggestion is unavailable', async () => {
+      // Arrange
+      service.dismissSuggestion.mockResolvedValue(
+        new NotFoundException(AI_MESSAGES.ERROR.SUGGESTION_NOT_FOUND),
+      );
+
+      // Act
+      const act = controller.dismiss(USER, { id: SUGGESTION_ID });
+
+      // Assert
+      await expect(act).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 });

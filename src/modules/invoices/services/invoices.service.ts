@@ -16,6 +16,7 @@ import { INVOICES_MESSAGES } from 'src/common/constants/messages/invoices.messag
 import { buildMeta, resolvePagination } from 'src/common/utils/pagination.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { toTwoDecimal } from 'src/common/utils/number.util';
+import { escapeHtml, textToHtml } from 'src/common/utils/html.util';
 import { formatError, formatErrorMessage } from 'src/common/utils/error.util';
 import { calculateInvoiceStatus } from '../utils/invoice-status.util';
 import { JOBS } from 'src/common/constants/agenda.constants';
@@ -481,9 +482,14 @@ export class InvoicesService implements OnModuleInit {
     }
   }
 
+  /**
+   * Queues the invoice email (PDF attached). With `reminderMessage`, the email
+   * is sent as a payment reminder carrying that message instead.
+   */
   async sendInvoice(
     id: string,
     businessId: string,
+    options: { reminderMessage?: string } = {},
   ): Promise<
     | { invoiceId: string; queued: true }
     | NotFoundException
@@ -501,6 +507,9 @@ export class InvoicesService implements OnModuleInit {
       await this.agendaService.now<InvoiceSendJobData>(JOBS.INVOICE_SEND, {
         businessId,
         invoiceId: id,
+        ...(options.reminderMessage
+          ? { reminderMessage: options.reminderMessage }
+          : {}),
       });
 
       return { invoiceId: id, queued: true };
@@ -595,12 +604,17 @@ export class InvoicesService implements OnModuleInit {
         ensured.pdfUrl as string,
       );
       const totalLabel = toTwoDecimal(ensured.totalAmount).toFixed(2);
+      const reminder = payload.reminderMessage?.trim();
 
       await this.emailService.send({
         to: client.email,
         name: client.name,
-        subject: `Invoice ${ensured.invoiceNumber}`,
-        html: `
+        subject: reminder
+          ? `Payment reminder: Invoice ${ensured.invoiceNumber}`
+          : `Invoice ${ensured.invoiceNumber}`,
+        html: reminder
+          ? this.buildReminderEmailHtml(ensured, reminder)
+          : `
           <div style="font-family: Arial, sans-serif; color: #111827;">
             <h2>Invoice ${ensured.invoiceNumber}</h2>
             <p>Hello ${client.name},</p>
@@ -623,6 +637,22 @@ export class InvoicesService implements OnModuleInit {
       this.logger.error(`handleInvoiceSendJob: failed ${formatError(error)}`);
       throw error;
     }
+  }
+
+  private buildReminderEmailHtml(invoice: Invoice, message: string): string {
+    const balanceLabel = toTwoDecimal(
+      invoice.totalAmount - invoice.amountPaid,
+    ).toFixed(2);
+
+    return `
+          <div style="font-family: Arial, sans-serif; color: #111827;">
+            <h2>Payment reminder: Invoice ${escapeHtml(invoice.invoiceNumber)}</h2>
+            <p>${textToHtml(message)}</p>
+            <p><strong>Amount due:</strong> ${balanceLabel}</p>
+            <p>You can access the invoice PDF using the attached document or this link:</p>
+            <p><a href="${invoice.pdfUrl}">${invoice.pdfUrl}</a></p>
+          </div>
+        `;
   }
 
   private async ensureInvoicePdf(

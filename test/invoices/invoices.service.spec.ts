@@ -314,6 +314,37 @@ describe('InvoicesService', () => {
     expect(result.meta.total).toBe(1);
   });
 
+  it('should queue a plain invoice send without a reminder message', async () => {
+    // Arrange
+    invoicesRepository.findById.mockResolvedValue(baseInvoice);
+
+    // Act
+    await service.sendInvoice(INVOICE_ID, BUSINESS_ID);
+
+    // Assert
+    expect(agendaService.now).toHaveBeenCalledWith(JOBS.INVOICE_SEND, {
+      businessId: BUSINESS_ID,
+      invoiceId: INVOICE_ID,
+    });
+  });
+
+  it('should queue the reminder message when sending a payment reminder', async () => {
+    // Arrange
+    invoicesRepository.findById.mockResolvedValue(baseInvoice);
+
+    // Act
+    await service.sendInvoice(INVOICE_ID, BUSINESS_ID, {
+      reminderMessage: 'Hi, a friendly reminder',
+    });
+
+    // Assert
+    expect(agendaService.now).toHaveBeenCalledWith(JOBS.INVOICE_SEND, {
+      businessId: BUSINESS_ID,
+      invoiceId: INVOICE_ID,
+      reminderMessage: 'Hi, a friendly reminder',
+    });
+  });
+
   it('returns 500 when repository fails unexpectedly', async () => {
     invoicesRepository.findById.mockRejectedValue(new Error('db crash'));
 
