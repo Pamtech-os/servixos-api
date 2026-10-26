@@ -1,13 +1,14 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectConnection } from '@nestjs/mongoose';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
-import { Connection, QueryFilter } from 'mongoose';
+import { Connection, ModifyResult, QueryFilter } from 'mongoose';
 import {
   WaitlistEntry,
   WaitlistPersona,
 } from '../schemas/waitlist-entry.schema';
 import { PaginationParams } from 'src/common/utils/pagination.util';
 import { escapeRegex } from 'src/common/utils/regex.util';
+import { formatError } from 'src/common/utils/error.util';
 
 export interface WaitlistFilters {
   search?: string;
@@ -24,7 +25,8 @@ export type WaitlistPersonaCounts = Record<WaitlistPersona, number> & {
 const EXPORT_CURSOR_BATCH_SIZE = 1000;
 
 @Injectable()
-export class WaitlistRepository {
+export class WaitlistRepository implements OnModuleInit {
+  private readonly logger = new Logger(WaitlistRepository.name);
   private readonly waitlistModel: ReturnModelType<typeof WaitlistEntry>;
 
   constructor(@InjectConnection() connection: Connection) {
@@ -33,13 +35,56 @@ export class WaitlistRepository {
     });
   }
 
-  async create(data: {
+  // autoIndex is disabled in production, so the unique email index is built explicitly in every
+  // environment — it is what guarantees no duplicates under concurrent signups
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.waitlistModel.createIndexes();
+    } catch (error) {
+      this.logger.error(
+        `Failed to build waitlist indexes — duplicate emails must be removed before the unique index can be created: ${formatError(error)}`,
+      );
+    }
+  }
+
+  /** Inserts the entry only if no entry with this email exists; `created` is false for duplicates. */
+  async createIfAbsent(data: {
     firstName: string;
     email: string;
     persona: WaitlistPersona;
-  }): Promise<WaitlistEntry> {
-    const doc = await this.waitlistModel.create(data);
-    return doc.toObject() as WaitlistEntry;
+  }): Promise<{ entry: WaitlistEntry; created: boolean }> {
+    const email = data.email.trim().toLowerCase();
+    const now = new Date();
+    // Atomic upsert with $setOnInsert — a single round-trip with no check-then-insert gap,
+    // and an existing entry is never modified. Timestamps are set manually so a duplicate
+    // attempt doesn't bump updatedAt.
+    const result = await this.waitlistModel
+      .findOneAndUpdate(
+        { email },
+        {
+          $setOnInsert: {
+            firstName: data.firstName,
+            email,
+            persona: data.persona,
+            createdAt: now,
+            updatedAt: now,
+          },
+        },
+        {
+          upsert: true,
+          returnDocument: 'after',
+          includeResultMetadata: true,
+          runValidators: true,
+          timestamps: false,
+        },
+      )
+      .lean<ModifyResult<WaitlistEntry>>()
+      .exec();
+
+    return {
+      entry: result.value as WaitlistEntry,
+      created: !result.lastErrorObject?.updatedExisting,
+    };
   }
 
   async findAll(

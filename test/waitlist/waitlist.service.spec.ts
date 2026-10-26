@@ -30,7 +30,7 @@ const toAsync = <T>(items: T[]): AsyncIterable<T> => Readable.from(items);
 describe('WaitlistService', () => {
   let service: WaitlistService;
   let waitlistRepo: {
-    create: jest.Mock;
+    createIfAbsent: jest.Mock;
     findAll: jest.Mock;
     streamAll: jest.Mock;
     countByPersona: jest.Mock;
@@ -39,7 +39,7 @@ describe('WaitlistService', () => {
 
   beforeEach(() => {
     waitlistRepo = {
-      create: jest.fn(),
+      createIfAbsent: jest.fn(),
       findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
       streamAll: jest.fn().mockReturnValue(toAsync([])),
       countByPersona: jest.fn().mockResolvedValue({ total: 0 }),
@@ -59,7 +59,10 @@ describe('WaitlistService', () => {
         email: 'ada@example.com',
         persona: WaitlistPersona.HAS_IDEA,
       };
-      waitlistRepo.create.mockResolvedValue(makeEntry());
+      waitlistRepo.createIfAbsent.mockResolvedValue({
+        entry: makeEntry(),
+        created: true,
+      });
 
       // Act
       const result = await service.join(dto);
@@ -70,7 +73,10 @@ describe('WaitlistService', () => {
 
     it('should queue the waitlist confirmation email', async () => {
       // Arrange
-      waitlistRepo.create.mockResolvedValue(makeEntry());
+      waitlistRepo.createIfAbsent.mockResolvedValue({
+        entry: makeEntry(),
+        created: true,
+      });
 
       // Act
       await service.join({
@@ -92,7 +98,10 @@ describe('WaitlistService', () => {
 
     it('should still succeed when queuing the email fails', async () => {
       // Arrange
-      waitlistRepo.create.mockResolvedValue(makeEntry());
+      waitlistRepo.createIfAbsent.mockResolvedValue({
+        entry: makeEntry(),
+        created: true,
+      });
       agendaService.now.mockRejectedValue(new Error('agenda down'));
 
       // Act
@@ -112,7 +121,10 @@ describe('WaitlistService', () => {
 
     it('should not queue an email when the email is already registered', async () => {
       // Arrange
-      waitlistRepo.create.mockRejectedValue({ code: 11000 });
+      waitlistRepo.createIfAbsent.mockResolvedValue({
+        entry: makeEntry(),
+        created: false,
+      });
 
       // Act
       await service.join({
@@ -127,7 +139,27 @@ describe('WaitlistService', () => {
 
     it('should return ConflictException when the email is already registered', async () => {
       // Arrange
-      waitlistRepo.create.mockRejectedValue({ code: 11000 });
+      waitlistRepo.createIfAbsent.mockResolvedValue({
+        entry: makeEntry(),
+        created: false,
+      });
+
+      // Act
+      const result = await service.join({
+        firstName: 'Ada',
+        email: 'ada@example.com',
+        persona: WaitlistPersona.BUSINESS_OWNER,
+      });
+
+      // Assert
+      expect(result).toEqual(
+        new ConflictException(WAITLIST_MESSAGES.ERROR.ALREADY_REGISTERED),
+      );
+    });
+
+    it('should return ConflictException when a concurrent signup wins the unique index race', async () => {
+      // Arrange
+      waitlistRepo.createIfAbsent.mockRejectedValue({ code: 11000 });
 
       // Act
       const result = await service.join({
@@ -144,7 +176,7 @@ describe('WaitlistService', () => {
 
     it('should return InternalServerErrorException on unexpected errors', async () => {
       // Arrange
-      waitlistRepo.create.mockRejectedValue(new Error('db down'));
+      waitlistRepo.createIfAbsent.mockRejectedValue(new Error('db down'));
 
       // Act
       const result = await service.join({

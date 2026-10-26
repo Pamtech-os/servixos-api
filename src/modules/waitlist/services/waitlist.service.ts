@@ -41,11 +41,16 @@ export class WaitlistService {
   /** Register a new waitlist signup and queue a confirmation email; rejects emails that are already registered. */
   async join(dto: JoinWaitlistDto) {
     try {
-      const entry = await this.waitlistRepo.create({
+      const { entry, created } = await this.waitlistRepo.createIfAbsent({
         firstName: dto.firstName,
         email: dto.email,
         persona: dto.persona,
       });
+      if (!created) {
+        return new ConflictException(
+          WAITLIST_MESSAGES.ERROR.ALREADY_REGISTERED,
+        );
+      }
 
       // Email failure must not fail the signup — the entry is already saved
       await this.agendaService
@@ -66,7 +71,7 @@ export class WaitlistService {
         persona: entry.persona,
       };
     } catch (error) {
-      // Unique index on email is the source of truth — avoids a check-then-insert race
+      // Two simultaneous upserts for a new email: the unique index rejects the loser with E11000
       if (isDuplicateKeyError(error)) {
         return new ConflictException(
           WAITLIST_MESSAGES.ERROR.ALREADY_REGISTERED,
