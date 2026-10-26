@@ -18,11 +18,19 @@ import {
 } from '../../email/templates/admin-custom-email.template';
 import { adminOtpTemplate } from '../../email/templates/admin-otp.template';
 import { newServiceRequestTemplate } from '../../email/templates/new-service-request.template';
+import { waitlistJoinedTemplate } from '../../email/templates/waitlist-joined.template';
+import { WaitlistPersona } from 'src/modules/waitlist/schemas/waitlist-entry.schema';
 import { JOBS } from 'src/common/constants/agenda.constants';
 
 export interface WelcomeJobData {
   to: string;
   firstName: string;
+}
+
+export interface WaitlistJoinedJobData {
+  to: string;
+  firstName: string;
+  persona: WaitlistPersona;
 }
 
 export interface PasswordResetJobData {
@@ -152,6 +160,21 @@ export function defineEmailJobs(
       html: welcomeTemplate(firstName, appUrl),
     });
   });
+
+  agenda.define(
+    JOBS.EMAIL_WAITLIST_JOINED,
+    { concurrency: 10 },
+    async (job: Job) => {
+      const { to, firstName, persona } = job.attrs
+        .data as WaitlistJoinedJobData;
+      await emailService.send({
+        to,
+        name: firstName,
+        subject: "You're on the Servix OS waitlist 🚀",
+        html: waitlistJoinedTemplate(firstName, persona),
+      });
+    },
+  );
 
   agenda.define(
     JOBS.EMAIL_PASSWORD_RESET,

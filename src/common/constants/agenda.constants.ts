@@ -43,6 +43,7 @@ export const JOBS = {
   SUBSCRIPTION_CARD_SAVED: 'subscription:card:saved',
   SUBSCRIPTION_ACTION_REQUIRED: 'subscription:action:required',
   EMAIL_ACTION_REQUIRED: 'email:action:required',
+  EMAIL_WAITLIST_JOINED: 'email:waitlist:joined',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];

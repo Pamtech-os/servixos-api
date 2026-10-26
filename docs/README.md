@@ -90,6 +90,7 @@ Some list endpoints include a `statistics` top-level key with aggregate counts/t
 | [subscription-api.md](./subscription-api.md) | Plans, billing, upgrades, Stripe payment flows |
 | [api-ai-features.md](./api-ai-features.md) | AI Insights, AI Advisor, AI Suggestions |
 | [api-ai-suggestions.md](./api-ai-suggestions.md) | AI Suggestions — cards, Review & Execute, dismiss, tracked outcomes |
+| [api-waitlist.md](./api-waitlist.md) | Public waitlist signup (marketing site) + admin list/search/export |
 
 ---
 
