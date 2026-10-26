@@ -73,6 +73,7 @@ import { SupportModule } from './modules/support/support.module';
 import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { SettingsModule } from './modules/settings/settings.module';
+import { WaitlistModule } from './modules/waitlist/waitlist.module';
 
 @Module({
   imports: [
@@ -148,6 +149,7 @@ import { SettingsModule } from './modules/settings/settings.module';
     StripeModule,
     SubscriptionModule,
     SettingsModule,
+    WaitlistModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
