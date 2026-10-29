@@ -49,6 +49,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       userRole: payload.userRole,
       pinVerified: payload.pinVerified,
       permissions: payload.permissions,
+      ...(payload.scope && { scope: payload.scope }),
     };
   }
 }

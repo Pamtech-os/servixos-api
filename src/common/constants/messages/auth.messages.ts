@@ -49,6 +49,7 @@ export const AUTH_MESSAGES = {
     EMAIL_VERIFIED: 'Email verified successfully',
     OTP_RESENT: 'A new verification code has been sent to your email',
     PIN_SET: 'PIN set successfully',
+    ONBOARDING_STATUS: 'Onboarding status retrieved',
     BUSINESS_CREATED: 'Business setup complete',
     LOGIN: 'Login successful',
     LOGOUT: 'Logged out successfully',

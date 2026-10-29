@@ -322,23 +322,28 @@ describe('Requests (integration)', () => {
 
     const otp = captureOtpFor(user.email);
 
-    await authed(
+    const verifyRes = await authed(
       req()
         .post('/api/auth/onboarding/verify-email')
         .send({ email: user.email, otp }),
     );
 
+    const onboardingToken = (
+      verifyRes.body as { data: { accessToken: string } }
+    ).data.accessToken;
+
     await authed(
       req()
         .post('/api/auth/onboarding/set-pin')
-        .send({ email: user.email, pin: user.pin, confirmPin: user.pin }),
+        .set('Authorization', `Bearer ${onboardingToken}`)
+        .send({ pin: user.pin, confirmPin: user.pin }),
     );
 
     const res = await authed(
       req()
         .post('/api/auth/onboarding/business')
+        .set('Authorization', `Bearer ${onboardingToken}`)
         .send({
-          email: user.email,
           businessName: `${user.firstName} Plumbing Co`,
           businessCategory: categoryId,
           businessDescription: BUSINESS_DESC,

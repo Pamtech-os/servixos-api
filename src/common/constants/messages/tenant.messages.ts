@@ -13,5 +13,6 @@ export const TENANT_MESSAGES = {
     // prevent deleted-account enumeration
     DELETED: 'Resource not found',
     EMPLOYEE_MISMATCH: 'Access denied',
+    ONBOARDING_INCOMPLETE: 'Please finish setting up your business to continue',
   },
 } as const;

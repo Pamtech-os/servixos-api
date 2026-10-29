@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthController } from './controllers/auth.controller';
+import { OnboardingController } from './controllers/onboarding.controller';
 import { AuthService } from './services/auth.service';
 import { AuthRepository } from './repositories/auth.repository';
 import { JwtStrategy } from './strategies/jwt.strategy';
@@ -32,7 +33,7 @@ import { BusinessCategoriesModule } from '../business-categories/business-catego
     WebsiteModule,
     BusinessCategoriesModule,
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, OnboardingController],
   providers: [AuthService, AuthRepository, JwtStrategy],
   exports: [JwtModule],
 })

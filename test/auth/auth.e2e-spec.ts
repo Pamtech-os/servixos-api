@@ -40,9 +40,10 @@ interface LoginPayload {
     firstName: string;
     lastName: string;
     email: string;
-    businessId: string;
+    businessId: string | null;
     mustChangePassword?: boolean;
     subdomain?: string;
+    onboardingStage?: string;
   };
 }
 
@@ -227,21 +228,35 @@ describe('Auth (integration)', () => {
     );
   }
 
-  async function accountAndVerify(email: string): Promise<void> {
+  async function accountAndVerify(email: string): Promise<string> {
     await createAccountOnly(email);
     const otp = captureOtpFor(email);
-    await authed(
+    const res = await authed(
       req().post('/api/auth/onboarding/verify-email').send({ email, otp }),
     );
+    return (res.body as ApiBody<LoginPayload>).data!.accessToken;
   }
 
-  async function readyForBusiness(email: string): Promise<void> {
-    await accountAndVerify(email);
-    await authed(
+  function asOnboarding(r: request.Test, accessToken: string): request.Test {
+    return authed(r.set('Authorization', `Bearer ${accessToken}`));
+  }
+
+  async function readyForBusiness(email: string): Promise<string> {
+    const token = await accountAndVerify(email);
+    await asOnboarding(
       req()
         .post('/api/auth/onboarding/set-pin')
-        .send({ email, pin: '1234', confirmPin: '1234' }),
+        .send({ pin: '1234', confirmPin: '1234' }),
+      token,
     );
+    return token;
+  }
+
+  async function loginAs(email: string, password: string): Promise<string> {
+    const res = await authed(
+      req().post('/api/auth/login').send({ email, password }),
+    );
+    return (res.body as ApiBody<LoginPayload>).data!.accessToken;
   }
 
   async function fullOnboarding(user: {
@@ -264,26 +279,28 @@ describe('Auth (integration)', () => {
       }),
     );
     const otp = captureOtpFor(user.email);
-    await authed(
+    const verifyRes = await authed(
       req()
         .post('/api/auth/onboarding/verify-email')
         .send({ email: user.email, otp }),
     );
-    await authed(
+    const token = (verifyRes.body as ApiBody<LoginPayload>).data!.accessToken;
+    await asOnboarding(
       req()
         .post('/api/auth/onboarding/set-pin')
-        .send({ email: user.email, pin: user.pin, confirmPin: user.pin }),
+        .send({ pin: user.pin, confirmPin: user.pin }),
+      token,
     );
-    const res = await authed(
+    const res = await asOnboarding(
       req()
         .post('/api/auth/onboarding/business')
         .send({
-          email: user.email,
           businessName: `${user.firstName} Business`,
           businessCategory: categoryId,
           businessDescription: BUSINESS_DESC,
           timezone: 'America/New_York',
         }),
+      token,
     );
     return (res.body as ApiBody<LoginPayload>).data!;
   }
@@ -697,6 +714,27 @@ describe('Auth (integration)', () => {
         expect(user?.emailVerificationOtp).toBeUndefined();
         expect(user?.emailVerificationOtpExpiry).toBeUndefined();
       });
+
+      it('returns an onboarding session with no business attached', async () => {
+        // Arrange
+        const email = nextEmail();
+        await createAccountOnly(email);
+        const rawOtp = captureOtpFor(email);
+
+        // Act
+        const res = await authed(
+          req()
+            .post('/api/auth/onboarding/verify-email')
+            .send({ email, otp: rawOtp }),
+        );
+
+        // Assert
+        expect((res.body as ApiBody<LoginPayload>).data).toMatchObject({
+          accessToken: expect.any(String) as string,
+          refreshToken: expect.any(String) as string,
+          user: { email, businessId: null, onboardingStage: 'email_verified' },
+        });
+      });
     });
 
     describe('error cases', () => {
@@ -884,24 +922,28 @@ describe('Auth (integration)', () => {
   // ─────────────────────────────────────────────────────────────────────────────
 
   describe('POST /api/auth/onboarding/set-pin', () => {
+    let token: string;
+
+    beforeAll(async () => {
+      token = await accountAndVerify(nextEmail());
+    });
+
     describe('input validation — 400', () => {
       it.each<[string, Record<string, unknown>]>([
-        ['email', { email: undefined }],
         ['pin', { pin: undefined }],
         ['confirmPin', { confirmPin: undefined }],
       ])('returns 400 when %s is missing', async (_field, override) => {
         // Arrange
-        const base = {
-          email: SEEDED_USER.email,
-          pin: '1234',
-          confirmPin: '1234',
-        };
+        const base = { pin: '1234', confirmPin: '1234' };
+
         // Act
-        const res = await authed(
+        const res = await asOnboarding(
           req()
             .post('/api/auth/onboarding/set-pin')
             .send({ ...base, ...override }),
+          token,
         );
+
         // Assert
         expect(res.status).toBe(400);
       });
@@ -911,25 +953,29 @@ describe('Auth (integration)', () => {
         ['12345', 'more than 4 digits'],
         ['abcd', 'non-numeric characters'],
       ])('returns 400 when pin is %s (%s)', async (pin, _desc) => {
-        // Arrange & Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/set-pin')
-            .send({ email: SEEDED_USER.email, pin, confirmPin: pin }),
+        // Arrange
+        const body = { pin, confirmPin: pin };
+
+        // Act
+        const res = await asOnboarding(
+          req().post('/api/auth/onboarding/set-pin').send(body),
+          token,
         );
+
         // Assert
         expect(res.status).toBe(400);
       });
 
       it('returns 400 when pin and confirmPin do not match', async () => {
-        // Arrange & Act
-        const res = await authed(
-          req().post('/api/auth/onboarding/set-pin').send({
-            email: SEEDED_USER.email,
-            pin: '1234',
-            confirmPin: '5678',
-          }),
+        // Arrange
+        const body = { pin: '1234', confirmPin: '5678' };
+
+        // Act
+        const res = await asOnboarding(
+          req().post('/api/auth/onboarding/set-pin').send(body),
+          token,
         );
+
         // Assert
         expect(res.status).toBe(400);
       });
@@ -939,51 +985,74 @@ describe('Auth (integration)', () => {
       it('returns 200 and stores the PIN as a bcrypt hash, not plaintext', async () => {
         // Arrange
         const email = nextEmail();
-        await accountAndVerify(email);
+        const onboardingToken = await accountAndVerify(email);
+
         // Act
-        const res = await authed(
+        const res = await asOnboarding(
           req()
             .post('/api/auth/onboarding/set-pin')
-            .send({ email, pin: '4321', confirmPin: '4321' }),
+            .send({ pin: '4321', confirmPin: '4321' }),
+          onboardingToken,
         );
         const user = await userModel.findOne({ email }).lean<User>();
+
         // Assert
         expect(res.status).toBe(200);
         expect(user?.pinHash).toBeDefined();
         expect(user?.pinHash).not.toBe('4321');
         expect(user?.pinHash!.startsWith('$2')).toBe(true);
       });
+
+      it('advances onboardingStage to pin_set', async () => {
+        // Arrange
+        const email = nextEmail();
+        const onboardingToken = await accountAndVerify(email);
+
+        // Act
+        await asOnboarding(
+          req()
+            .post('/api/auth/onboarding/set-pin')
+            .send({ pin: '4321', confirmPin: '4321' }),
+          onboardingToken,
+        );
+        const user = await userModel.findOne({ email }).lean<User>();
+
+        // Assert
+        expect(user?.onboardingStage).toBe('pin_set');
+      });
     });
 
     describe('error cases', () => {
-      it('returns 400 when the email is not registered', async () => {
-        // Arrange & Act
-        const res = await authed(
-          req().post('/api/auth/onboarding/set-pin').send({
-            email: 'nobody@test.local',
-            pin: '1234',
-            confirmPin: '1234',
-          }),
-        );
-        // Assert
-        expect(res.status).toBe(400);
-      });
+      it('returns 401 without a session', async () => {
+        // Arrange
+        const body = { pin: '1234', confirmPin: '1234' };
 
-      it('returns 400 when the email has not been verified yet', async () => {
-        // Arrange — account exists but email not verified
-        const email = nextEmail();
-        await createAccountOnly(email);
         // Act
         const res = await authed(
+          req().post('/api/auth/onboarding/set-pin').send(body),
+        );
+
+        // Assert
+        expect(res.status).toBe(401);
+      });
+
+      it('returns 409 when the user already has a business', async () => {
+        // Arrange
+        const fullToken = await loginAs(
+          SEEDED_USER.email,
+          SEEDED_USER.password,
+        );
+
+        // Act
+        const res = await asOnboarding(
           req()
             .post('/api/auth/onboarding/set-pin')
-            .send({ email, pin: '1234', confirmPin: '1234' }),
+            .send({ pin: '1234', confirmPin: '1234' }),
+          fullToken,
         );
+
         // Assert
-        expect(res.status).toBe(400);
-        expect((res.body as ApiBody).message).toBe(
-          AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED,
-        );
+        expect(res.status).toBe(409);
       });
     });
   });
@@ -993,82 +1062,75 @@ describe('Auth (integration)', () => {
   // ─────────────────────────────────────────────────────────────────────────────
 
   describe('POST /api/auth/onboarding/business', () => {
-    const baseBusinessPayload = (email: string) => ({
-      email,
+    const baseBusinessPayload = () => ({
       businessName: 'Test Cleaning Co',
       businessCategory: categoryId,
       businessDescription: BUSINESS_DESC,
       timezone: 'America/New_York',
     });
 
+    function createBusiness(
+      token: string,
+      overrides: Record<string, unknown> = {},
+    ): request.Test {
+      return asOnboarding(
+        req()
+          .post('/api/auth/onboarding/business')
+          .send({ ...baseBusinessPayload(), ...overrides }),
+        token,
+      );
+    }
+
     describe('input validation — 400', () => {
       it.each<[string, Record<string, unknown>]>([
-        ['email', { email: undefined }],
         ['businessName', { businessName: undefined }],
         ['businessCategory', { businessCategory: undefined }],
         ['businessDescription', { businessDescription: undefined }],
         ['timezone', { timezone: null }],
       ])('returns 400 when %s is missing', async (_field, override) => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({ ...baseBusinessPayload(email), ...override }),
-        );
+        const res = await createBusiness(token, override);
+
         // Assert
         expect(res.status).toBe(400);
       });
 
       it('returns 400 when businessCategory is not a valid MongoId', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({
-              ...baseBusinessPayload(email),
-              businessCategory: 'invalid',
-            }),
-        );
+        const res = await createBusiness(token, {
+          businessCategory: 'invalid',
+        });
+
         // Assert
         expect(res.status).toBe(400);
       });
 
       it('returns 400 when timezone is not a valid IANA string', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({
-              ...baseBusinessPayload(email),
-              timezone: 'Not/A/Timezone',
-            }),
-        );
+        const res = await createBusiness(token, { timezone: 'Not/A/Timezone' });
+
         // Assert
         expect(res.status).toBe(400);
       });
 
       it('returns 400 when businessDescription contains a flagged term', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({
-              ...baseBusinessPayload(email),
-              businessDescription: 'We offer fraud and scam services.',
-            }),
-        );
+        const res = await createBusiness(token, {
+          businessDescription: 'We offer fraud and scam services.',
+        });
+
         // Assert
         expect(res.status).toBe(400);
       });
@@ -1077,15 +1139,12 @@ describe('Auth (integration)', () => {
     describe('happy path', () => {
       it('returns 201 with accessToken, refreshToken, and user data including subdomain', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        const res = await createBusiness(token);
         const body = res.body as ApiBody<LoginPayload>;
+
         // Assert
         expect(res.status).toBe(201);
         expect(body.data?.accessToken).toBeDefined();
@@ -1096,40 +1155,32 @@ describe('Auth (integration)', () => {
 
       it('auto-creates three default roles (Owner, Manager, Employee)', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        const token = await readyForBusiness(nextEmail());
+        const res = await createBusiness(token);
         const businessId = (res.body as ApiBody<LoginPayload>).data?.user
           .businessId;
+
         // Act
         const roles = await roleModel.find({ businessId }).lean<Role[]>();
+
         // Assert
-        const names = roles.map((r) => r.name);
-        expect(names).toContain(DefaultRole.OWNER);
-        expect(names).toContain(DefaultRole.MANAGER);
-        expect(names).toContain(DefaultRole.EMPLOYEE);
-        expect(roles).toHaveLength(3);
+        expect(roles.map((r) => r.name).sort()).toEqual(
+          [DefaultRole.EMPLOYEE, DefaultRole.MANAGER, DefaultRole.OWNER].sort(),
+        );
       });
 
       it('auto-creates a WebsiteConfig document for the business', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        const token = await readyForBusiness(nextEmail());
+        const res = await createBusiness(token);
         const businessId = (res.body as ApiBody<LoginPayload>).data?.user
           .businessId;
+
         // Act
         const config = await websiteConfigModel
           .findOne({ businessId })
           .lean<WebsiteConfig>();
+
         // Assert
         expect(config).not.toBeNull();
       });
@@ -1137,33 +1188,30 @@ describe('Auth (integration)', () => {
       it('sets user.businessId, user.isActive to true, and assigns the Owner role', async () => {
         // Arrange
         const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(email);
+
         // Act
-        await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        await createBusiness(token);
         const user = await userModel.findOne({ email }).lean<User>();
+
         // Assert
-        expect(user?.businessId).toBeDefined();
-        expect(user?.isActive).toBe(true);
-        expect(user?.roleId).toBeDefined();
+        expect(user).toMatchObject({
+          businessId: expect.anything() as unknown,
+          isActive: true,
+          roleId: expect.anything() as unknown,
+          onboardingStage: 'business_created',
+        });
       });
 
       it('generates a URL-safe subdomain from the business name', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({
-              ...baseBusinessPayload(email),
-              businessName: 'My Test Biz!',
-            }),
-        );
+        const res = await createBusiness(token, {
+          businessName: 'My Test Biz!',
+        });
+
         // Assert
         const subdomain = (res.body as ApiBody<LoginPayload>).data?.user
           .subdomain;
@@ -1172,40 +1220,28 @@ describe('Auth (integration)', () => {
 
       it('appends a numeric suffix to the subdomain when the base is already taken', async () => {
         // Arrange — two users with the same business name
-        const [email1, email2] = [nextEmail(), nextEmail()];
-        await readyForBusiness(email1);
-        await readyForBusiness(email2);
+        const token1 = await readyForBusiness(nextEmail());
+        const token2 = await readyForBusiness(nextEmail());
         const sharedName = 'Duplicate Name Biz';
-        const res1 = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({ ...baseBusinessPayload(email1), businessName: sharedName }),
-        );
-        const res2 = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({ ...baseBusinessPayload(email2), businessName: sharedName }),
-        );
-        // Assert — subdomains must differ
-        const sub1 = (res1.body as ApiBody<LoginPayload>).data?.user.subdomain;
+        await createBusiness(token1, { businessName: sharedName });
+
+        // Act
+        const res2 = await createBusiness(token2, { businessName: sharedName });
+
+        // Assert
         const sub2 = (res2.body as ApiBody<LoginPayload>).data?.user.subdomain;
-        expect(sub1).toBeDefined();
-        expect(sub2).toBeDefined();
-        expect(sub1).not.toBe(sub2);
-        expect(sub2).toMatch(/-\d+$/);
+        expect(sub2).toMatch(/^duplicate-name-biz-\d+$/);
       });
 
       it('schedules an email:welcome job after business setup', async () => {
         // Arrange
         const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(email);
         nowSpy.mockClear();
+
         // Act
-        await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        await createBusiness(token);
+
         // Assert
         const calls = nowSpy.mock.calls as [string, EmailJobData][];
         const welcomeCall = calls.find(
@@ -1213,49 +1249,59 @@ describe('Auth (integration)', () => {
         );
         expect(welcomeCall).toBeDefined();
       });
-    });
 
-    describe('error cases', () => {
-      it('returns 400 when the user is not found', async () => {
-        // Arrange & Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload('nobody@test.local')),
-        );
-        // Assert
-        expect(res.status).toBe(400);
-      });
-
-      it('returns 400 when the email has not been verified', async () => {
-        // Arrange — account only, no email verification
+      it('revokes onboarding refresh tokens once the business is created', async () => {
+        // Arrange
         const email = nextEmail();
         await createAccountOnly(email);
+        const verifyRes = await authed(
+          req()
+            .post('/api/auth/onboarding/verify-email')
+            .send({ email, otp: captureOtpFor(email) }),
+        );
+        const session = (verifyRes.body as ApiBody<LoginPayload>).data!;
+        await asOnboarding(
+          req()
+            .post('/api/auth/onboarding/set-pin')
+            .send({ pin: '1234', confirmPin: '1234' }),
+          session.accessToken,
+        );
+        await createBusiness(session.accessToken);
+
         // Act
         const res = await authed(
           req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
+            .post('/api/auth/refresh')
+            .send({ refreshToken: session.refreshToken }),
         );
+
         // Assert
-        expect(res.status).toBe(400);
-        expect((res.body as ApiBody).message).toBe(
-          AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED,
+        expect(res.status).toBe(401);
+      });
+    });
+
+    describe('error cases', () => {
+      it('returns 401 without a session', async () => {
+        // Arrange
+        const body = baseBusinessPayload();
+
+        // Act
+        const res = await authed(
+          req().post('/api/auth/onboarding/business').send(body),
         );
+
+        // Assert
+        expect(res.status).toBe(401);
       });
 
       it('returns 400 when the PIN has not been set', async () => {
         // Arrange — account + verify email, but skip set-pin
-        const email = nextEmail();
-        await accountAndVerify(email);
+        const token = await accountAndVerify(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(email)),
-        );
+        const res = await createBusiness(token);
+
         // Assert
-        expect(res.status).toBe(400);
         expect((res.body as ApiBody).message).toBe(
           AUTH_MESSAGES.ERROR.PIN_NOT_SET,
         );
@@ -1263,34 +1309,189 @@ describe('Auth (integration)', () => {
 
       it('returns 400 when the businessCategory does not exist in the database', async () => {
         // Arrange
-        const email = nextEmail();
-        await readyForBusiness(email);
+        const token = await readyForBusiness(nextEmail());
+
         // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send({
-              ...baseBusinessPayload(email),
-              businessCategory: '507f1f77bcf86cd799439011',
-            }),
-        );
+        const res = await createBusiness(token, {
+          businessCategory: '507f1f77bcf86cd799439011',
+        });
+
         // Assert
         expect(res.status).toBe(400);
       });
 
       it('returns 409 when the user already has a business set up', async () => {
         // Arrange — SEEDED_USER already completed onboarding
-        // Act
-        const res = await authed(
-          req()
-            .post('/api/auth/onboarding/business')
-            .send(baseBusinessPayload(SEEDED_USER.email)),
+        const fullToken = await loginAs(
+          SEEDED_USER.email,
+          SEEDED_USER.password,
         );
+
+        // Act
+        const res = await createBusiness(fullToken);
+
         // Assert
-        expect(res.status).toBe(409);
         expect((res.body as ApiBody).message).toBe(
           AUTH_MESSAGES.ERROR.BUSINESS_ALREADY_SETUP,
         );
+      });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Onboarding session — status, resume, scope enforcement
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  describe('Onboarding session', () => {
+    describe('GET /api/auth/onboarding/status', () => {
+      it('returns 401 without a session', async () => {
+        // Arrange
+        const statusRequest = req().get('/api/auth/onboarding/status');
+
+        // Act
+        const res = await authed(statusRequest);
+
+        // Assert
+        expect(res.status).toBe(401);
+      });
+
+      it('points a freshly verified owner at set_pin', async () => {
+        // Arrange
+        const token = await accountAndVerify(nextEmail());
+
+        // Act
+        const res = await asOnboarding(
+          req().get('/api/auth/onboarding/status'),
+          token,
+        );
+
+        // Assert
+        expect((res.body as ApiBody<{ nextStep: string }>).data).toMatchObject({
+          stage: 'email_verified',
+          nextStep: 'set_pin',
+          businessId: null,
+        });
+      });
+
+      it('points an owner with a PIN at business_discovery', async () => {
+        // Arrange
+        const token = await readyForBusiness(nextEmail());
+
+        // Act
+        const res = await asOnboarding(
+          req().get('/api/auth/onboarding/status'),
+          token,
+        );
+
+        // Assert
+        expect((res.body as ApiBody<{ nextStep: string }>).data).toMatchObject({
+          stage: 'pin_set',
+          nextStep: 'business_discovery',
+          hasPin: true,
+        });
+      });
+
+      it('includes the pending business registration check', async () => {
+        // Arrange
+        const email = nextEmail();
+        await authed(
+          req()
+            .post('/api/auth/onboarding/account')
+            .send({
+              ...makeAccountPayload(email),
+              businessRegistrationNumber: 'C1234567',
+            }),
+        );
+        const verifyRes = await authed(
+          req()
+            .post('/api/auth/onboarding/verify-email')
+            .send({ email, otp: captureOtpFor(email) }),
+        );
+        const token = (verifyRes.body as ApiBody<LoginPayload>).data!
+          .accessToken;
+
+        // Act
+        const res = await asOnboarding(
+          req().get('/api/auth/onboarding/status'),
+          token,
+        );
+
+        // Assert
+        expect(
+          (res.body as ApiBody<{ businessRegistration: unknown }>).data
+            ?.businessRegistration,
+        ).toEqual({ number: 'C1234567', status: 'pending' });
+      });
+    });
+
+    describe('resume via login and refresh', () => {
+      it('lets a verified owner without a business log in with an onboarding session', async () => {
+        // Arrange
+        const email = nextEmail();
+        await accountAndVerify(email);
+
+        // Act
+        const res = await authed(
+          req()
+            .post('/api/auth/login')
+            .send({ email, password: 'Password123' }),
+        );
+
+        // Assert
+        expect((res.body as ApiBody<LoginPayload>).data?.user).toMatchObject({
+          businessId: null,
+          onboardingStage: 'email_verified',
+        });
+      });
+
+      it('still rejects login for an account whose email is not verified', async () => {
+        // Arrange
+        const email = nextEmail();
+        await createAccountOnly(email);
+
+        // Act
+        const res = await authed(
+          req()
+            .post('/api/auth/login')
+            .send({ email, password: 'Password123' }),
+        );
+
+        // Assert
+        expect(res.status).toBe(401);
+      });
+
+      it('rotates an onboarding refresh token into a new onboarding session', async () => {
+        // Arrange
+        const email = nextEmail();
+        await createAccountOnly(email);
+        const verifyRes = await authed(
+          req()
+            .post('/api/auth/onboarding/verify-email')
+            .send({ email, otp: captureOtpFor(email) }),
+        );
+        const { refreshToken } = (verifyRes.body as ApiBody<LoginPayload>)
+          .data!;
+
+        // Act
+        const res = await authed(
+          req().post('/api/auth/refresh').send({ refreshToken }),
+        );
+
+        // Assert
+        expect(res.status).toBe(200);
+      });
+    });
+
+    describe('scope enforcement', () => {
+      it('blocks onboarding sessions from tenant routes with ONBOARDING_INCOMPLETE', async () => {
+        // Arrange
+        const token = await accountAndVerify(nextEmail());
+
+        // Act
+        const res = await asOnboarding(req().get('/api/clients'), token);
+
+        // Assert
+        expect(res.status).toBe(403);
       });
     });
   });
@@ -1818,7 +2019,7 @@ describe('Auth (integration)', () => {
       };
 
       const ownerLogin = await fullOnboarding(owner);
-      const ownerBusinessId = ownerLogin.user.businessId;
+      const ownerBusinessId = ownerLogin.user.businessId!;
 
       const employeeRole = await roleModel
         .findOne({
@@ -1945,7 +2146,7 @@ describe('Auth (integration)', () => {
       };
 
       const ownerLogin = await fullOnboarding(owner);
-      const ownerBusinessId = ownerLogin.user.businessId;
+      const ownerBusinessId = ownerLogin.user.businessId!;
 
       const roleName = `Dispatcher ${Date.now()}`;
       const createRoleRes = await asUser(
