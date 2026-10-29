@@ -182,6 +182,7 @@ describe('Auth (integration)', () => {
       lastName: 'User',
       email,
       phone: PHONE,
+      country: 'US',
       password: 'Password123',
       confirmPassword: 'Password123',
     };
@@ -257,6 +258,7 @@ describe('Auth (integration)', () => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
+        country: 'US',
         password: user.password,
         confirmPassword: user.password,
       }),
@@ -306,6 +308,7 @@ describe('Auth (integration)', () => {
         ['lastName', { lastName: undefined }],
         ['email', { email: undefined }],
         ['phone', { phone: undefined }],
+        ['country', { country: undefined }],
         ['password', { password: undefined }],
         ['confirmPassword', { confirmPassword: undefined }],
       ])('returns 400 when %s is missing', async (_field, override) => {
@@ -318,6 +321,27 @@ describe('Auth (integration)', () => {
         const res = await authed(
           req().post('/api/auth/onboarding/account').send(payload),
         );
+        // Assert
+        expect(res.status).toBe(400);
+      });
+
+      it.each<[string, Record<string, unknown>]>([
+        ['country is not a launch country', { country: 'DE' }],
+        ['phone is from an unsupported country', { phone: '+4915123456789' }],
+        ['phone shares +1 but is not US/CA', { phone: '+18765551234' }],
+        [
+          'businessRegistrationNumber has invalid characters',
+          { businessRegistrationNumber: 'RC 12/34$' },
+        ],
+      ])('returns 400 when %s', async (_case, override) => {
+        // Arrange
+        const payload = { ...makeAccountPayload(nextEmail()), ...override };
+
+        // Act
+        const res = await authed(
+          req().post('/api/auth/onboarding/account').send(payload),
+        );
+
         // Assert
         expect(res.status).toBe(400);
       });
@@ -462,6 +486,86 @@ describe('Auth (integration)', () => {
         // Assert
         expect(user?.isActive).toBe(false);
         expect(user?.isEmailVerified).toBe(false);
+      });
+
+      it('stores the country and sets onboardingStage to registered', async () => {
+        // Arrange
+        const email = nextEmail();
+
+        // Act
+        await authed(
+          req()
+            .post('/api/auth/onboarding/account')
+            .send(makeAccountPayload(email)),
+        );
+        const user = await userModel.findOne({ email }).lean<User>();
+
+        // Assert
+        expect(user).toMatchObject({
+          country: 'US',
+          onboardingStage: 'registered',
+        });
+      });
+
+      it('creates the account without a businessRegistration when no number is given', async () => {
+        // Arrange
+        const email = nextEmail();
+
+        // Act
+        await authed(
+          req()
+            .post('/api/auth/onboarding/account')
+            .send(makeAccountPayload(email)),
+        );
+        const user = await userModel.findOne({ email }).lean<User>();
+
+        // Assert
+        expect(user?.businessRegistration).toBeUndefined();
+      });
+
+      it('stores a pending, normalised businessRegistration when a number is given', async () => {
+        // Arrange
+        const email = nextEmail();
+
+        // Act
+        await authed(
+          req()
+            .post('/api/auth/onboarding/account')
+            .send({
+              ...makeAccountPayload(email),
+              businessRegistrationNumber: 'rc-123456',
+            }),
+        );
+        const user = await userModel.findOne({ email }).lean<User>();
+
+        // Assert
+        expect(user?.businessRegistration).toMatchObject({
+          number: 'RC-123456',
+          country: 'US',
+          status: 'pending',
+        });
+      });
+
+      it('schedules the kyb:verify:registration job when a number is given', async () => {
+        // Arrange
+        const email = nextEmail();
+        nowSpy.mockClear();
+
+        // Act
+        await authed(
+          req()
+            .post('/api/auth/onboarding/account')
+            .send({
+              ...makeAccountPayload(email),
+              businessRegistrationNumber: 'RC123456',
+            }),
+        );
+        const user = await userModel.findOne({ email }).lean<User>();
+
+        // Assert
+        expect(nowSpy).toHaveBeenCalledWith('kyb:verify:registration', {
+          userId: user!._id.toString(),
+        });
       });
 
       it('stores the OTP as a SHA-256 hash with a future expiry', async () => {

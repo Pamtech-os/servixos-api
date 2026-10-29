@@ -170,6 +170,7 @@ describe('Jobs (integration)', () => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
+        country: 'US',
         password: user.password,
         confirmPassword: user.password,
       }),

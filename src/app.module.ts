@@ -74,6 +74,7 @@ import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { KybModule } from './modules/kyb/kyb.module';
 
 @Module({
   imports: [
@@ -150,6 +151,7 @@ import { WaitlistModule } from './modules/waitlist/waitlist.module';
     SubscriptionModule,
     SettingsModule,
     WaitlistModule,
+    KybModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

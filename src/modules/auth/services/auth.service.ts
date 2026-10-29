@@ -58,7 +58,12 @@ import {
   PasswordResetJobData,
 } from '../../agenda/jobs/email.jobs';
 import { RedisService } from '../../redis/services/redis.service';
-import { UserRole } from '../../users/schemas/user.schema';
+import {
+  OnboardingStage,
+  RegistrationVerificationStatus,
+  UserRole,
+} from '../../users/schemas/user.schema';
+import type { VerifyRegistrationJobData } from '../../kyb/types/kyb.types';
 import { LogCategory } from '../../activity-logs/schemas/activity-log.schema';
 import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 import { isInternalStaffRole } from 'src/common/utils/user-role.util';
@@ -513,18 +518,39 @@ export class AuthService {
       const otpHash = hashToken(otp);
       const expiry = new Date(Date.now() + CACHE_TTL.EMAIL_OTP * 1000);
 
-      await this.usersRepository.create({
+      const user = await this.usersRepository.create({
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
         phone: dto.phone,
         passwordHash,
+        country: dto.country,
         userRole: UserRole.OWNER,
         isActive: false,
         isEmailVerified: false,
+        onboardingStage: OnboardingStage.REGISTERED,
         emailVerificationOtp: otpHash,
         emailVerificationOtpExpiry: expiry,
+        ...(dto.businessRegistrationNumber && {
+          businessRegistration: {
+            number: dto.businessRegistrationNumber,
+            country: dto.country,
+            status: RegistrationVerificationStatus.PENDING,
+          },
+        }),
       });
+
+      if (dto.businessRegistrationNumber) {
+        void this.agendaService
+          .now<VerifyRegistrationJobData>(JOBS.KYB_VERIFY_REGISTRATION, {
+            userId: user._id.toString(),
+          })
+          .catch((err: unknown) =>
+            this.logger.error(
+              `Job "${JOBS.KYB_VERIFY_REGISTRATION}" failed to enqueue: ${err instanceof Error ? err.stack : String(err)}`,
+            ),
+          );
+      }
 
       await this.agendaService
         .now<EmailVerificationJobData>(JOBS.EMAIL_VERIFICATION, {
@@ -585,6 +611,7 @@ export class AuthService {
 
       await this.usersRepository.updateById(user._id, {
         isEmailVerified: true,
+        onboardingStage: OnboardingStage.EMAIL_VERIFIED,
         emailVerificationOtp: undefined,
         emailVerificationOtpExpiry: undefined,
       });
@@ -658,7 +685,10 @@ export class AuthService {
       }
 
       const pinHash = await hashValue(dto.pin);
-      await this.usersRepository.updateById(user._id, { pinHash });
+      await this.usersRepository.updateById(user._id, {
+        pinHash,
+        onboardingStage: OnboardingStage.PIN_SET,
+      });
 
       return null;
     } catch (error) {
@@ -854,7 +884,12 @@ export class AuthService {
 
       await this.usersRepository.updateById(
         ownerId,
-        { businessId, roleId: ownerRoleId, isActive: true },
+        {
+          businessId,
+          roleId: ownerRoleId,
+          isActive: true,
+          onboardingStage: OnboardingStage.BUSINESS_CREATED,
+        },
         session,
       );
 
