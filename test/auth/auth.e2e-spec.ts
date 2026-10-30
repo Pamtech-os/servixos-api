@@ -1491,7 +1491,10 @@ describe('Auth (integration)', () => {
         const res = await asOnboarding(req().get('/api/clients'), token);
 
         // Assert
-        expect(res.status).toBe(403);
+        expect(res.body).toMatchObject({
+          statusCode: 403,
+          code: 'ONBOARDING_INCOMPLETE',
+        });
       });
     });
   });

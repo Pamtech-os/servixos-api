@@ -1,5 +1,6 @@
 import { index, modelOptions, prop, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
+import { AiContent } from '../../website/schemas/website-config.schema';
 
 export enum StartingPoint {
   NO_IDEA = 'no_idea',
@@ -259,7 +260,20 @@ export class ChatTurn {
   createdAt: Date;
 }
 
+/** Latest AI-generated website copy shown in the live preview before the business exists. */
+export class WebsiteDraft {
+  @prop({ type: () => AiContent, _id: false, required: true })
+  aiContent: AiContent;
+
+  @prop({ trim: true })
+  instructions?: string;
+
+  @prop({ required: true })
+  generatedAt: Date;
+}
+
 @index({ userId: 1 }, { unique: true })
+@index({ businessId: 1 }, { sparse: true })
 @modelOptions({
   schemaOptions: { collection: 'onboarding_sessions', timestamps: true },
 })
@@ -278,7 +292,14 @@ export class OnboardingSession {
   @prop({ type: () => BusinessProfile, _id: false, default: () => ({}) })
   profile: BusinessProfile;
 
-  /** Set when the user approves the whole setup and the business is created (Stage 3). */
+  @prop({ type: () => WebsiteDraft, _id: false })
+  websiteDraft?: WebsiteDraft;
+
+  /** Business created from this profile; lets ServixOS AI features read the profile later. */
+  @prop({ ref: 'Business', type: Types.ObjectId })
+  businessId?: Types.ObjectId;
+
+  /** Set when the user approves the whole setup and the business is created. */
   @prop()
   approvedAt?: Date;
 }

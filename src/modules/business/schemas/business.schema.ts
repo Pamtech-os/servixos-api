@@ -1,5 +1,7 @@
 import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
+import { SupportedCountry } from 'src/common/constants/countries.constants';
+import { BusinessRegistration } from '../../users/schemas/user.schema';
 
 export enum SubscriptionPlan {
   STARTER = 'starter',
@@ -105,6 +107,14 @@ export class Business {
 
   @prop({ trim: true })
   address?: string;
+
+  /** Launch country of the owner at signup; drives currency and pricing. */
+  @prop({ enum: SupportedCountry })
+  country?: SupportedCountry;
+
+  /** Registry details captured at signup and verified via Prembly, when provided. */
+  @prop({ type: () => BusinessRegistration, _id: false })
+  registration?: BusinessRegistration;
 
   @prop({ type: () => ColorScheme, _id: false, default: () => ({}) })
   colors: ColorScheme;

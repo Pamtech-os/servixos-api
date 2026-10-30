@@ -19,4 +19,8 @@ export class ApiResponse<T = unknown> {
   data?: T;
   meta?: PaginationMeta;
   statistics?: Record<string, number>;
+  /** Machine-readable error code (errors only), e.g. ONBOARDING_INCOMPLETE. */
+  code?: string;
+  /** Structured error context (errors only), e.g. which sections are missing. */
+  details?: Record<string, unknown>;
 }

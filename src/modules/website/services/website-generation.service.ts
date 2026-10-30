@@ -23,10 +23,17 @@ const ALLOWED_LOGO_MIME_TYPES = new Set([
   'image/png',
 ]);
 
-interface BusinessContext {
+export interface BusinessContext {
   name: string;
   categoryName: string;
   description?: string;
+  tagline?: string;
+  valueProposition?: string;
+  targetCustomers?: string[];
+  services?: { name: string; description?: string }[];
+  tone?: string;
+  /** Free-form change requests from the user, e.g. "make it warmer". */
+  instructions?: string;
 }
 
 export interface GeneratedWebsiteData {
@@ -352,9 +359,8 @@ export class WebsiteGenerationService {
     }
   }
 
-  private async generateAiContent(
-    context: BusinessContext,
-  ): Promise<AiContent | null> {
+  /** Generates website copy from a business context; returns null when generation fails. */
+  async generateAiContent(context: BusinessContext): Promise<AiContent | null> {
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
@@ -381,8 +387,23 @@ export class WebsiteGenerationService {
     const desc = context.description
       ? ` Business description: ${context.description}.`
       : '';
+    const details = [
+      context.tagline && `Tagline: ${context.tagline}`,
+      context.valueProposition &&
+        `Value proposition: ${context.valueProposition}`,
+      context.targetCustomers?.length &&
+        `Target customers: ${context.targetCustomers.join(', ')}`,
+      context.services?.length &&
+        `Services (use these, in this order): ${context.services
+          .map((s) => (s.description ? `${s.name} — ${s.description}` : s.name))
+          .join('; ')}`,
+      context.tone && `Tone of voice: ${context.tone}`,
+      context.instructions &&
+        `Requested changes from the owner: ${context.instructions}`,
+    ].filter(Boolean);
+    const extra = details.length ? `\n\n${details.join('\n')}` : '';
 
-    return `Generate professional and modern website content for a ${context.categoryName} business named "${context.name}".${desc}
+    return `Generate professional and modern website content for a ${context.categoryName} business named "${context.name}".${desc}${extra}
 
 Return ONLY a valid JSON object (no markdown, no explanation) with this structure:
 {

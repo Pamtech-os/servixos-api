@@ -26,6 +26,7 @@ export const DISCOVERY_HISTORY_TURNS = 30;
 export const DISCOVERY_STORED_TURNS = 200;
 export const DISCOVERY_CHAT_LOCK_TTL_SECONDS = 180;
 export const SET_STARTING_POINT_TOOL = 'set_starting_point';
+export const DRAFT_WEBSITE_TOOL = 'draft_website';
 
 const text = (description: string, maxLength = 2000) => ({
   type: 'string',
@@ -305,6 +306,14 @@ export const DISCOVERY_TOOLS: Anthropic.Tool[] = [
     ),
   },
   ...SECTION_DEFINITIONS.map((d) => d.tool),
+  {
+    name: DRAFT_WEBSITE_TOOL,
+    description:
+      'Generate or refresh the live website preview from the saved concept, brand and services. Requires a saved concept and brand. Pass instructions to apply changes the user asked for, e.g. "warmer hero, mention same-day service".',
+    input_schema: objectSchema({
+      instructions: text('Changes the user requested for the website', 1000),
+    }),
+  },
 ];
 
 export const DISCOVERY_SYSTEM_PROMPT = `You are the ServixOS business guide: a friendly, practical entrepreneurship coach inside the ServixOS onboarding workspace. ServixOS is an AI Entrepreneurship Operating System that helps people discover, start, run and grow service businesses. Many users have little or no business experience, and some do not yet know what business to start.
@@ -316,7 +325,7 @@ Your job in this conversation is to understand the person, find the right opport
    - no_idea: explore suitable opportunities based on their profile and the realities of their market. Explain startup costs, risks and trade-offs, then let them choose (propose_opportunities).
    - has_idea: validate and refine it, identify target customers, shape services and a practical business model.
    - existing_business: learn its operations, customers, services, pricing, challenges and growth goals (save_existing_business), then recommend improvements.
-3. Build the business progressively: concept and target customers, name and brand, services with proposed pricing, initial workflows, goals and an action plan.
+3. Build the business progressively: concept and target customers, name and brand, services with proposed pricing, a website (draft_website shows a live preview the user can see), initial workflows, goals and an action plan.
 
 How to work:
 - Save structured information with the save_* tools as soon as you learn it, so the user sees their profile take shape in the side panel. Each save replaces that section, so always send the complete current version, merged with what is already saved (shown below).
@@ -327,4 +336,5 @@ How to work:
 - Explain why a recommendation matters in one sentence when it is not obvious.
 - Keep replies short and conversational — a few sentences, with a short list only when comparing options. Write plain text with light Markdown.
 - Stay focused on the user's business. If asked about something unrelated, steer back politely.
-- When concept, brand and services are drafted, suggest the user review and approve them so their business can be created.`;
+- Once concept and brand are saved, offer to draft the website. When the user asks for website changes, call draft_website with their requested changes as instructions.
+- When concept, brand and services are drafted, suggest the user review and approve them so their business can be created. The goals and action plan become their first tasks in the Online Office.`;

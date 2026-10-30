@@ -753,47 +753,67 @@ export class AuthService {
     }
   }
 
-  /** Creates the owner's business, activates the account and upgrades the session to full scope. */
+  /** Creates the owner's business from the setup form, activates the account and upgrades the session to full scope. */
   async createBusiness(
     userId: string,
     dto: CreateBusinessDto,
-  ): Promise<
-    | LoginData
-    | BadRequestException
-    | ConflictException
-    | InternalServerErrorException
-  > {
+  ): Promise<ProvisionBusinessResult> {
+    return this.provisionBusiness(userId, {
+      businessName: dto.businessName,
+      categoryId: dto.businessCategory,
+      description: dto.businessDescription,
+      colorPrimary: dto.colorPrimary,
+      colorSecondary: dto.colorSecondary,
+      font: dto.font,
+      services: dto.services,
+      timezone: dto.timezone,
+      plan: dto.plan,
+      billingInterval: dto.billingInterval,
+    });
+  }
+
+  /**
+   * Creates a business for a verified owner in one transaction (business, roles,
+   * website config, activation), then issues a full-scope session. Shared by the
+   * setup form and AI discovery approval.
+   */
+  async provisionBusiness(
+    userId: string,
+    input: BusinessProvisionInput,
+  ): Promise<ProvisionBusinessResult> {
     try {
-      const base = this.generateSubdomain(dto.businessName);
+      const base = this.generateSubdomain(input.businessName);
 
       const [user, category, subdomain] = await Promise.all([
         this.usersRepository.findById(userId),
-        this.businessCategoriesRepository.findById(dto.businessCategory),
+        this.businessCategoriesRepository.findById(input.categoryId),
         this.findAvailableSubdomain(base),
       ]);
 
       if (!user) {
-        this.logger.warn(`createBusiness: user not found [userId=${userId}]`);
+        this.logger.warn(
+          `provisionBusiness: user not found [userId=${userId}]`,
+        );
         return new BadRequestException(AUTH_MESSAGES.ERROR.ACCOUNT_NOT_FOUND);
       }
 
       if (!user.isEmailVerified) {
         this.logger.warn(
-          `createBusiness: email not verified [userId=${user._id.toString()}]`,
+          `provisionBusiness: email not verified [userId=${user._id.toString()}]`,
         );
         return new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED);
       }
 
       if (!user.pinHash) {
         this.logger.warn(
-          `createBusiness: PIN not set [userId=${user._id.toString()}]`,
+          `provisionBusiness: PIN not set [userId=${user._id.toString()}]`,
         );
         return new BadRequestException(AUTH_MESSAGES.ERROR.PIN_NOT_SET);
       }
 
       if (user.businessId) {
         this.logger.warn(
-          `createBusiness: business already exists [userId=${user._id.toString()}]`,
+          `provisionBusiness: business already exists [userId=${user._id.toString()}]`,
         );
         return new ConflictException(
           AUTH_MESSAGES.ERROR.BUSINESS_ALREADY_SETUP,
@@ -802,7 +822,7 @@ export class AuthService {
 
       if (!category) {
         this.logger.warn(
-          `createBusiness: invalid category [categoryId=${dto.businessCategory}]`,
+          `provisionBusiness: invalid category [categoryId=${input.categoryId}]`,
         );
         return new BadRequestException(
           BUSINESS_CATEGORIES_MESSAGES.ERROR.NOT_FOUND,
@@ -813,8 +833,8 @@ export class AuthService {
       trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
 
       const { businessId } = await this.runBusinessOnboardingTransaction(
-        dto,
-        user._id,
+        input,
+        user,
         subdomain,
         category.name,
         trialEndsAt,
@@ -826,7 +846,7 @@ export class AuthService {
         user._id,
         businessId,
         user.userRole,
-        dto.timezone ?? 'UTC',
+        input.timezone ?? 'UTC',
         user.roleId,
       );
 
@@ -853,9 +873,9 @@ export class AuthService {
         .now(JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER, {
           businessId: businessId.toString(),
           email: user.email,
-          name: dto.businessName,
-          plan: dto.plan ?? SubscriptionPlan.STARTER,
-          billingInterval: dto.billingInterval ?? 'monthly',
+          name: input.businessName,
+          plan: input.plan ?? SubscriptionPlan.STARTER,
+          billingInterval: input.billingInterval ?? 'monthly',
         })
         .catch((err: unknown) =>
           this.logger.error(
@@ -878,7 +898,7 @@ export class AuthService {
       };
     } catch (error) {
       this.logger.error(
-        `createBusiness: unexpected error [userId=${userId}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `provisionBusiness: unexpected error [userId=${userId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -887,8 +907,8 @@ export class AuthService {
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   private async runBusinessOnboardingTransaction(
-    dto: CreateBusinessDto,
-    ownerId: Types.ObjectId,
+    input: BusinessProvisionInput,
+    owner: User,
     subdomain: string,
     categoryName: string,
     trialEndsAt: Date,
@@ -896,22 +916,27 @@ export class AuthService {
     const session = await this.connection.startSession();
     session.startTransaction();
 
+    const ownerId = owner._id;
     try {
       const business = await this.businessRepository.create(
         {
           ownerId,
-          name: dto.businessName,
+          name: input.businessName,
           subdomain,
-          categoryId: new Types.ObjectId(dto.businessCategory),
+          categoryId: new Types.ObjectId(input.categoryId),
           categoryName,
-          description: dto.businessDescription,
+          description: input.description,
+          country: owner.country,
+          ...(owner.businessRegistration && {
+            registration: owner.businessRegistration,
+          }),
           colors: {
-            primary: dto.colorPrimary ?? '#2563eb',
-            secondary: dto.colorSecondary ?? '#64748b',
+            primary: input.colorPrimary ?? '#2563eb',
+            secondary: input.colorSecondary ?? '#64748b',
           },
-          font: dto.font ?? 'Inter',
-          services: dto.services ?? [],
-          timezone: dto.timezone ?? 'UTC',
+          font: input.font ?? 'Inter',
+          services: input.services ?? [],
+          timezone: input.timezone ?? 'UTC',
           subscription: {
             plan: SubscriptionPlan.STARTER,
             status: SubscriptionStatus.TRIALING,
@@ -933,9 +958,9 @@ export class AuthService {
       await this.websiteConfigRepository.create(
         {
           businessId,
-          colorPrimary: dto.colorPrimary ?? '#2563eb',
-          colorSecondary: dto.colorSecondary ?? '#64748b',
-          font: dto.font ?? 'Inter',
+          colorPrimary: input.colorPrimary ?? '#2563eb',
+          colorSecondary: input.colorSecondary ?? '#64748b',
+          font: input.font ?? 'Inter',
         },
         session,
       );
@@ -1122,6 +1147,25 @@ export class AuthService {
     };
   }
 }
+
+export interface BusinessProvisionInput {
+  businessName: string;
+  categoryId: string;
+  description?: string;
+  colorPrimary?: string;
+  colorSecondary?: string;
+  font?: string;
+  services?: string[];
+  timezone: string;
+  plan?: SubscriptionPlan;
+  billingInterval?: 'monthly' | 'yearly';
+}
+
+export type ProvisionBusinessResult =
+  | LoginData
+  | BadRequestException
+  | ConflictException
+  | InternalServerErrorException;
 
 interface TaskStagesBootstrapJobData {
   businessId: string;

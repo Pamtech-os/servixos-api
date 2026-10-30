@@ -6,6 +6,7 @@ import {
   ChatTurn,
   OnboardingSession,
   StartingPoint,
+  WebsiteDraft,
 } from '../schemas/onboarding-session.schema';
 
 @Injectable()
@@ -95,6 +96,39 @@ export class OnboardingSessionRepository {
         { userId: new Types.ObjectId(userId) },
         { $push: { messages: { $each: turns, $slice: -maxTurns } } },
       )
+      .exec();
+  }
+
+  async setWebsiteDraft(userId: string, draft: WebsiteDraft): Promise<void> {
+    await this.model
+      .updateOne(
+        { userId: new Types.ObjectId(userId) },
+        { $set: { websiteDraft: draft } },
+      )
+      .exec();
+  }
+
+  async markApproved(userId: string, businessId: string): Promise<void> {
+    await this.model
+      .updateOne(
+        { userId: new Types.ObjectId(userId) },
+        {
+          $set: {
+            businessId: new Types.ObjectId(businessId),
+            approvedAt: new Date(),
+          },
+        },
+      )
+      .exec();
+  }
+
+  /** The approved discovery profile for a business, for use by ServixOS AI features. */
+  async findByBusinessId(
+    businessId: string,
+  ): Promise<OnboardingSession | null> {
+    return this.model
+      .findOne({ businessId: new Types.ObjectId(businessId) })
+      .lean<OnboardingSession>()
       .exec();
   }
 }

@@ -12,6 +12,8 @@ import {
 } from 'src/modules/onboarding/schemas/onboarding-session.schema';
 import { DiscoveryAgentService } from 'src/modules/onboarding/services/discovery-agent.service';
 import { OnboardingService } from 'src/modules/onboarding/services/onboarding.service';
+import { OnboardingSetupService } from 'src/modules/onboarding/services/onboarding-setup.service';
+import { ServiceUnavailableException } from '@nestjs/common';
 import type { DiscoveryEvent } from 'src/modules/onboarding/types/onboarding.types';
 import { User, UserRole } from 'src/modules/users/schemas/user.schema';
 import { asMock } from 'test/helpers/mock';
@@ -66,6 +68,7 @@ describe('DiscoveryAgentService.chat', () => {
     appendTurns: jest.Mock;
   };
   let redis: { setIfAbsent: jest.Mock; del: jest.Mock };
+  let setupService: { generateWebsitePreview: jest.Mock };
   let events: DiscoveryEvent[];
 
   const run = (message = 'Hi') =>
@@ -95,6 +98,11 @@ describe('DiscoveryAgentService.chat', () => {
         .mockResolvedValue({ profile: {}, messages: [] }),
       appendTurns: jest.fn().mockResolvedValue(undefined),
     };
+    setupService = {
+      generateWebsitePreview: jest
+        .fn()
+        .mockResolvedValue({ business: { name: 'Shine' }, generatedAt: null }),
+    };
     redis = {
       setIfAbsent: jest.fn().mockResolvedValue(true),
       del: jest.fn().mockResolvedValue(undefined),
@@ -103,6 +111,7 @@ describe('DiscoveryAgentService.chat', () => {
     service = new DiscoveryAgentService(
       asMock<ConfigService>({ get: jest.fn() }),
       asMock<OnboardingService>(onboardingService),
+      asMock<OnboardingSetupService>(setupService),
       asMock<OnboardingSessionRepository>(sessionRepository),
       asMock<RedisService>(redis),
     );
@@ -236,6 +245,65 @@ describe('DiscoveryAgentService.chat', () => {
     expect(JSON.stringify(sentParams(1).system)).toBe(
       JSON.stringify(sentParams(0).system),
     );
+  });
+
+  it('emits the refreshed website preview from draft_website', async () => {
+    // Arrange
+    queue(
+      {
+        content: [toolUse('draft_website', { instructions: 'warmer' })],
+        stop_reason: 'tool_use',
+      },
+      { stop_reason: 'end_turn' },
+    );
+
+    // Act
+    await run();
+
+    // Assert
+    expect(events).toContainEqual({
+      type: 'website',
+      preview: { business: { name: 'Shine' }, generatedAt: null },
+    });
+  });
+
+  it('passes the user’s change requests to the website generator', async () => {
+    // Arrange
+    queue(
+      {
+        content: [toolUse('draft_website', { instructions: 'warmer' })],
+        stop_reason: 'tool_use',
+      },
+      { stop_reason: 'end_turn' },
+    );
+
+    // Act
+    await run();
+
+    // Assert
+    expect(setupService.generateWebsitePreview).toHaveBeenCalledWith(
+      USER_ID.toString(),
+      'warmer',
+    );
+  });
+
+  it('reports website generation failures to the model as error tool results', async () => {
+    // Arrange
+    setupService.generateWebsitePreview.mockResolvedValue(
+      new ServiceUnavailableException('preview failed'),
+    );
+    queue(
+      { content: [toolUse('draft_website', {})], stop_reason: 'tool_use' },
+      { stop_reason: 'end_turn' },
+    );
+
+    // Act
+    await run();
+
+    // Assert
+    expect(sentParams(1).messages.at(-1)).toMatchObject({
+      content: [{ is_error: true, content: 'preview failed' }],
+    });
   });
 
   it('does not apply tool calls truncated by max_tokens', async () => {

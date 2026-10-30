@@ -20,6 +20,14 @@ import { ONBOARDING_MESSAGES } from 'src/common/constants/messages/onboarding.me
 import { OnboardingService } from '../services/onboarding.service';
 import { DiscoveryAgentService } from '../services/discovery-agent.service';
 import { ChatMessageDto } from '../dto/chat-message.dto';
+import { ApproveSetupDto } from '../dto/approve-setup.dto';
+import { WebsitePreviewDto } from '../dto/website-preview.dto';
+import { OnboardingSetupService } from '../services/onboarding-setup.service';
+import { setAuthCookies } from '../../auth/utils/auth-cookies.util';
+import { AppEnvironment } from 'src/common/constants/app.constants';
+import { CurrentChannel } from 'src/common/decorators/channel.decorator';
+import { Channel } from 'src/common/enums/channel.enum';
+import { ConfigService } from '@nestjs/config';
 import type { DiscoveryEvent } from '../types/onboarding.types';
 
 /** Phase 2 — AI business discovery workspace (chat + structured profile). */
@@ -29,6 +37,8 @@ export class DiscoveryController {
   constructor(
     private readonly onboardingService: OnboardingService,
     private readonly discoveryAgent: DiscoveryAgentService,
+    private readonly setupService: OnboardingSetupService,
+    private readonly config: ConfigService,
   ) {}
 
   @Get('session')
@@ -115,6 +125,61 @@ export class DiscoveryController {
     if (result instanceof HttpException) throw result;
     return {
       message: ONBOARDING_MESSAGES.SUCCESS.SECTION_APPROVED,
+      data: result,
+    };
+  }
+
+  @Get('preview/website')
+  async getWebsitePreview(@CurrentUser() user: JwtUser) {
+    const result = await this.setupService.getWebsitePreview(user.sub);
+    if (result instanceof HttpException) throw result;
+    return {
+      message: ONBOARDING_MESSAGES.SUCCESS.PREVIEW_RETRIEVED,
+      data: result,
+    };
+  }
+
+  @Post('preview/website')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ global: { ttl: 60_000, limit: 5 } })
+  async generateWebsitePreview(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: WebsitePreviewDto,
+  ) {
+    const result = await this.setupService.generateWebsitePreview(
+      user.sub,
+      dto.instructions,
+    );
+    if (result instanceof HttpException) throw result;
+    return {
+      message: ONBOARDING_MESSAGES.SUCCESS.PREVIEW_GENERATED,
+      data: result,
+    };
+  }
+
+  /** Creates the business from the approved profile and returns a full-scope session. */
+  @Post('approve')
+  @HttpCode(HttpStatus.CREATED)
+  async approveSetup(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: ApproveSetupDto,
+    @CurrentChannel() channel: Channel,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.setupService.approveSetup(user.sub, dto);
+    if (result instanceof HttpException) throw result;
+
+    if (channel === Channel.WEB) {
+      setAuthCookies(
+        res,
+        result.accessToken,
+        result.refreshToken,
+        this.config.get<string>('NODE_ENV') === AppEnvironment.PRODUCTION,
+      );
+    }
+
+    return {
+      message: ONBOARDING_MESSAGES.SUCCESS.SETUP_APPROVED,
       data: result,
     };
   }

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Anthropic from '@anthropic-ai/sdk';
 import { ONBOARDING_MESSAGES } from 'src/common/constants/messages/onboarding.messages';
@@ -23,10 +23,12 @@ import {
   DISCOVERY_STORED_TURNS,
   DISCOVERY_SYSTEM_PROMPT,
   DISCOVERY_TOOLS,
+  DRAFT_WEBSITE_TOOL,
   SECTION_BY_TOOL,
   SET_STARTING_POINT_TOOL,
 } from '../constants/discovery-agent.constants';
 import { OnboardingService } from './onboarding.service';
+import { OnboardingSetupService } from './onboarding-setup.service';
 import type { DiscoveryEmitter } from '../types/onboarding.types';
 
 const STARTING_POINTS: ReadonlySet<string> = new Set(
@@ -52,6 +54,7 @@ export class DiscoveryAgentService {
   constructor(
     config: ConfigService,
     private readonly onboardingService: OnboardingService,
+    private readonly setupService: OnboardingSetupService,
     private readonly sessionRepository: OnboardingSessionRepository,
     private readonly redisService: RedisService,
   ) {
@@ -177,6 +180,26 @@ export class DiscoveryAgentService {
       await this.onboardingService.setStartingPoint(userId, startingPoint);
       emit({ type: 'starting_point', startingPoint });
       return { type: 'tool_result', tool_use_id: block.id, content: 'Saved.' };
+    }
+
+    if (block.name === DRAFT_WEBSITE_TOOL) {
+      const instructions = (block.input as { instructions?: unknown })
+        ?.instructions;
+      if (instructions !== undefined && typeof instructions !== 'string') {
+        return error(JSON.stringify({ INVALID_INPUT: block.input }));
+      }
+      const preview = await this.setupService.generateWebsitePreview(
+        userId,
+        instructions,
+      );
+      if (preview instanceof HttpException) return error(preview.message);
+
+      emit({ type: 'website', preview });
+      return {
+        type: 'tool_result',
+        tool_use_id: block.id,
+        content: 'Website preview updated. The user can see it now.',
+      };
     }
 
     const definition = SECTION_BY_TOOL.get(block.name);

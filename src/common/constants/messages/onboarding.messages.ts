@@ -13,11 +13,17 @@ export const ONBOARDING_MESSAGES = {
     PRICE_UNIT_INVALID:
       'Price unit must be fixed, hourly, per_visit or monthly',
     SECTION_INVALID: 'Unknown profile section',
+    INSTRUCTIONS_TOO_LONG: 'Instructions must be 1000 characters or fewer',
+    CATEGORY_INVALID: 'businessCategory must be a valid category ID',
+    TIMEZONE_INVALID: 'Timezone must be valid',
   },
   SUCCESS: {
     SESSION_RETRIEVED: 'Onboarding session retrieved',
     SECTION_UPDATED: 'Section updated',
     SECTION_APPROVED: 'Section approved',
+    PREVIEW_RETRIEVED: 'Website preview retrieved',
+    PREVIEW_GENERATED: 'Website preview updated',
+    SETUP_APPROVED: 'Your business is ready. Welcome to your Online Office!',
   },
   ERROR: {
     BUSINESS_ALREADY_CREATED:
@@ -27,6 +33,14 @@ export const ONBOARDING_MESSAGES = {
       'Please wait for the current reply to finish before sending another message',
     AI_UNAVAILABLE:
       'The assistant is temporarily unavailable. Your progress is saved — please try again shortly.',
+    PREVIEW_NEEDS_PROFILE:
+      'Draft your business concept and brand before generating a website preview',
+    PREVIEW_FAILED:
+      'We could not generate the website preview right now. Please try again shortly.',
+    SETUP_NOT_APPROVED:
+      'Please review and approve your concept, brand and services before continuing',
+    CATEGORY_REQUIRED:
+      'Please choose the category that best fits your business',
     AI_DECLINED:
       "I can't help with that request. Let's keep working on your business — what would you like to do next?",
   },

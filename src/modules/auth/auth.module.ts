@@ -35,6 +35,6 @@ import { BusinessCategoriesModule } from '../business-categories/business-catego
   ],
   controllers: [AuthController, OnboardingController],
   providers: [AuthService, AuthRepository, JwtStrategy],
-  exports: [JwtModule],
+  exports: [JwtModule, AuthService],
 })
 export class AuthModule {}
