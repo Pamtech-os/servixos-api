@@ -43,10 +43,8 @@ describe('Payment method gate (integration, REQUIRE_PAYMENT_METHOD=true)', () =>
   let stripe: StripeService;
   let mongoContainer: StartedMongoDBContainer;
   let redisContainer: StartedTestContainer;
-  const previousFlag = process.env.REQUIRE_PAYMENT_METHOD;
 
   beforeAll(async () => {
-    process.env.REQUIRE_PAYMENT_METHOD = 'true';
     [mongoContainer, redisContainer] = await Promise.all([
       new MongoDBContainer('mongo:7').start(),
       new GenericContainer('redis:7-alpine').withExposedPorts(6379).start(),
@@ -56,6 +54,7 @@ describe('Payment method gate (integration, REQUIRE_PAYMENT_METHOD=true)', () =>
         mongoContainer.getConnectionString() +
         '/servixos_test?directConnection=true',
       redisUrl: `redis://localhost:${redisContainer.getMappedPort(6379)}`,
+      requirePaymentMethod: true,
     }));
 
     const tokenRes = await request(app.getHttpServer() as Server).get(
@@ -95,8 +94,6 @@ describe('Payment method gate (integration, REQUIRE_PAYMENT_METHOD=true)', () =>
   }, 300_000);
 
   afterAll(async () => {
-    if (previousFlag === undefined) delete process.env.REQUIRE_PAYMENT_METHOD;
-    else process.env.REQUIRE_PAYMENT_METHOD = previousFlag;
     await app.close();
     await mongoContainer.stop();
     await redisContainer.stop();

@@ -6,6 +6,8 @@ describe('StripeService', () => {
   let service: StripeService;
   let prices: { retrieve: jest.Mock };
   let subscriptions: { create: jest.Mock };
+  let paymentMethods: { attach: jest.Mock };
+  let customers: { update: jest.Mock };
 
   beforeEach(() => {
     service = new StripeService(
@@ -20,7 +22,14 @@ describe('StripeService', () => {
       }),
     };
     subscriptions = { create: jest.fn().mockResolvedValue({ id: 'sub_1' }) };
-    Reflect.set(service, 'stripe', { prices, subscriptions });
+    paymentMethods = { attach: jest.fn().mockResolvedValue({ id: 'pm_new' }) };
+    customers = { update: jest.fn().mockResolvedValue({}) };
+    Reflect.set(service, 'stripe', {
+      prices,
+      subscriptions,
+      paymentMethods,
+      customers,
+    });
   });
 
   describe('getPriceInCurrency', () => {
@@ -86,6 +95,21 @@ describe('StripeService', () => {
       expect(
         (subscriptions.create.mock.calls as unknown[][])[0][0],
       ).not.toHaveProperty('automatic_tax');
+    });
+  });
+
+  describe('attachPaymentMethod', () => {
+    it('sets the attached payment method as the invoice default', async () => {
+      // Arrange
+      const token = 'pm_card_visa';
+
+      // Act
+      await service.attachPaymentMethod('cus_1', token);
+
+      // Assert
+      expect(customers.update).toHaveBeenCalledWith('cus_1', {
+        invoice_settings: { default_payment_method: 'pm_new' },
+      });
     });
   });
 });

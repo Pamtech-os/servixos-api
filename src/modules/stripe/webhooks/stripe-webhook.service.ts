@@ -7,15 +7,56 @@ import { STRIPE_EVENTS } from 'src/common/constants/stripe-events.constants';
 /** Redis TTL for event deduplication — 48 hours */
 const EVENT_TTL_SECONDS = 172800;
 
-interface StripeInvoiceData {
+type StripeRef = string | { id: string } | null | undefined;
+
+/**
+ * Invoice fields the jobs depend on. Since Stripe's 2025 API versions the
+ * subscription lives under `parent.subscription_details` and the price under
+ * `lines[].pricing.price_details`; the legacy top-level fields are kept for
+ * older payloads.
+ */
+export interface StripeInvoiceData {
   id: string;
   customer: string | null;
-  subscription: string | null;
   amount_paid: number;
   amount_due: number;
   currency: string;
+  /** End of the period being invoiced (the trial end for the first charge), not the new period. */
   period_end: number;
-  lines?: { data: Array<{ price?: { id: string } | null }> };
+  parent?: {
+    subscription_details?: { subscription?: StripeRef } | null;
+  } | null;
+  lines?: {
+    data: Array<{
+      period?: { end: number } | null;
+      pricing?: { price_details?: { price?: StripeRef } | null } | null;
+      /** Legacy API versions */
+      price?: { id: string } | null;
+    }>;
+  };
+  /** Legacy API versions */
+  subscription?: StripeRef;
+}
+
+const refId = (ref: StripeRef): string | null =>
+  typeof ref === 'string' ? ref : (ref?.id ?? null);
+
+export function invoiceSubscriptionId(invoice: StripeInvoiceData): string {
+  return (
+    refId(invoice.parent?.subscription_details?.subscription) ??
+    refId(invoice.subscription) ??
+    ''
+  );
+}
+
+export function invoicePriceId(invoice: StripeInvoiceData): string | null {
+  const line = invoice.lines?.data[0];
+  return refId(line?.pricing?.price_details?.price) ?? line?.price?.id ?? null;
+}
+
+/** End of the newly paid service period (subscription line), falling back to the invoice period. */
+export function invoiceServicePeriodEnd(invoice: StripeInvoiceData): number {
+  return invoice.lines?.data[0]?.period?.end ?? invoice.period_end;
 }
 
 interface StripeSubscriptionData {
@@ -117,12 +158,12 @@ export class StripeWebhookService {
     await this.agendaService.now(JOBS.SUBSCRIPTION_PAYMENT_SUCCEEDED, {
       stripeEventId: event.id,
       customerId: invoice.customer ?? '',
-      subscriptionId: invoice.subscription ?? '',
+      subscriptionId: invoiceSubscriptionId(invoice),
       invoiceId: invoice.id,
       amountPaid: invoice.amount_paid,
       currency: invoice.currency,
-      periodEnd: invoice.period_end,
-      priceId: invoice.lines?.data[0]?.price?.id ?? null,
+      periodEnd: invoiceServicePeriodEnd(invoice),
+      priceId: invoicePriceId(invoice),
     });
   }
 
@@ -144,7 +185,7 @@ export class StripeWebhookService {
     await this.agendaService.now(JOBS.SUBSCRIPTION_PAYMENT_FAILED, {
       stripeEventId: event.id,
       customerId: invoice.customer ?? '',
-      subscriptionId: invoice.subscription ?? '',
+      subscriptionId: invoiceSubscriptionId(invoice),
       invoiceId: invoice.id,
       amountDue: invoice.amount_due,
       currency: invoice.currency,
