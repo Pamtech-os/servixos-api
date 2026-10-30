@@ -35,6 +35,7 @@ import { PinVerifiedGuard } from './common/guards/pin-verified.guard';
 import { PermissionsContextGuard } from './common/guards/permissions-context.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
+import { PaymentMethodGuard } from './common/guards/payment-method.guard';
 
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiInsightsModule } from './modules/ai-insights/ai-insights.module';
@@ -168,6 +169,7 @@ import { OnboardingModule } from './modules/onboarding/onboarding.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PinVerifiedGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
+    { provide: APP_GUARD, useClass: PaymentMethodGuard },
     { provide: APP_GUARD, useClass: PermissionsContextGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

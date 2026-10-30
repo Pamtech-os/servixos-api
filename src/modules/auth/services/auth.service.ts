@@ -7,6 +7,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { isPaymentMethodRequired } from 'src/common/utils/billing.util';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
@@ -114,6 +116,7 @@ export class AuthService {
     private readonly businessCategoriesRepository: BusinessCategoriesRepository,
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
+    private readonly config: ConfigService,
   ) {}
 
   async login(
@@ -829,8 +832,10 @@ export class AuthService {
         );
       }
 
-      const trialEndsAt = new Date();
-      trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
+      // With card-before-access on, the trial starts at card + consent instead
+      const cardRequired = isPaymentMethodRequired(this.config);
+      const trialEndsAt = cardRequired ? undefined : new Date();
+      trialEndsAt?.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
 
       const { businessId } = await this.runBusinessOnboardingTransaction(
         input,
@@ -868,7 +873,7 @@ export class AuthService {
           ),
         );
 
-      // Async: create Stripe customer + subscription with a 7-day trial
+      // Async: create the Stripe customer (and, when no card is required, the card-less trial)
       void this.agendaService
         .now(JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER, {
           businessId: businessId.toString(),
@@ -876,6 +881,7 @@ export class AuthService {
           name: input.businessName,
           plan: input.plan ?? SubscriptionPlan.STARTER,
           billingInterval: input.billingInterval ?? 'monthly',
+          createTrialSubscription: !cardRequired,
         })
         .catch((err: unknown) =>
           this.logger.error(
@@ -911,7 +917,7 @@ export class AuthService {
     owner: User,
     subdomain: string,
     categoryName: string,
-    trialEndsAt: Date,
+    trialEndsAt: Date | undefined,
   ): Promise<{ businessId: Types.ObjectId }> {
     const session = await this.connection.startSession();
     session.startTransaction();
@@ -939,8 +945,10 @@ export class AuthService {
           timezone: input.timezone ?? 'UTC',
           subscription: {
             plan: SubscriptionPlan.STARTER,
-            status: SubscriptionStatus.TRIALING,
-            trialEndsAt,
+            status: trialEndsAt
+              ? SubscriptionStatus.TRIALING
+              : SubscriptionStatus.INCOMPLETE,
+            ...(trialEndsAt && { trialEndsAt }),
             features: getFeaturesForPlan(SubscriptionPlan.STARTER),
             hasPaymentMethod: false,
           },

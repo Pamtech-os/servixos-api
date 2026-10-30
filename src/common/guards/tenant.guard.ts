@@ -15,7 +15,10 @@ import { ALLOW_ONBOARDING_KEY } from '../decorators/allow-onboarding.decorator';
 import { TENANT_MESSAGES } from '../constants/messages/tenant.messages';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
 import { JwtUser, TokenScope } from '../decorators/current-user.decorator';
-import { SubscriptionStatus } from 'src/modules/business/schemas/business.schema';
+import {
+  Business,
+  SubscriptionStatus,
+} from 'src/modules/business/schemas/business.schema';
 
 export const ONBOARDING_INCOMPLETE_CODE = 'ONBOARDING_INCOMPLETE';
 
@@ -92,6 +95,8 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.MISMATCH);
     }
 
+    // Shared with later guards (PaymentMethodGuard) to avoid a second lookup
+    (req as Request & { business?: Business }).business = business;
     return true;
   }
 }

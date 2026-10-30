@@ -3,7 +3,9 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   HttpCode,
+  Ip,
   HttpStatus,
   InternalServerErrorException,
   NotFoundException,
@@ -18,7 +20,10 @@ import { PaginationDto } from 'src/common/dto/pagination.dto';
 import { SubscriptionService } from '../services/subscription.service';
 import { SubscribeDto } from '../dto/subscribe.dto';
 import { UpgradeDto } from '../dto/upgrade.dto';
+import { TrialQuoteDto } from '../dto/trial-quote.dto';
+import { AllowWithoutPaymentMethod } from 'src/common/decorators/allow-without-payment-method.decorator';
 
+@AllowWithoutPaymentMethod()
 @Controller('subscription')
 export class SubscriptionController {
   constructor(private readonly subscriptionService: SubscriptionService) {}
@@ -42,14 +47,29 @@ export class SubscriptionController {
     return this.subscriptionService.createSetupIntent(user.businessId);
   }
 
+  /** Price, first charge date, billing frequency, tax and cancellation terms shown before card entry. */
+  @Get('trial-quote')
+  getTrialQuote(@CurrentUser() user: JwtUser, @Query() dto: TrialQuoteDto) {
+    return this.subscriptionService.getTrialQuote(user.businessId, dto);
+  }
+
   /**
-   * Creates a Stripe Subscription with a 7-day free trial on the chosen plan.
-   * An optional paymentMethodId attaches the card upfront for seamless conversion.
+   * Starts the 7-day free trial on the chosen plan once the owner accepts the
+   * quoted terms. The card from a confirmed SetupIntent is attached upfront.
    */
   @Post('subscribe')
   @HttpCode(HttpStatus.OK)
-  subscribe(@CurrentUser() user: JwtUser, @Body() dto: SubscribeDto) {
-    return this.subscriptionService.subscribe(user.businessId, dto);
+  subscribe(
+    @CurrentUser() user: JwtUser,
+    @Body() dto: SubscribeDto,
+    @Ip() ip?: string,
+    @Headers('x-forwarded-for') forwardedFor?: string,
+    @Headers('user-agent') userAgent?: string,
+  ) {
+    return this.subscriptionService.subscribe(user.businessId, dto, {
+      ipAddress: forwardedFor?.split(',')[0].trim() ?? ip,
+      userAgent,
+    });
   }
 
   /**

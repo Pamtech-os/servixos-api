@@ -21,8 +21,12 @@ export class StripeService {
     email: string,
     name: string,
     metadata: Record<string, string>,
+    idempotencyKey?: string,
   ) {
-    return this.stripe.customers.create({ email, name, metadata });
+    return this.stripe.customers.create(
+      { email, name, metadata },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
   }
 
   /**
@@ -59,12 +63,17 @@ export class StripeService {
   /**
    * Creates a Stripe Subscription with a 7-day free trial.
    * No payment is collected until the trial ends.
+   *
+   * `cancelIfNoPaymentMethod` makes Stripe cancel (never charge) a trial that
+   * ends without a card on file. `currency` selects one of the price's
+   * currency options so the customer is billed in their local currency.
    */
   async createSubscription(
     customerId: string,
     priceId: string,
     metadata: Record<string, string>,
     idempotencyKey: string,
+    options: SubscriptionOptions = {},
   ) {
     return this.stripe.subscriptions.create(
       {
@@ -74,9 +83,48 @@ export class StripeService {
         payment_settings: { save_default_payment_method: 'on_subscription' },
         metadata,
         expand: ['latest_invoice.payment_intent'],
+        ...(options.currency && { currency: options.currency.toLowerCase() }),
+        ...(options.cancelIfNoPaymentMethod && {
+          trial_settings: {
+            end_behavior: { missing_payment_method: 'cancel' },
+          },
+        }),
+        ...(options.automaticTax && { automatic_tax: { enabled: true } }),
       },
       { idempotencyKey },
     );
+  }
+
+  /**
+   * Resolves what a price costs in `currency`, falling back to the price's
+   * default currency when no matching currency option is configured in Stripe.
+   */
+  async getPriceInCurrency(
+    priceId: string,
+    currency: string,
+  ): Promise<{ amount: number; currency: string; interval: string | null }> {
+    const price = await this.stripe.prices.retrieve(priceId, {
+      expand: ['currency_options'],
+    });
+    const wanted = currency.toLowerCase();
+    const option =
+      wanted === price.currency ? null : price.currency_options?.[wanted];
+
+    if (option?.unit_amount != null) {
+      return {
+        amount: option.unit_amount,
+        currency: wanted,
+        interval: price.recurring?.interval ?? null,
+      };
+    }
+    if (price.unit_amount == null) {
+      throw new Error(`Price ${priceId} has no fixed unit amount`);
+    }
+    return {
+      amount: price.unit_amount,
+      currency: price.currency,
+      interval: price.recurring?.interval ?? null,
+    };
   }
 
   /**
@@ -189,4 +237,10 @@ export class StripeService {
   async retrieveSubscription(subscriptionId: string) {
     return this.stripe.subscriptions.retrieve(subscriptionId);
   }
+}
+
+export interface SubscriptionOptions {
+  currency?: string;
+  cancelIfNoPaymentMethod?: boolean;
+  automaticTax?: boolean;
 }

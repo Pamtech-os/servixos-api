@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Types } from 'mongoose';
@@ -48,6 +49,7 @@ describe('AuthService.getOnboardingStatus', () => {
       asMock<BusinessCategoriesRepository>({}),
       asMock<AgendaService>({}),
       asMock<RedisService>({}),
+      asMock<ConfigService>({ get: jest.fn() }),
     );
   });
 

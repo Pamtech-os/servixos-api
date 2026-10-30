@@ -18,6 +18,12 @@ import {
   TransactionType,
 } from 'src/modules/subscription/schemas/subscription-transaction.schema';
 import { asMock } from 'test/helpers/mock';
+import { ConfigService } from '@nestjs/config';
+import { ServiceUnavailableException } from '@nestjs/common';
+import { UsersRepository } from 'src/modules/users/repositories/users.repository';
+import { OnboardingStage } from 'src/modules/users/schemas/user.schema';
+import { SupportedCountry } from 'src/common/constants/countries.constants';
+import { BILLING_TERMS_VERSION } from 'src/common/constants/billing.constants';
 
 const BUSINESS_ID = '664abc123456789012345678';
 const STRIPE_CUSTOMER_ID = 'cus_test123456';
@@ -26,8 +32,10 @@ const STRIPE_PRICE_ID_MONTHLY = 'price_starter_monthly';
 const STRIPE_PRICE_ID_YEARLY = 'price_starter_yearly';
 const STRIPE_GROWTH_PRICE_ID = 'price_growth_monthly';
 
+const OWNER_ID = new Types.ObjectId();
 const baseBusiness = {
   _id: new Types.ObjectId(BUSINESS_ID),
+  ownerId: OWNER_ID,
   name: 'Acme Co',
   email: 'owner@acme.com',
   stripeCustomerId: STRIPE_CUSTOMER_ID,
@@ -87,7 +95,11 @@ describe('SubscriptionService', () => {
     cancelSubscription: jest.Mock;
     getLatestOpenInvoice: jest.Mock;
     getInvoicePaymentClientSecret: jest.Mock;
+    getPriceInCurrency: jest.Mock;
+    createCustomer: jest.Mock;
   };
+  let usersRepository: { findById: jest.Mock; updateById: jest.Mock };
+  let configValues: Record<string, string>;
 
   beforeEach(() => {
     subscriptionRepository = {
@@ -130,12 +142,27 @@ describe('SubscriptionService', () => {
       getInvoicePaymentClientSecret: jest
         .fn()
         .mockResolvedValue({ clientSecret: 'pi_secret', invoiceId: 'in_test' }),
+      getPriceInCurrency: jest.fn().mockResolvedValue({
+        amount: 2900,
+        currency: 'usd',
+        interval: 'month',
+      }),
+      createCustomer: jest.fn().mockResolvedValue({ id: 'cus_new' }),
     };
+    usersRepository = {
+      findById: jest.fn().mockResolvedValue({ email: 'owner@acme.com' }),
+      updateById: jest.fn().mockResolvedValue(null),
+    };
+    configValues = {};
 
     service = new SubscriptionService(
       asMock<SubscriptionRepository>(subscriptionRepository),
       asMock<BusinessRepository>(businessRepository),
       asMock<StripeService>(stripeService),
+      asMock<UsersRepository>(usersRepository),
+      asMock<ConfigService>({
+        get: jest.fn((key: string) => configValues[key]),
+      }),
     );
   });
 
@@ -179,17 +206,18 @@ describe('SubscriptionService', () => {
       );
     });
 
-    it('throws NotFoundException when business has no Stripe customer', async () => {
+    it('creates the Stripe customer on demand when it does not exist yet', async () => {
       // Arrange
       businessRepository.findById.mockResolvedValue({
         ...baseBusiness,
         stripeCustomerId: undefined,
       });
 
-      // Act & Assert
-      await expect(service.createSetupIntent(BUSINESS_ID)).rejects.toThrow(
-        NotFoundException,
-      );
+      // Act
+      await service.createSetupIntent(BUSINESS_ID);
+
+      // Assert
+      expect(stripeService.createSetupIntent).toHaveBeenCalledWith('cus_new');
     });
 
     it('returns clientSecret for a LOCKED business so they can update their card', async () => {
@@ -232,6 +260,8 @@ describe('SubscriptionService', () => {
     const dto = {
       plan: SubscriptionPlan.STARTER,
       billingInterval: 'monthly' as const,
+      acceptTerms: true,
+      termsVersion: BILLING_TERMS_VERSION,
     };
 
     it('creates a Stripe subscription with a free trial and returns trialEndsAt', async () => {
@@ -252,16 +282,14 @@ describe('SubscriptionService', () => {
         STRIPE_PRICE_ID_MONTHLY,
         { businessId: BUSINESS_ID },
         `subscribe:${BUSINESS_ID}:${SubscriptionPlan.STARTER}:monthly`,
+        { currency: 'usd', cancelIfNoPaymentMethod: true, automaticTax: false },
       );
       expect(result.data).toHaveProperty('trialEndsAt');
     });
 
     it('selects yearly price when billingInterval is yearly', async () => {
       // Arrange
-      const yearlyDto = {
-        plan: SubscriptionPlan.STARTER,
-        billingInterval: 'yearly' as const,
-      };
+      const yearlyDto = { ...dto, billingInterval: 'yearly' as const };
       businessRepository.findById.mockResolvedValue({
         ...baseBusiness,
         stripeSubscriptionId: null,
@@ -277,6 +305,7 @@ describe('SubscriptionService', () => {
         STRIPE_PRICE_ID_YEARLY,
         expect.any(Object),
         expect.any(String),
+        expect.any(Object),
       );
     });
 
@@ -311,16 +340,111 @@ describe('SubscriptionService', () => {
       );
     });
 
-    it('throws NotFoundException when business has no Stripe customer', async () => {
+    it('creates the Stripe customer when the async setup job has not run yet', async () => {
       // Arrange
       businessRepository.findById.mockResolvedValue({
         ...baseBusiness,
         stripeCustomerId: undefined,
       });
 
-      // Act & Assert
-      await expect(service.subscribe(BUSINESS_ID, dto)).rejects.toThrow(
-        NotFoundException,
+      // Act
+      await service.subscribe(BUSINESS_ID, dto);
+
+      // Assert
+      expect(stripeService.createCustomer).toHaveBeenCalledWith(
+        'owner@acme.com',
+        'Acme Co',
+        { businessId: BUSINESS_ID },
+        `customer:${BUSINESS_ID}`,
+      );
+    });
+
+    it('rejects when the subscription terms were not accepted', async () => {
+      // Arrange
+      const declined = { ...dto, acceptTerms: false };
+
+      // Act
+      const call = service.subscribe(BUSINESS_ID, declined);
+
+      // Assert
+      await expect(call).rejects.toThrow(BadRequestException);
+    });
+
+    it('rejects consent given to an outdated version of the terms', async () => {
+      // Arrange
+      const outdated = { ...dto, termsVersion: '2020-01-01' };
+
+      // Act
+      const call = service.subscribe(BUSINESS_ID, outdated);
+
+      // Assert
+      await expect(call).rejects.toThrow(BadRequestException);
+    });
+
+    it('requires a payment method when card-before-access is on', async () => {
+      // Arrange
+      configValues.REQUIRE_PAYMENT_METHOD = 'true';
+
+      // Act
+      const call = service.subscribe(BUSINESS_ID, dto);
+
+      // Assert
+      await expect(call).rejects.toThrow(BadRequestException);
+    });
+
+    it('starts the trial and records the consent with the disclosed price', async () => {
+      // Arrange
+      const withCard = { ...dto, paymentMethodId: 'pm_test_visa' };
+
+      // Act
+      await service.subscribe(BUSINESS_ID, withCard, {
+        ipAddress: '1.2.3.4',
+        userAgent: 'jest',
+      });
+
+      // Assert
+      expect(businessRepository.updateById.mock.calls[0]).toMatchObject([
+        BUSINESS_ID,
+        {
+          'subscription.status': SubscriptionStatus.TRIALING,
+          'subscription.hasPaymentMethod': true,
+          billingConsent: {
+            termsVersion: BILLING_TERMS_VERSION,
+            amount: 2900,
+            currency: 'USD',
+            ipAddress: '1.2.3.4',
+            firstChargeAt: new Date(stripeSubscription.trial_end * 1000),
+          },
+        },
+      ]);
+    });
+
+    it('marks the owner onboarding as complete', async () => {
+      // Arrange — default dto
+
+      // Act
+      await service.subscribe(BUSINESS_ID, dto);
+
+      // Assert
+      expect(usersRepository.updateById).toHaveBeenCalledWith(OWNER_ID, {
+        onboardingStage: OnboardingStage.COMPLETE,
+      });
+    });
+
+    it('bills in the local currency of the business country', async () => {
+      // Arrange
+      businessRepository.findById.mockResolvedValue({
+        ...baseBusiness,
+        country: SupportedCountry.NG,
+      });
+
+      // Act
+      await service.subscribe(BUSINESS_ID, dto);
+
+      // Assert
+      expect(stripeService.getPriceInCurrency).toHaveBeenCalledWith(
+        STRIPE_PRICE_ID_MONTHLY,
+        'NGN',
       );
     });
 
@@ -642,6 +766,68 @@ describe('SubscriptionService', () => {
       expect(
         subscriptionRepository.findTransactionsByBusiness,
       ).toHaveBeenCalledWith(BUSINESS_ID, 1, expect.any(Number));
+    });
+  });
+
+  // ─── getTrialQuote ──────────────────────────────────────────────────────────
+
+  describe('getTrialQuote', () => {
+    const quoteDto = {
+      plan: SubscriptionPlan.STARTER,
+      billingInterval: 'monthly' as const,
+    };
+
+    it('discloses the price, trial end, first charge date and terms version', async () => {
+      // Arrange
+      businessRepository.findById.mockResolvedValue({
+        ...baseBusiness,
+        country: SupportedCountry.GB,
+      });
+      stripeService.getPriceInCurrency.mockResolvedValue({
+        amount: 2400,
+        currency: 'gbp',
+        interval: 'month',
+      });
+
+      // Act
+      const result = await service.getTrialQuote(BUSINESS_ID, quoteDto);
+
+      // Assert
+      expect(result.data).toMatchObject({
+        planName: 'Starter',
+        amount: 2400,
+        currency: 'GBP',
+        formattedAmount: '£24.00',
+        trialDays: 7,
+        taxMode: 'none',
+        termsVersion: BILLING_TERMS_VERSION,
+      });
+    });
+
+    it('sets the first charge for seven days from now', async () => {
+      // Arrange
+      const before = Date.now();
+
+      // Act
+      const result = await service.getTrialQuote(BUSINESS_ID, quoteDto);
+
+      // Assert
+      const firstChargeAt = (result.data as { firstChargeAt: Date })
+        .firstChargeAt;
+      const days = (firstChargeAt.getTime() - before) / 86_400_000;
+      expect(Math.round(days)).toBe(7);
+    });
+
+    it('returns ServiceUnavailable when Stripe pricing cannot be loaded', async () => {
+      // Arrange
+      stripeService.getPriceInCurrency.mockRejectedValue(new Error('stripe'));
+      jest.spyOn(Reflect.get(service, 'logger'), 'error').mockImplementation();
+
+      // Act
+      const call = service.getTrialQuote(BUSINESS_ID, quoteDto);
+
+      // Assert
+      await expect(call).rejects.toThrow(ServiceUnavailableException);
     });
   });
 });
