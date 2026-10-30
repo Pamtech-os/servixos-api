@@ -239,32 +239,39 @@ describe('Client Portal (integration)', () => {
         lastName: user.lastName,
         email: user.email,
         phone: user.phone,
+        country: 'US',
         password: user.password,
         confirmPassword: user.password,
       }),
     );
 
     const otp = captureOtpFor(user.email);
-    await signed(
+    const verifyRes = await signed(
       req()
         .post('/api/auth/onboarding/verify-email')
         .send({ email: user.email, otp }),
     );
+    const onboardingToken = (
+      verifyRes.body as { data: { accessToken: string } }
+    ).data.accessToken;
 
     await signed(
       req()
         .post('/api/auth/onboarding/set-pin')
-        .send({ email: user.email, pin: user.pin, confirmPin: user.pin }),
+        .set('Authorization', `Bearer ${onboardingToken}`)
+        .send({ pin: user.pin, confirmPin: user.pin }),
     );
 
     const businessRes = await signed(
-      req().post('/api/auth/onboarding/business').send({
-        email: user.email,
-        businessName: 'Client Portal Business',
-        businessCategory,
-        businessDescription: 'Client portal integration test business',
-        timezone: 'America/New_York',
-      }),
+      req()
+        .post('/api/auth/onboarding/business')
+        .set('Authorization', `Bearer ${onboardingToken}`)
+        .send({
+          businessName: 'Client Portal Business',
+          businessCategory,
+          businessDescription: 'Client portal integration test business',
+          timezone: 'America/New_York',
+        }),
     );
 
     return (businessRes.body as ApiBody<OwnerLogin>).data!;

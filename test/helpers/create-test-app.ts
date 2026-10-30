@@ -13,6 +13,8 @@ export interface TestApp {
 export async function createTestApp(overrideEnv: {
   databaseUrl: string;
   redisUrl: string;
+  /** Card-before-access gate; explicit so a developer's .env never leaks into tests. */
+  requirePaymentMethod?: boolean;
 }): Promise<TestApp> {
   const apiKey = 'test-api-key-integration';
 
@@ -27,6 +29,9 @@ export async function createTestApp(overrideEnv: {
   process.env.ENCRYPTION_IV = 'b'.repeat(24);
   process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
   process.env.NODE_ENV = 'test';
+  process.env.REQUIRE_PAYMENT_METHOD = String(
+    overrideEnv.requirePaymentMethod ?? false,
+  );
   process.env.STORAGE_PROVIDER = 'b'.repeat(10);
 
   const moduleRef = await Test.createTestingModule({

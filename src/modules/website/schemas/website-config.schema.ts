@@ -20,6 +20,8 @@ class AiService {
 class AiTestimonialPlaceholder {
   @prop() quote: string;
   @prop() author: string;
+  /** False only once the owner has entered a real testimonial; missing on legacy docs. */
+  @prop() isPlaceholder?: boolean;
 }
 
 class AiContact {

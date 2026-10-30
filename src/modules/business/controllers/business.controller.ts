@@ -5,6 +5,7 @@ import { BusinessRepository } from '../repositories/business.repository';
 import { SETTINGS_MESSAGES } from 'src/common/constants/messages/settings.messages';
 import type { ServiceResponse } from 'src/common/dto/response.dto';
 import { AllowLocked } from 'src/common/decorators/allow-locked.decorator';
+import { AllowWithoutPaymentMethod } from 'src/common/decorators/allow-without-payment-method.decorator';
 
 @Controller()
 export class BusinessController {
@@ -15,6 +16,7 @@ export class BusinessController {
    * status, features, and billing details.
    */
   @AllowLocked()
+  @AllowWithoutPaymentMethod()
   @Get('me')
   async getMe(@CurrentUser() user: JwtUser): Promise<ServiceResponse> {
     const business = await this.businessRepository.findById(user.businessId);

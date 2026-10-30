@@ -7,6 +7,8 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { isPaymentMethodRequired } from 'src/common/utils/billing.util';
 import { InjectConnection } from '@nestjs/mongoose';
 import { Connection, Types } from 'mongoose';
 import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
@@ -21,7 +23,10 @@ import {
   SubscriptionStatus,
 } from 'src/modules/business/schemas/business.schema';
 import { CACHE_TTL } from 'src/common/constants/cache-ttl.constants';
-import { JwtUser } from 'src/common/decorators/current-user.decorator';
+import {
+  JwtUser,
+  TokenScope,
+} from 'src/common/decorators/current-user.decorator';
 import {
   compareValue,
   generateOtp,
@@ -31,7 +36,12 @@ import {
 } from 'src/common/utils/hash.util';
 import { toBusinessLocalTime } from 'src/common/utils/timezone.util';
 import { AuthRepository } from '../repositories/auth.repository';
-import { LoginData, TokenData } from '../types/auth.types';
+import {
+  LoginData,
+  OnboardingNextStep,
+  OnboardingStatusData,
+  TokenData,
+} from '../types/auth.types';
 import { LoginDto } from '../dto/login.dto';
 import { RefreshTokenDto } from '../dto/refresh-token.dto';
 import { ForgotPasswordDto } from '../dto/forgot-password.dto';
@@ -58,12 +68,36 @@ import {
   PasswordResetJobData,
 } from '../../agenda/jobs/email.jobs';
 import { RedisService } from '../../redis/services/redis.service';
-import { UserRole } from '../../users/schemas/user.schema';
+import {
+  OnboardingStage,
+  RegistrationVerificationStatus,
+  User,
+  UserRole,
+} from '../../users/schemas/user.schema';
+import type { VerifyRegistrationJobData } from '../../kyb/types/kyb.types';
 import { LogCategory } from '../../activity-logs/schemas/activity-log.schema';
 import { ACTIVITY_LOGS_MESSAGES } from 'src/common/constants/messages/activity-logs.messages';
 import { isInternalStaffRole } from 'src/common/utils/user-role.util';
 
 const PIN_MAX_ATTEMPTS = 3;
+
+const ONBOARDING_NEXT_STEP: Record<OnboardingStage, OnboardingNextStep> = {
+  [OnboardingStage.REGISTERED]: OnboardingNextStep.VERIFY_EMAIL,
+  [OnboardingStage.EMAIL_VERIFIED]: OnboardingNextStep.SET_PIN,
+  [OnboardingStage.PIN_SET]: OnboardingNextStep.BUSINESS_DISCOVERY,
+  [OnboardingStage.BUSINESS_CREATED]: OnboardingNextStep.PAYMENT_METHOD,
+  [OnboardingStage.PAYMENT_METHOD_ADDED]: OnboardingNextStep.DASHBOARD,
+  [OnboardingStage.COMPLETE]: OnboardingNextStep.DASHBOARD,
+};
+
+/** Users created before onboardingStage existed have it derived from their data. */
+function resolveOnboardingStage(user: User): OnboardingStage {
+  if (user.onboardingStage) return user.onboardingStage;
+  if (user.businessId) return OnboardingStage.COMPLETE;
+  if (user.pinHash) return OnboardingStage.PIN_SET;
+  if (user.isEmailVerified) return OnboardingStage.EMAIL_VERIFIED;
+  return OnboardingStage.REGISTERED;
+}
 const REFRESH_TOKEN_TTL_DAYS = 7;
 const CLIENT_TOKEN_KEY = (token: string) => `client_token:${token}`;
 
@@ -82,6 +116,7 @@ export class AuthService {
     private readonly businessCategoriesRepository: BusinessCategoriesRepository,
     private readonly agendaService: AgendaService,
     private readonly redisService: RedisService,
+    private readonly config: ConfigService,
   ) {}
 
   async login(
@@ -91,7 +126,7 @@ export class AuthService {
   ): Promise<LoginData | UnauthorizedException | InternalServerErrorException> {
     try {
       const user = await this.usersRepository.findByEmail(dto.email);
-      if (!user || !user.isActive) {
+      if (!user || (!user.isActive && !this.canResumeOnboarding(user))) {
         this.logger.warn(
           `login: user not found or inactive [email=${dto.email}]`,
         );
@@ -110,8 +145,12 @@ export class AuthService {
         );
       }
 
+      if (!user.businessId) {
+        return await this.issueOnboardingSession(user);
+      }
+
       const userId = user._id;
-      const businessId = user.businessId!;
+      const businessId = user.businessId;
 
       const business = await this.businessRepository.findById(
         businessId.toString(),
@@ -350,7 +389,13 @@ export class AuthService {
       const user = await this.usersRepository.findById(
         stored.userId.toString(),
       );
-      if (!user || !user.isActive) {
+      // Onboarding sessions upgrade to full scope once the business has been created
+      const businessId = stored.businessId ?? user?.businessId;
+      const isEligible = businessId
+        ? !!user?.isActive
+        : !!user && this.canResumeOnboarding(user);
+
+      if (!user || !isEligible) {
         this.logger.warn(
           `refreshToken: user not found or inactive [userId=${stored.userId.toString()}]`,
         );
@@ -365,24 +410,25 @@ export class AuthService {
         Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
       );
 
-      const permissions = await this.resolvePermissions(
-        user.userRole,
-        user.roleId,
-      );
-      const accessToken = this.signAccessToken({
-        sub: stored.userId.toString(),
-        businessId: stored.businessId.toString(),
-        userRole: user.userRole,
-        pinVerified: stored.pinVerified ?? false,
-        permissions,
-      });
+      const accessToken = businessId
+        ? this.signAccessToken({
+            sub: stored.userId.toString(),
+            businessId: businessId.toString(),
+            userRole: user.userRole,
+            pinVerified: stored.pinVerified ?? false,
+            permissions: await this.resolvePermissions(
+              user.userRole,
+              user.roleId,
+            ),
+          })
+        : this.signOnboardingAccessToken(user);
 
       // Rotate: revoke old token and persist new one atomically, carrying pinVerified forward
       await Promise.all([
         this.authRepository.revokeRefreshToken(oldTokenHash),
         this.authRepository.createRefreshToken({
           userId: stored.userId,
-          businessId: stored.businessId,
+          ...(businessId && { businessId }),
           tokenHash: newTokenHash,
           expiresAt,
           pinVerified: stored.pinVerified ?? false,
@@ -513,18 +559,39 @@ export class AuthService {
       const otpHash = hashToken(otp);
       const expiry = new Date(Date.now() + CACHE_TTL.EMAIL_OTP * 1000);
 
-      await this.usersRepository.create({
+      const user = await this.usersRepository.create({
         firstName: dto.firstName,
         lastName: dto.lastName,
         email: dto.email,
         phone: dto.phone,
         passwordHash,
+        country: dto.country,
         userRole: UserRole.OWNER,
         isActive: false,
         isEmailVerified: false,
+        onboardingStage: OnboardingStage.REGISTERED,
         emailVerificationOtp: otpHash,
         emailVerificationOtpExpiry: expiry,
+        ...(dto.businessRegistrationNumber && {
+          businessRegistration: {
+            number: dto.businessRegistrationNumber,
+            country: dto.country,
+            status: RegistrationVerificationStatus.PENDING,
+          },
+        }),
       });
+
+      if (dto.businessRegistrationNumber) {
+        void this.agendaService
+          .now<VerifyRegistrationJobData>(JOBS.KYB_VERIFY_REGISTRATION, {
+            userId: user._id.toString(),
+          })
+          .catch((err: unknown) =>
+            this.logger.error(
+              `Job "${JOBS.KYB_VERIFY_REGISTRATION}" failed to enqueue: ${err instanceof Error ? err.stack : String(err)}`,
+            ),
+          );
+      }
 
       await this.agendaService
         .now<EmailVerificationJobData>(JOBS.EMAIL_VERIFICATION, {
@@ -557,9 +624,10 @@ export class AuthService {
     }
   }
 
+  /** Validates the email OTP and opens an onboarding session so the owner can continue signed in. */
   async verifyEmail(
     dto: VerifyEmailDto,
-  ): Promise<null | BadRequestException | InternalServerErrorException> {
+  ): Promise<LoginData | BadRequestException | InternalServerErrorException> {
     try {
       const user = await this.usersRepository.findByEmail(dto.email);
 
@@ -583,13 +651,14 @@ export class AuthService {
         return new BadRequestException(AUTH_MESSAGES.ERROR.INVALID_OTP);
       }
 
-      await this.usersRepository.updateById(user._id, {
+      const verified = await this.usersRepository.updateById(user._id, {
         isEmailVerified: true,
+        onboardingStage: OnboardingStage.EMAIL_VERIFIED,
         emailVerificationOtp: undefined,
         emailVerificationOtpExpiry: undefined,
       });
 
-      return null;
+      return await this.issueOnboardingSession(verified ?? user);
     } catch (error) {
       this.logger.error(
         `verifyEmail: unexpected error [email=${dto.email}]: ${error instanceof Error ? error.stack : String(error)}`,
@@ -640,14 +709,29 @@ export class AuthService {
     }
   }
 
+  /** Sets the owner's 4-digit PIN during onboarding (before a business exists). */
   async setPin(
+    userId: string,
     dto: SetPinDto,
-  ): Promise<null | BadRequestException | InternalServerErrorException> {
+  ): Promise<
+    | null
+    | BadRequestException
+    | ConflictException
+    | InternalServerErrorException
+  > {
     try {
-      const user = await this.usersRepository.findByEmail(dto.email);
+      const user = await this.usersRepository.findById(userId);
       if (!user) {
-        this.logger.warn(`setPin: user not found [email=${dto.email}]`);
+        this.logger.warn(`setPin: user not found [userId=${userId}]`);
         return new BadRequestException(AUTH_MESSAGES.ERROR.ACCOUNT_NOT_FOUND);
+      }
+
+      // Once a business exists, PIN changes must go through a flow that checks the current PIN
+      if (user.businessId) {
+        this.logger.warn(`setPin: business already exists [userId=${userId}]`);
+        return new ConflictException(
+          AUTH_MESSAGES.ERROR.BUSINESS_ALREADY_SETUP,
+        );
       }
 
       if (!user.isEmailVerified) {
@@ -658,56 +742,81 @@ export class AuthService {
       }
 
       const pinHash = await hashValue(dto.pin);
-      await this.usersRepository.updateById(user._id, { pinHash });
+      await this.usersRepository.updateById(user._id, {
+        pinHash,
+        onboardingStage: OnboardingStage.PIN_SET,
+      });
 
       return null;
     } catch (error) {
       this.logger.error(
-        `setPin: unexpected error [email=${dto.email}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `setPin: unexpected error [userId=${userId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
   }
 
+  /** Creates the owner's business from the setup form, activates the account and upgrades the session to full scope. */
   async createBusiness(
+    userId: string,
     dto: CreateBusinessDto,
-  ): Promise<
-    | LoginData
-    | BadRequestException
-    | ConflictException
-    | InternalServerErrorException
-  > {
+  ): Promise<ProvisionBusinessResult> {
+    return this.provisionBusiness(userId, {
+      businessName: dto.businessName,
+      categoryId: dto.businessCategory,
+      description: dto.businessDescription,
+      colorPrimary: dto.colorPrimary,
+      colorSecondary: dto.colorSecondary,
+      font: dto.font,
+      services: dto.services,
+      timezone: dto.timezone,
+      plan: dto.plan,
+      billingInterval: dto.billingInterval,
+    });
+  }
+
+  /**
+   * Creates a business for a verified owner in one transaction (business, roles,
+   * website config, activation), then issues a full-scope session. Shared by the
+   * setup form and AI discovery approval.
+   */
+  async provisionBusiness(
+    userId: string,
+    input: BusinessProvisionInput,
+  ): Promise<ProvisionBusinessResult> {
     try {
-      const base = this.generateSubdomain(dto.businessName);
+      const base = this.generateSubdomain(input.businessName);
 
       const [user, category, subdomain] = await Promise.all([
-        this.usersRepository.findByEmail(dto.email),
-        this.businessCategoriesRepository.findById(dto.businessCategory),
+        this.usersRepository.findById(userId),
+        this.businessCategoriesRepository.findById(input.categoryId),
         this.findAvailableSubdomain(base),
       ]);
 
       if (!user) {
-        this.logger.warn(`createBusiness: user not found [email=${dto.email}]`);
+        this.logger.warn(
+          `provisionBusiness: user not found [userId=${userId}]`,
+        );
         return new BadRequestException(AUTH_MESSAGES.ERROR.ACCOUNT_NOT_FOUND);
       }
 
       if (!user.isEmailVerified) {
         this.logger.warn(
-          `createBusiness: email not verified [userId=${user._id.toString()}]`,
+          `provisionBusiness: email not verified [userId=${user._id.toString()}]`,
         );
         return new BadRequestException(AUTH_MESSAGES.ERROR.EMAIL_NOT_VERIFIED);
       }
 
       if (!user.pinHash) {
         this.logger.warn(
-          `createBusiness: PIN not set [userId=${user._id.toString()}]`,
+          `provisionBusiness: PIN not set [userId=${user._id.toString()}]`,
         );
         return new BadRequestException(AUTH_MESSAGES.ERROR.PIN_NOT_SET);
       }
 
       if (user.businessId) {
         this.logger.warn(
-          `createBusiness: business already exists [userId=${user._id.toString()}]`,
+          `provisionBusiness: business already exists [userId=${user._id.toString()}]`,
         );
         return new ConflictException(
           AUTH_MESSAGES.ERROR.BUSINESS_ALREADY_SETUP,
@@ -716,29 +825,33 @@ export class AuthService {
 
       if (!category) {
         this.logger.warn(
-          `createBusiness: invalid category [categoryId=${dto.businessCategory}]`,
+          `provisionBusiness: invalid category [categoryId=${input.categoryId}]`,
         );
         return new BadRequestException(
           BUSINESS_CATEGORIES_MESSAGES.ERROR.NOT_FOUND,
         );
       }
 
-      const trialEndsAt = new Date();
-      trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
+      // With card-before-access on, the trial starts at card + consent instead
+      const cardRequired = isPaymentMethodRequired(this.config);
+      const trialEndsAt = cardRequired ? undefined : new Date();
+      trialEndsAt?.setDate(trialEndsAt.getDate() + TRIAL_PERIOD_DAYS);
 
       const { businessId } = await this.runBusinessOnboardingTransaction(
-        dto,
-        user._id,
+        input,
+        user,
         subdomain,
         category.name,
         trialEndsAt,
       );
 
+      // Retire onboarding-scoped refresh tokens now that a full session exists
+      await this.authRepository.revokeAllUserRefreshTokens(user._id);
       const { accessToken, refreshToken } = await this.issueSession(
         user._id,
         businessId,
         user.userRole,
-        dto.timezone ?? 'UTC',
+        input.timezone ?? 'UTC',
         user.roleId,
       );
 
@@ -760,14 +873,15 @@ export class AuthService {
           ),
         );
 
-      // Async: create Stripe customer + subscription with a 7-day trial
+      // Async: create the Stripe customer (and, when no card is required, the card-less trial)
       void this.agendaService
         .now(JOBS.SUBSCRIPTION_SETUP_STRIPE_CUSTOMER, {
           businessId: businessId.toString(),
           email: user.email,
-          name: dto.businessName,
-          plan: dto.plan ?? SubscriptionPlan.STARTER,
-          billingInterval: dto.billingInterval ?? 'monthly',
+          name: input.businessName,
+          plan: input.plan ?? SubscriptionPlan.STARTER,
+          billingInterval: input.billingInterval ?? 'monthly',
+          createTrialSubscription: !cardRequired,
         })
         .catch((err: unknown) =>
           this.logger.error(
@@ -790,7 +904,7 @@ export class AuthService {
       };
     } catch (error) {
       this.logger.error(
-        `createBusiness: unexpected error [email=${dto.email}]: ${error instanceof Error ? error.stack : String(error)}`,
+        `provisionBusiness: unexpected error [userId=${userId}]: ${error instanceof Error ? error.stack : String(error)}`,
       );
       return new InternalServerErrorException(COMMON_MESSAGES.ERROR.INTERNAL);
     }
@@ -799,35 +913,42 @@ export class AuthService {
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   private async runBusinessOnboardingTransaction(
-    dto: CreateBusinessDto,
-    ownerId: Types.ObjectId,
+    input: BusinessProvisionInput,
+    owner: User,
     subdomain: string,
     categoryName: string,
-    trialEndsAt: Date,
+    trialEndsAt: Date | undefined,
   ): Promise<{ businessId: Types.ObjectId }> {
     const session = await this.connection.startSession();
     session.startTransaction();
 
+    const ownerId = owner._id;
     try {
       const business = await this.businessRepository.create(
         {
           ownerId,
-          name: dto.businessName,
+          name: input.businessName,
           subdomain,
-          categoryId: new Types.ObjectId(dto.businessCategory),
+          categoryId: new Types.ObjectId(input.categoryId),
           categoryName,
-          description: dto.businessDescription,
+          description: input.description,
+          country: owner.country,
+          ...(owner.businessRegistration && {
+            registration: owner.businessRegistration,
+          }),
           colors: {
-            primary: dto.colorPrimary ?? '#2563eb',
-            secondary: dto.colorSecondary ?? '#64748b',
+            primary: input.colorPrimary ?? '#2563eb',
+            secondary: input.colorSecondary ?? '#64748b',
           },
-          font: dto.font ?? 'Inter',
-          services: dto.services ?? [],
-          timezone: dto.timezone ?? 'UTC',
+          font: input.font ?? 'Inter',
+          services: input.services ?? [],
+          timezone: input.timezone ?? 'UTC',
           subscription: {
             plan: SubscriptionPlan.STARTER,
-            status: SubscriptionStatus.TRIALING,
-            trialEndsAt,
+            status: trialEndsAt
+              ? SubscriptionStatus.TRIALING
+              : SubscriptionStatus.INCOMPLETE,
+            ...(trialEndsAt && { trialEndsAt }),
             features: getFeaturesForPlan(SubscriptionPlan.STARTER),
             hasPaymentMethod: false,
           },
@@ -845,16 +966,21 @@ export class AuthService {
       await this.websiteConfigRepository.create(
         {
           businessId,
-          colorPrimary: dto.colorPrimary ?? '#2563eb',
-          colorSecondary: dto.colorSecondary ?? '#64748b',
-          font: dto.font ?? 'Inter',
+          colorPrimary: input.colorPrimary ?? '#2563eb',
+          colorSecondary: input.colorSecondary ?? '#64748b',
+          font: input.font ?? 'Inter',
         },
         session,
       );
 
       await this.usersRepository.updateById(
         ownerId,
-        { businessId, roleId: ownerRoleId, isActive: true },
+        {
+          businessId,
+          roleId: ownerRoleId,
+          isActive: true,
+          onboardingStage: OnboardingStage.BUSINESS_CREATED,
+        },
         session,
       );
 
@@ -930,6 +1056,36 @@ export class AuthService {
     return { accessToken, refreshToken: rawRefreshToken };
   }
 
+  /** Returns where the user is in the onboarding journey so the client can resume at the right step. */
+  async getOnboardingStatus(
+    userId: string,
+  ): Promise<OnboardingStatusData | UnauthorizedException> {
+    const user = await this.usersRepository.findById(userId);
+    if (!user || user.deletedAt) {
+      return new UnauthorizedException(AUTH_MESSAGES.ERROR.UNAUTHORIZED);
+    }
+
+    const stage = resolveOnboardingStage(user);
+    const registration = user.businessRegistration;
+
+    return {
+      stage,
+      nextStep: ONBOARDING_NEXT_STEP[stage],
+      firstName: user.firstName,
+      email: user.email,
+      country: user.country,
+      hasPin: !!user.pinHash,
+      businessId: user.businessId?.toString() ?? null,
+      businessRegistration: registration
+        ? {
+            number: registration.number,
+            status: registration.status,
+            registeredName: registration.registeredName,
+          }
+        : null,
+    };
+  }
+
   async issueClientToken(): Promise<{ token: string; expiresAt: number }> {
     const token = generateSecureToken();
     const ttl = CACHE_TTL.CLIENT_TOKEN;
@@ -952,7 +1108,72 @@ export class AuthService {
   private signAccessToken(payload: JwtUser): string {
     return this.jwtService.sign(payload);
   }
+
+  /** Verified owners without a business may sign in with an onboarding-scoped session. */
+  private canResumeOnboarding(user: User): boolean {
+    return (
+      user.userRole === UserRole.OWNER &&
+      user.isEmailVerified &&
+      !user.businessId &&
+      !user.deletedAt
+    );
+  }
+
+  private signOnboardingAccessToken(user: User): string {
+    return this.signAccessToken({
+      sub: user._id.toString(),
+      businessId: '',
+      userRole: user.userRole,
+      pinVerified: false,
+      permissions: [],
+      scope: TokenScope.ONBOARDING,
+    });
+  }
+
+  private async issueOnboardingSession(user: User): Promise<LoginData> {
+    const rawRefreshToken = generateSecureToken(32);
+    await this.authRepository.createRefreshToken({
+      userId: user._id,
+      tokenHash: hashToken(rawRefreshToken),
+      expiresAt: new Date(
+        Date.now() + REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000,
+      ),
+    });
+
+    return {
+      accessToken: this.signOnboardingAccessToken(user),
+      refreshToken: rawRefreshToken,
+      user: {
+        id: user._id.toString(),
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        businessId: null,
+        mustChangePassword: false,
+        onboardingStage: resolveOnboardingStage(user),
+      },
+    };
+  }
 }
+
+export interface BusinessProvisionInput {
+  businessName: string;
+  categoryId: string;
+  description?: string;
+  colorPrimary?: string;
+  colorSecondary?: string;
+  font?: string;
+  services?: string[];
+  timezone: string;
+  plan?: SubscriptionPlan;
+  billingInterval?: 'monthly' | 'yearly';
+}
+
+export type ProvisionBusinessResult =
+  | LoginData
+  | BadRequestException
+  | ConflictException
+  | InternalServerErrorException;
 
 interface TaskStagesBootstrapJobData {
   businessId: string;

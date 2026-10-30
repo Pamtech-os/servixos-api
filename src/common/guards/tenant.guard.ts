@@ -11,10 +11,16 @@ import { Types } from 'mongoose';
 import { Request } from 'express';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { ALLOW_LOCKED_KEY } from '../decorators/allow-locked.decorator';
+import { ALLOW_ONBOARDING_KEY } from '../decorators/allow-onboarding.decorator';
 import { TENANT_MESSAGES } from '../constants/messages/tenant.messages';
 import { BusinessRepository } from 'src/modules/business/repositories/business.repository';
-import { JwtUser } from '../decorators/current-user.decorator';
-import { SubscriptionStatus } from 'src/modules/business/schemas/business.schema';
+import { JwtUser, TokenScope } from '../decorators/current-user.decorator';
+import {
+  Business,
+  SubscriptionStatus,
+} from 'src/modules/business/schemas/business.schema';
+
+export const ONBOARDING_INCOMPLETE_CODE = 'ONBOARDING_INCOMPLETE';
 
 @Injectable()
 export class TenantGuard implements CanActivate {
@@ -30,9 +36,23 @@ export class TenantGuard implements CanActivate {
     ]);
     if (isPublic) return true;
 
+    const allowOnboarding = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_ONBOARDING_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (allowOnboarding) return true;
+
     const req = context
       .switchToHttp()
       .getRequest<Request & { user: JwtUser }>();
+
+    if (req.user?.scope === TokenScope.ONBOARDING) {
+      throw new ForbiddenException({
+        code: ONBOARDING_INCOMPLETE_CODE,
+        message: TENANT_MESSAGES.ERROR.ONBOARDING_INCOMPLETE,
+      });
+    }
+
     const businessId = req.headers['x-business-id'] as string | undefined;
 
     if (!businessId) {
@@ -75,6 +95,8 @@ export class TenantGuard implements CanActivate {
       throw new ForbiddenException(TENANT_MESSAGES.ERROR.MISMATCH);
     }
 
+    // Shared with later guards (PaymentMethodGuard) to avoid a second lookup
+    (req as Request & { business?: Business }).business = business;
     return true;
   }
 }

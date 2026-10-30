@@ -35,6 +35,7 @@ import { PinVerifiedGuard } from './common/guards/pin-verified.guard';
 import { PermissionsContextGuard } from './common/guards/permissions-context.guard';
 import { PermissionsGuard } from './common/guards/permissions.guard';
 import { TenantGuard } from './common/guards/tenant.guard';
+import { PaymentMethodGuard } from './common/guards/payment-method.guard';
 
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { AiInsightsModule } from './modules/ai-insights/ai-insights.module';
@@ -74,6 +75,8 @@ import { StripeModule } from './modules/stripe/stripe.module';
 import { SubscriptionModule } from './modules/subscription/subscription.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { WaitlistModule } from './modules/waitlist/waitlist.module';
+import { KybModule } from './modules/kyb/kyb.module';
+import { OnboardingModule } from './modules/onboarding/onboarding.module';
 
 @Module({
   imports: [
@@ -150,6 +153,8 @@ import { WaitlistModule } from './modules/waitlist/waitlist.module';
     SubscriptionModule,
     SettingsModule,
     WaitlistModule,
+    KybModule,
+    OnboardingModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
@@ -164,6 +169,7 @@ import { WaitlistModule } from './modules/waitlist/waitlist.module';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PinVerifiedGuard },
     { provide: APP_GUARD, useClass: TenantGuard },
+    { provide: APP_GUARD, useClass: PaymentMethodGuard },
     { provide: APP_GUARD, useClass: PermissionsContextGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
   ],

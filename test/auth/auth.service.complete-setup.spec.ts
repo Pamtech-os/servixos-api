@@ -1,3 +1,4 @@
+import { ConfigService } from '@nestjs/config';
 import {
   BadRequestException,
   InternalServerErrorException,
@@ -63,6 +64,7 @@ describe('AuthService.completeSetup', () => {
         set: jest.fn(),
         del: jest.fn(),
       }),
+      asMock<ConfigService>({ get: jest.fn() }),
     );
   });
 

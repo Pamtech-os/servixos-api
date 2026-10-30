@@ -138,8 +138,10 @@ export class ClientAuthService {
     try {
       const tokenHash = hashToken(dto.refreshToken ?? '');
       const stored = await this.authRepository.findValidRefreshToken(tokenHash);
+      const businessId = stored?.businessId;
 
-      if (!stored) {
+      // Business-less (owner onboarding) refresh tokens are never valid for the client portal
+      if (!stored || !businessId) {
         return new UnauthorizedException(
           CLIENT_AUTH_MESSAGES.ERROR.EXPIRED_TOKEN,
         );
@@ -147,8 +149,8 @@ export class ClientAuthService {
 
       const [user, business, client] = await Promise.all([
         this.usersRepository.findById(stored.userId.toString()),
-        this.businessRepository.findById(stored.businessId.toString()),
-        this.clientsRepository.findByUserId(stored.userId, stored.businessId),
+        this.businessRepository.findById(businessId.toString()),
+        this.clientsRepository.findByUserId(stored.userId, businessId),
       ]);
 
       if (
@@ -173,7 +175,7 @@ export class ClientAuthService {
 
       const accessToken = this.signAccessToken({
         sub: stored.userId.toString(),
-        businessId: stored.businessId.toString(),
+        businessId: businessId.toString(),
         userRole: UserRole.CLIENT,
         pinVerified: true,
       });

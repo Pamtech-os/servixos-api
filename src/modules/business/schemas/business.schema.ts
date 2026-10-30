@@ -1,5 +1,7 @@
 import { prop, index, modelOptions, PropType } from '@typegoose/typegoose';
 import { Types } from 'mongoose';
+import { SupportedCountry } from 'src/common/constants/countries.constants';
+import { BusinessRegistration } from '../../users/schemas/user.schema';
 
 export enum SubscriptionPlan {
   STARTER = 'starter',
@@ -8,7 +10,8 @@ export enum SubscriptionPlan {
 }
 
 export enum SubscriptionStatus {
-  TRIALING = 'trialing', // 7-day free trial, no payment required
+  INCOMPLETE = 'incomplete', // business created; awaiting card + consent to start the trial
+  TRIALING = 'trialing', // 7-day free trial
   ACTIVE = 'active', // paid and current
   GRACE_PERIOD = 'grace_period', // payment failed — 5-day window to recover
   LOCKED = 'locked', // trial expired or grace period exhausted
@@ -70,7 +73,22 @@ class Subscription {
   pendingCurrency?: string;
 }
 
-export { Subscription };
+/** What the owner saw and agreed to when starting the trial (audit trail). */
+class BillingConsent {
+  @prop({ required: true }) termsVersion: string;
+  @prop({ required: true }) acceptedAt: Date;
+  @prop({ enum: SubscriptionPlan, required: true }) plan: SubscriptionPlan;
+  @prop({ enum: ['monthly', 'yearly'], required: true })
+  billingInterval: string;
+  /** Disclosed price in minor units of `currency`. */
+  @prop({ required: true }) amount: number;
+  @prop({ required: true, uppercase: true }) currency: string;
+  @prop({ required: true }) firstChargeAt: Date;
+  @prop({ trim: true }) ipAddress?: string;
+  @prop({ trim: true }) userAgent?: string;
+}
+
+export { Subscription, BillingConsent };
 
 @index({ ownerId: 1 }, { unique: true })
 @index({ subdomain: 1 }, { unique: true, sparse: true })
@@ -105,6 +123,14 @@ export class Business {
 
   @prop({ trim: true })
   address?: string;
+
+  /** Launch country of the owner at signup; drives currency and pricing. */
+  @prop({ enum: SupportedCountry })
+  country?: SupportedCountry;
+
+  /** Registry details captured at signup and verified via Prembly, when provided. */
+  @prop({ type: () => BusinessRegistration, _id: false })
+  registration?: BusinessRegistration;
 
   @prop({ type: () => ColorScheme, _id: false, default: () => ({}) })
   colors: ColorScheme;
@@ -154,6 +180,9 @@ export class Business {
   /** Active Stripe Price ID (reflects current plan + billing interval) */
   @prop({ trim: true })
   stripePriceId?: string;
+
+  @prop({ type: () => BillingConsent, _id: false })
+  billingConsent?: BillingConsent;
 
   /** Billing cycle chosen at subscription — 'monthly' or 'yearly' */
   @prop({ enum: ['monthly', 'yearly'], default: 'monthly' })

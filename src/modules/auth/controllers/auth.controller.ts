@@ -26,9 +26,7 @@ import { ResetPasswordDto } from '../dto/reset-password.dto';
 import { CreateAccountDto } from '../dto/create-account.dto';
 import { VerifyEmailDto } from '../dto/verify-email.dto';
 import { ResendOtpDto } from '../dto/resend-otp.dto';
-import { SetPinDto } from '../dto/set-pin.dto';
 import { CompleteSetupDto } from '../dto/complete-setup.dto';
-import { CreateBusinessDto } from '../dto/create-business.dto';
 import { Public } from 'src/common/decorators/public.decorator';
 import { SkipSignature } from 'src/common/decorators/skip-signature.decorator';
 import {
@@ -38,11 +36,12 @@ import {
 import { Channel } from 'src/common/enums/channel.enum';
 import { Throttle } from '@nestjs/throttler';
 import { AppEnvironment } from 'src/common/constants/app.constants';
+import { COOKIE_NAMES } from 'src/common/constants/cookie.constants';
 import {
-  ACCESS_TOKEN_COOKIE_MAX_AGE,
-  COOKIE_NAMES,
-  REFRESH_TOKEN_COOKIE_MAX_AGE,
-} from 'src/common/constants/cookie.constants';
+  clearAuthCookies,
+  setAccessTokenCookie,
+  setAuthCookies,
+} from '../utils/auth-cookies.util';
 // import { Encrypt } from 'src/common/decorators/encrypt.decorator';
 
 // @Encrypt()
@@ -259,10 +258,19 @@ export class AuthController {
 
   @Post('onboarding/verify-email')
   @HttpCode(HttpStatus.OK)
-  async verifyEmail(@Body() dto: VerifyEmailDto) {
+  async verifyEmail(
+    @Body() dto: VerifyEmailDto,
+    @CurrentChannel() channel: Channel,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.verifyEmail(dto);
     if (result instanceof HttpException) throw result;
-    return { message: AUTH_MESSAGES.SUCCESS.EMAIL_VERIFIED, data: null };
+
+    if (channel === Channel.WEB) {
+      this.setAuthCookies(res, result.accessToken, result.refreshToken);
+    }
+
+    return { message: AUTH_MESSAGES.SUCCESS.EMAIL_VERIFIED, data: result };
   }
 
   @Post('onboarding/resend-otp')
@@ -273,34 +281,6 @@ export class AuthController {
     return { message: AUTH_MESSAGES.SUCCESS.OTP_RESENT, data: null };
   }
 
-  @Post('onboarding/set-pin')
-  @HttpCode(HttpStatus.OK)
-  async setPin(@Body() dto: SetPinDto) {
-    const result = await this.authService.setPin(dto);
-    if (result instanceof HttpException) throw result;
-    return { message: AUTH_MESSAGES.SUCCESS.PIN_SET, data: null };
-  }
-
-  @Post('onboarding/business')
-  @HttpCode(HttpStatus.CREATED)
-  async createBusiness(
-    @Body() dto: CreateBusinessDto,
-    @CurrentChannel() channel: Channel,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    const result = await this.authService.createBusiness(dto);
-    if (result instanceof HttpException) throw result;
-
-    if (channel === Channel.WEB) {
-      this.setAuthCookies(res, result.accessToken, result.refreshToken);
-    }
-
-    return {
-      message: AUTH_MESSAGES.SUCCESS.BUSINESS_CREATED,
-      data: result,
-    };
-  }
-
   // ─── Private helpers ────────────────────────────────────────────────────────
 
   private get isProd(): boolean {
@@ -308,13 +288,7 @@ export class AuthController {
   }
 
   private setAccessTokenCookie(res: Response, token: string): void {
-    res.cookie(COOKIE_NAMES.ACCESS_TOKEN, token, {
-      httpOnly: true,
-      secure: this.isProd,
-      sameSite: 'lax',
-      maxAge: ACCESS_TOKEN_COOKIE_MAX_AGE,
-      path: '/',
-    });
+    setAccessTokenCookie(res, token, this.isProd);
   }
 
   private setAuthCookies(
@@ -322,24 +296,10 @@ export class AuthController {
     accessToken: string,
     refreshToken: string,
   ): void {
-    this.setAccessTokenCookie(res, accessToken);
-    res.cookie(COOKIE_NAMES.REFRESH_TOKEN, refreshToken, {
-      httpOnly: true,
-      secure: this.isProd,
-      sameSite: 'lax',
-      maxAge: REFRESH_TOKEN_COOKIE_MAX_AGE,
-      path: '/',
-    });
+    setAuthCookies(res, accessToken, refreshToken, this.isProd);
   }
 
   private clearAuthCookies(res: Response): void {
-    const base = {
-      httpOnly: true,
-      secure: this.isProd,
-      sameSite: 'lax' as const,
-      path: '/',
-    };
-    res.clearCookie(COOKIE_NAMES.ACCESS_TOKEN, base);
-    res.clearCookie(COOKIE_NAMES.REFRESH_TOKEN, base);
+    clearAuthCookies(res, this.isProd);
   }
 }

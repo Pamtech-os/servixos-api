@@ -17,7 +17,7 @@ export class AuthRepository {
   async createRefreshToken(
     data: {
       userId: Types.ObjectId;
-      businessId: Types.ObjectId;
+      businessId?: Types.ObjectId;
       tokenHash: string;
       expiresAt: Date;
       pinVerified?: boolean;

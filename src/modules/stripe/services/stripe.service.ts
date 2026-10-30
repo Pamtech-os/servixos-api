@@ -21,8 +21,12 @@ export class StripeService {
     email: string,
     name: string,
     metadata: Record<string, string>,
+    idempotencyKey?: string,
   ) {
-    return this.stripe.customers.create({ email, name, metadata });
+    return this.stripe.customers.create(
+      { email, name, metadata },
+      idempotencyKey ? { idempotencyKey } : undefined,
+    );
   }
 
   /**
@@ -48,23 +52,29 @@ export class StripeService {
     customerId: string,
     paymentMethodId: string,
   ): Promise<void> {
-    await this.stripe.paymentMethods.attach(paymentMethodId, {
+    // Use the attached object's id: attaching a reusable token (e.g. test cards) mints a new PaymentMethod
+    const attached = await this.stripe.paymentMethods.attach(paymentMethodId, {
       customer: customerId,
     });
     await this.stripe.customers.update(customerId, {
-      invoice_settings: { default_payment_method: paymentMethodId },
+      invoice_settings: { default_payment_method: attached.id },
     });
   }
 
   /**
    * Creates a Stripe Subscription with a 7-day free trial.
    * No payment is collected until the trial ends.
+   *
+   * `cancelIfNoPaymentMethod` makes Stripe cancel (never charge) a trial that
+   * ends without a card on file. `currency` selects one of the price's
+   * currency options so the customer is billed in their local currency.
    */
   async createSubscription(
     customerId: string,
     priceId: string,
     metadata: Record<string, string>,
     idempotencyKey: string,
+    options: SubscriptionOptions = {},
   ) {
     return this.stripe.subscriptions.create(
       {
@@ -74,9 +84,48 @@ export class StripeService {
         payment_settings: { save_default_payment_method: 'on_subscription' },
         metadata,
         expand: ['latest_invoice.payment_intent'],
+        ...(options.currency && { currency: options.currency.toLowerCase() }),
+        ...(options.cancelIfNoPaymentMethod && {
+          trial_settings: {
+            end_behavior: { missing_payment_method: 'cancel' },
+          },
+        }),
+        ...(options.automaticTax && { automatic_tax: { enabled: true } }),
       },
       { idempotencyKey },
     );
+  }
+
+  /**
+   * Resolves what a price costs in `currency`, falling back to the price's
+   * default currency when no matching currency option is configured in Stripe.
+   */
+  async getPriceInCurrency(
+    priceId: string,
+    currency: string,
+  ): Promise<{ amount: number; currency: string; interval: string | null }> {
+    const price = await this.stripe.prices.retrieve(priceId, {
+      expand: ['currency_options'],
+    });
+    const wanted = currency.toLowerCase();
+    const option =
+      wanted === price.currency ? null : price.currency_options?.[wanted];
+
+    if (option?.unit_amount != null) {
+      return {
+        amount: option.unit_amount,
+        currency: wanted,
+        interval: price.recurring?.interval ?? null,
+      };
+    }
+    if (price.unit_amount == null) {
+      throw new Error(`Price ${priceId} has no fixed unit amount`);
+    }
+    return {
+      amount: price.unit_amount,
+      currency: price.currency,
+      interval: price.recurring?.interval ?? null,
+    };
   }
 
   /**
@@ -132,47 +181,36 @@ export class StripeService {
   }
 
   /**
-   * Returns the client_secret of the PaymentIntent on an open invoice.
-   * The frontend uses this to confirm payment (handles 3DS automatically).
+   * Returns the client_secret for paying an open invoice; the frontend confirms
+   * it with Stripe.js (handles 3DS). Uses the invoice's `confirmation_secret`
+   * (current API; `payment_intent` was removed from invoices in 2025).
    *
-   * If the invoice has no PaymentIntent yet (card was attached to the customer
-   * after the billing attempt, or was never set as the invoice default), we
-   * force a payment attempt via invoices.pay(). This creates the PaymentIntent
-   * so the frontend can confirm any required 3DS challenge. If the charge
-   * succeeds immediately the webhook will unlock the account server-side.
+   * If the invoice has no confirmation secret yet, a payment attempt is forced
+   * via invoices.pay() so Stripe creates one; if that charge succeeds
+   * immediately the webhook unlocks the account server-side.
    */
   async getInvoicePaymentClientSecret(
     invoiceId: string,
   ): Promise<{ clientSecret: string; invoiceId: string }> {
-    type ExpandedInvoice = {
-      id: string;
-      payment_intent: { client_secret: string | null } | null;
-    };
+    let invoice = await this.stripe.invoices.retrieve(invoiceId, {
+      expand: ['confirmation_secret'],
+    });
 
-    let invoice = (await this.stripe.invoices.retrieve(invoiceId, {
-      expand: ['payment_intent'],
-    })) as unknown as ExpandedInvoice;
-
-    // No PaymentIntent exists — the card on file wasn't the billing default
-    // when Stripe first attempted to charge. Force an attempt now so Stripe
-    // creates (or resumes) the PaymentIntent against the existing card.
-    if (!invoice.payment_intent) {
+    if (!invoice.confirmation_secret?.client_secret) {
       await this.stripe.invoices.pay(invoiceId, { off_session: true });
-      invoice = (await this.stripe.invoices.retrieve(invoiceId, {
-        expand: ['payment_intent'],
-      })) as unknown as ExpandedInvoice;
+      invoice = await this.stripe.invoices.retrieve(invoiceId, {
+        expand: ['confirmation_secret'],
+      });
     }
 
-    if (!invoice.payment_intent || !invoice.payment_intent.client_secret) {
+    const clientSecret = invoice.confirmation_secret?.client_secret;
+    if (!clientSecret) {
       throw new Error(
-        `Invoice ${invoiceId} has no collectable PaymentIntent — no payment method on file`,
+        `Invoice ${invoiceId} has no collectable payment — no payment method on file`,
       );
     }
 
-    return {
-      clientSecret: invoice.payment_intent.client_secret,
-      invoiceId: invoice.id,
-    };
+    return { clientSecret, invoiceId: invoice.id };
   }
 
   /**
@@ -189,4 +227,10 @@ export class StripeService {
   async retrieveSubscription(subscriptionId: string) {
     return this.stripe.subscriptions.retrieve(subscriptionId);
   }
+}
+
+export interface SubscriptionOptions {
+  currency?: string;
+  cancelIfNoPaymentMethod?: boolean;
+  automaticTax?: boolean;
 }

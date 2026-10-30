@@ -6,6 +6,11 @@ export const AUTH_MESSAGES = {
     LAST_NAME_INVALID: 'Last name must be a valid string',
     EMAIL_INVALID: 'A valid email address is required',
     PHONE_INVALID: 'Phone must be a valid international phone number',
+    PHONE_COUNTRY_UNSUPPORTED:
+      'Phone must be a valid number from Nigeria, the United Kingdom, the United States or Canada',
+    COUNTRY_UNSUPPORTED: 'Country must be one of: NG, GB, US, CA',
+    REGISTRATION_NUMBER_INVALID:
+      'Business registration number may only contain letters, numbers and hyphens (max 30 characters)',
     PASSWORD_REQUIRED: 'Password is required',
     PASSWORD_INVALID: 'Password must be a valid string',
     PASSWORD_MIN_LENGTH: 'Password must be at least 8 characters',
@@ -44,6 +49,7 @@ export const AUTH_MESSAGES = {
     EMAIL_VERIFIED: 'Email verified successfully',
     OTP_RESENT: 'A new verification code has been sent to your email',
     PIN_SET: 'PIN set successfully',
+    ONBOARDING_STATUS: 'Onboarding status retrieved',
     BUSINESS_CREATED: 'Business setup complete',
     LOGIN: 'Login successful',
     LOGOUT: 'Logged out successfully',

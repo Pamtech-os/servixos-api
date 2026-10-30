@@ -27,6 +27,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
     let statusCode = HttpStatus.INTERNAL_SERVER_ERROR;
     let message: string = COMMON_MESSAGES.ERROR.INTERNAL;
+    let code: string | undefined;
+    let details: Record<string, unknown> | undefined;
 
     const context = `${request.method} ${request.url}`;
 
@@ -45,6 +47,15 @@ export class AllExceptionsFilter implements ExceptionFilter {
           message = raw['message'];
         } else if (Array.isArray(raw['message'])) {
           message = (raw['message'] as string[]).join('; ');
+        }
+        // Opt-in structured context: only explicit `code`/`details` keys are forwarded
+        if (typeof raw['code'] === 'string') code = raw['code'];
+        if (
+          typeof raw['details'] === 'object' &&
+          raw['details'] !== null &&
+          !Array.isArray(raw['details'])
+        ) {
+          details = raw['details'] as Record<string, unknown>;
         }
       }
 
@@ -70,6 +81,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
       success: false,
       statusCode,
       message,
+      ...(code && { code }),
+      ...(details && { details }),
     };
 
     if (request.isEncrypted) {

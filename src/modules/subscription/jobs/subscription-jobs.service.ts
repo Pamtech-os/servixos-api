@@ -17,6 +17,7 @@ import {
   TransactionType,
 } from '../schemas/subscription-transaction.schema';
 import { getFeaturesForPlan } from 'src/common/constants/subscription-features.constants';
+import { stripeCustomerIdempotencyKey } from '../services/subscription.service';
 import { PlanChangeType } from '../../admin/schemas/plan-change.schema';
 import { getModelForClass, ReturnModelType } from '@typegoose/typegoose';
 import { PlanChange } from '../../admin/schemas/plan-change.schema';
@@ -41,6 +42,12 @@ export interface SetupStripeCustomerJobData {
   name: string;
   plan: SubscriptionPlan;
   billingInterval: 'monthly' | 'yearly';
+  /**
+   * False when card-before-access is on: the trial subscription is created only
+   * once the owner adds a card and consents. Missing on jobs queued before this
+   * flag existed, which keeps their original card-less trial behaviour.
+   */
+  createTrialSubscription?: boolean;
 }
 
 export interface PaymentSucceededJobData {
@@ -198,7 +205,14 @@ export class SubscriptionJobsService implements OnModuleInit {
   private async handleSetupStripeCustomer(
     job: Job<SetupStripeCustomerJobData>,
   ): Promise<void> {
-    const { businessId, email, name, plan, billingInterval } = job.attrs.data!;
+    const {
+      businessId,
+      email,
+      name,
+      plan,
+      billingInterval,
+      createTrialSubscription = true,
+    } = job.attrs.data!;
 
     try {
       const business = await this.businessRepository.findById(businessId);
@@ -217,9 +231,12 @@ export class SubscriptionJobsService implements OnModuleInit {
         return;
       }
 
-      const customer = await this.stripeService.createCustomer(email, name, {
-        businessId,
-      });
+      const customer = await this.stripeService.createCustomer(
+        email,
+        name,
+        { businessId },
+        stripeCustomerIdempotencyKey(businessId),
+      );
 
       const planDoc = await this.subscriptionRepository.findPlanBySlug(plan);
       const priceId = planDoc
@@ -230,7 +247,7 @@ export class SubscriptionJobsService implements OnModuleInit {
 
       let stripeSubscriptionId: string | undefined;
 
-      if (priceId) {
+      if (priceId && createTrialSubscription) {
         const subscription = await this.stripeService.createSubscription(
           customer.id,
           priceId,

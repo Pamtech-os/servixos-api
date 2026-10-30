@@ -11,8 +11,9 @@ export class RefreshToken {
   @prop({ ref: 'User', type: Types.ObjectId, required: true })
   userId: Types.ObjectId;
 
-  @prop({ ref: 'Business', type: Types.ObjectId, required: true })
-  businessId: Types.ObjectId;
+  /** Absent on onboarding sessions issued before the business exists. */
+  @prop({ ref: 'Business', type: Types.ObjectId })
+  businessId?: Types.ObjectId;
 
   @prop({ required: true })
   tokenHash: string;

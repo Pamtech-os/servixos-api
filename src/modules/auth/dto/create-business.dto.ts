@@ -1,6 +1,5 @@
 import {
   IsArray,
-  IsEmail,
   IsEnum,
   IsIn,
   IsMongoId,
@@ -15,10 +14,6 @@ import { AUTH_MESSAGES } from 'src/common/constants/messages/auth.messages';
 import { SubscriptionPlan } from 'src/modules/business/schemas/business.schema';
 
 export class CreateBusinessDto {
-  @IsEmail({}, { message: AUTH_MESSAGES.VALIDATION.EMAIL_INVALID })
-  @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
-  email: string;
-
   @IsString({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_INVALID })
   @IsNotEmpty({ message: AUTH_MESSAGES.VALIDATION.BUSINESS_NAME_REQUIRED })
   @Transform(({ value }: { value: string }) => value?.trim())

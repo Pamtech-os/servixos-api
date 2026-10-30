@@ -3,6 +3,7 @@ import { BusinessModule } from '../business/business.module';
 import { StripeModule } from '../stripe/stripe.module';
 import { AgendaModule } from '../agenda/agenda.module';
 import { EmailModule } from '../email/email.module';
+import { UsersModule } from '../users/users.module';
 import { SubscriptionRepository } from './repositories/subscription.repository';
 import { SubscriptionService } from './services/subscription.service';
 import { SubscriptionJobsService } from './jobs/subscription-jobs.service';
@@ -10,7 +11,13 @@ import { SubscriptionController } from './controllers/subscription.controller';
 import { PlanSeeder } from '../../seeders/plan.seeder';
 
 @Module({
-  imports: [BusinessModule, StripeModule, AgendaModule, EmailModule],
+  imports: [
+    BusinessModule,
+    StripeModule,
+    AgendaModule,
+    EmailModule,
+    UsersModule,
+  ],
   controllers: [SubscriptionController],
   providers: [
     SubscriptionRepository,

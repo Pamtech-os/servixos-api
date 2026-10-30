@@ -16,6 +16,7 @@ import { StorageService } from '../../storage/storage.service';
 import type { UpdateBookingFormDto } from '../dto/update-booking-form.dto';
 import type { UpdateDesignDto } from '../dto/update-design.dto';
 import type { UpdateContentDto } from '../dto/update-content.dto';
+import { TESTIMONIAL_PLACEHOLDER } from '../constants/website.constants';
 
 const ALLOWED_LOGO_MIME_TYPES = new Set([
   'image/jpeg',
@@ -23,10 +24,17 @@ const ALLOWED_LOGO_MIME_TYPES = new Set([
   'image/png',
 ]);
 
-interface BusinessContext {
+export interface BusinessContext {
   name: string;
   categoryName: string;
   description?: string;
+  tagline?: string;
+  valueProposition?: string;
+  targetCustomers?: string[];
+  services?: { name: string; description?: string }[];
+  tone?: string;
+  /** Free-form change requests from the user, e.g. "make it warmer". */
+  instructions?: string;
 }
 
 export interface GeneratedWebsiteData {
@@ -182,7 +190,7 @@ export class WebsiteGenerationService {
         colorSecondary: config.colorSecondary,
         font: config.font,
         logoUrl: config.logoUrl,
-        aiContent: config.aiContent,
+        aiContent: withoutPlaceholderTestimonial(config.aiContent),
         bookingForm: config.bookingForm,
       },
     };
@@ -266,8 +274,12 @@ export class WebsiteGenerationService {
       if (dto.about !== undefined) update['aiContent.about'] = dto.about;
       if (dto.services !== undefined)
         update['aiContent.services'] = dto.services;
+      // An owner-entered testimonial is real content and may be shown publicly
       if (dto.testimonialPlaceholder !== undefined)
-        update['aiContent.testimonialPlaceholder'] = dto.testimonialPlaceholder;
+        update['aiContent.testimonialPlaceholder'] = {
+          ...dto.testimonialPlaceholder,
+          isPlaceholder: false,
+        };
       if (dto.contact !== undefined) update['aiContent.contact'] = dto.contact;
 
       await this.websiteConfigRepository.updateByBusinessId(businessId, update);
@@ -352,9 +364,8 @@ export class WebsiteGenerationService {
     }
   }
 
-  private async generateAiContent(
-    context: BusinessContext,
-  ): Promise<AiContent | null> {
+  /** Generates website copy from a business context; returns null when generation fails. */
+  async generateAiContent(context: BusinessContext): Promise<AiContent | null> {
     try {
       const message = await this.anthropic.messages.create({
         model: this.model,
@@ -368,7 +379,11 @@ export class WebsiteGenerationService {
       const jsonMatch = block.text.match(/\{[\s\S]*\}/);
       if (!jsonMatch) return null;
 
-      return JSON.parse(jsonMatch[0]) as AiContent;
+      const content = JSON.parse(jsonMatch[0]) as AiContent;
+      return {
+        ...content,
+        testimonialPlaceholder: { ...TESTIMONIAL_PLACEHOLDER },
+      };
     } catch (err) {
       this.logger.error(
         `generateAiContent: AI generation failed: ${err instanceof Error ? err.stack : String(err)}`,
@@ -381,18 +396,45 @@ export class WebsiteGenerationService {
     const desc = context.description
       ? ` Business description: ${context.description}.`
       : '';
+    const details = [
+      context.tagline && `Tagline: ${context.tagline}`,
+      context.valueProposition &&
+        `Value proposition: ${context.valueProposition}`,
+      context.targetCustomers?.length &&
+        `Target customers: ${context.targetCustomers.join(', ')}`,
+      context.services?.length &&
+        `Services (use these, in this order): ${context.services
+          .map((s) => (s.description ? `${s.name} — ${s.description}` : s.name))
+          .join('; ')}`,
+      context.tone && `Tone of voice: ${context.tone}`,
+      context.instructions &&
+        `Requested changes from the owner: ${context.instructions}`,
+    ].filter(Boolean);
+    const extra = details.length ? `\n\n${details.join('\n')}` : '';
 
-    return `Generate professional and modern website content for a ${context.categoryName} business named "${context.name}".${desc}
+    return `Generate professional and modern website content for a ${context.categoryName} business named "${context.name}".${desc}${extra}
 
 Return ONLY a valid JSON object (no markdown, no explanation) with this structure:
 {
   "hero": { "headline": "", "subheadline": "", "ctaText": "" },
   "about": { "title": "", "body": "" },
   "services": [{ "name": "", "description": "" }],
-  "testimonialPlaceholder": { "quote": "", "author": "" },
   "contact": { "callToAction": "" }
 }
 
-Make the copy compelling, professional, and specific to the business type.`;
+Make the copy compelling, professional, and specific to the business type. Do not write customer testimonials, reviews, ratings or statistics about past customers — the business has not collected any yet.`;
   }
+}
+
+/**
+ * Public sites never show a placeholder testimonial. Legacy content without
+ * the flag was AI-written, so only an explicit `isPlaceholder: false` is shown.
+ */
+function withoutPlaceholderTestimonial(
+  content?: AiContent,
+): AiContent | undefined {
+  if (!content?.testimonialPlaceholder) return content;
+  if (content.testimonialPlaceholder.isPlaceholder === false) return content;
+  const { testimonialPlaceholder: _hidden, ...rest } = content;
+  return rest;
 }

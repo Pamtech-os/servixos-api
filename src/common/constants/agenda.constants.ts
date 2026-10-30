@@ -44,6 +44,8 @@ export const JOBS = {
   SUBSCRIPTION_ACTION_REQUIRED: 'subscription:action:required',
   EMAIL_ACTION_REQUIRED: 'email:action:required',
   EMAIL_WAITLIST_JOINED: 'email:waitlist:joined',
+  // Onboarding
+  KYB_VERIFY_REGISTRATION: 'kyb:verify:registration',
 } as const;
 
 export type AgendaJobName = (typeof JOBS)[keyof typeof JOBS];
