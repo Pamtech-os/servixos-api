@@ -10,6 +10,7 @@ import {
   type PublicWebsiteData,
 } from 'src/modules/website/services/website-generation.service';
 import { BookingFieldKey } from 'src/modules/website/schemas/website-config.schema';
+import { TESTIMONIAL_PLACEHOLDER } from 'src/modules/website/constants/website.constants';
 import { type UpdateBookingFormDto } from 'src/modules/website/dto/update-booking-form.dto';
 import { type UpdateDesignDto } from 'src/modules/website/dto/update-design.dto';
 import { type UpdateContentDto } from 'src/modules/website/dto/update-content.dto';
@@ -283,10 +284,61 @@ describe('WebsiteGenerationService.getPublicWebsite', () => {
         colorPrimary: baseConfig.colorPrimary,
         colorSecondary: baseConfig.colorSecondary,
         font: baseConfig.font,
-        aiContent: baseConfig.aiContent,
+        // Legacy testimonial without isPlaceholder:false was AI-written, so it is hidden
+        aiContent: {
+          hero: baseConfig.aiContent.hero,
+          about: baseConfig.aiContent.about,
+          services: baseConfig.aiContent.services,
+          contact: baseConfig.aiContent.contact,
+        },
       },
     };
     expect(result).toEqual(expected);
+  });
+
+  it('hides a placeholder testimonial from the public site', async () => {
+    // Arrange
+    businessRepository.findBySubdomain.mockResolvedValue(baseBusiness);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue({
+      ...baseConfig,
+      aiContent: {
+        ...baseConfig.aiContent,
+        testimonialPlaceholder: { ...TESTIMONIAL_PLACEHOLDER },
+      },
+    });
+
+    // Act
+    const result = await service.getPublicWebsite(SUBDOMAIN);
+
+    // Assert
+    expect(
+      (result as PublicWebsiteData).website.aiContent?.testimonialPlaceholder,
+    ).toBeUndefined();
+  });
+
+  it('shows a testimonial the owner has entered', async () => {
+    // Arrange
+    const testimonial = {
+      quote: 'Fixed our boiler in an hour',
+      author: 'Amaka O.',
+      isPlaceholder: false,
+    };
+    businessRepository.findBySubdomain.mockResolvedValue(baseBusiness);
+    websiteConfigRepository.findByBusinessId.mockResolvedValue({
+      ...baseConfig,
+      aiContent: {
+        ...baseConfig.aiContent,
+        testimonialPlaceholder: testimonial,
+      },
+    });
+
+    // Act
+    const result = await service.getPublicWebsite(SUBDOMAIN);
+
+    // Assert
+    expect(
+      (result as PublicWebsiteData).website.aiContent?.testimonialPlaceholder,
+    ).toEqual(testimonial);
   });
 
   it('looks up the config by the business _id, not the subdomain', async () => {
@@ -615,6 +667,28 @@ describe('WebsiteGenerationService.updateContent', () => {
     );
   });
 
+  it('marks an owner-edited testimonial as real content', async () => {
+    // Arrange
+    const dto: UpdateContentDto = {
+      testimonialPlaceholder: { quote: 'Brilliant', author: 'Tunde' },
+    };
+
+    // Act
+    await service.updateContent(BUSINESS_ID.toString(), dto);
+
+    // Assert
+    expect(websiteConfigRepository.updateByBusinessId).toHaveBeenCalledWith(
+      BUSINESS_ID.toString(),
+      {
+        'aiContent.testimonialPlaceholder': {
+          quote: 'Brilliant',
+          author: 'Tunde',
+          isPlaceholder: false,
+        },
+      },
+    );
+  });
+
   it('does not include omitted sections in the update', async () => {
     // Arrange
     const dto: UpdateContentDto = {
@@ -786,5 +860,58 @@ describe('WebsiteGenerationService.updateLogo', () => {
 
     // Assert
     expect(storageService.delete).not.toHaveBeenCalled();
+  });
+});
+
+describe('WebsiteGenerationService.generateAiContent', () => {
+  let service: WebsiteGenerationService;
+  let create: jest.Mock;
+
+  beforeEach(() => {
+    service = new WebsiteGenerationService(
+      asMock<ConfigService>({ get: jest.fn() }),
+      asMock<WebsiteConfigRepository>({}),
+      asMock<BusinessRepository>({}),
+      asMock<StorageService>({}),
+    );
+    create = jest.fn().mockResolvedValue({
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            hero: { headline: 'h', subheadline: 's', ctaText: 'c' },
+            testimonialPlaceholder: { quote: 'Best ever!', author: 'Jane D.' },
+          }),
+        },
+      ],
+    });
+    Reflect.set(service, 'anthropic', { messages: { create } });
+  });
+
+  it('replaces any model-written testimonial with the labelled placeholder', async () => {
+    // Arrange
+    const context = { name: 'Shine', categoryName: 'Cleaning' };
+
+    // Act
+    const content = await service.generateAiContent(context);
+
+    // Assert
+    expect(content?.testimonialPlaceholder).toEqual(TESTIMONIAL_PLACEHOLDER);
+  });
+
+  it('tells the model not to invent testimonials', async () => {
+    // Arrange
+    const context = { name: 'Shine', categoryName: 'Cleaning' };
+
+    // Act
+    await service.generateAiContent(context);
+
+    // Assert
+    const [params] = create.mock.calls[0] as [
+      { messages: { content: string }[] },
+    ];
+    expect(params.messages[0].content).toContain(
+      'Do not write customer testimonials',
+    );
   });
 });
