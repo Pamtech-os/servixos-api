@@ -19,12 +19,13 @@ export class PremblyService {
     this.baseUrl =
       config.get<string>('PREMBLY_BASE_URL') ||
       'https://api.myidentitypass.com';
-    this.appId = config.get<string>('PREMBLY_APP_ID');
+    // this.appId = config.get<string>('PREMBLY_APP_ID');
     this.apiKey = config.get<string>('PREMBLY_API_KEY');
   }
 
   get isConfigured(): boolean {
-    return !!this.appId && !!this.apiKey;
+    // return !!this.appId && !!this.apiKey;
+    return !!this.apiKey;
   }
 
   /**

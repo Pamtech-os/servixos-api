@@ -87,6 +87,10 @@ export class WaitlistRepository implements OnModuleInit {
     };
   }
 
+  async deleteById(id: string): Promise<void> {
+    await this.waitlistModel.deleteOne({ _id: id }).exec();
+  }
+
   async findAll(
     filters: WaitlistFilters,
     pagination: PaginationParams,

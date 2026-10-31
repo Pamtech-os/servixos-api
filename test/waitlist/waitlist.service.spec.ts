@@ -1,7 +1,9 @@
 import {
+  BadRequestException,
   ConflictException,
   InternalServerErrorException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Readable } from 'stream';
 import { Types } from 'mongoose';
 import { WaitlistService } from 'src/modules/waitlist/services/waitlist.service';
@@ -31,6 +33,7 @@ describe('WaitlistService', () => {
   let service: WaitlistService;
   let waitlistRepo: {
     createIfAbsent: jest.Mock;
+    deleteById: jest.Mock;
     findAll: jest.Mock;
     streamAll: jest.Mock;
     countByPersona: jest.Mock;
@@ -40,6 +43,7 @@ describe('WaitlistService', () => {
   beforeEach(() => {
     waitlistRepo = {
       createIfAbsent: jest.fn(),
+      deleteById: jest.fn().mockResolvedValue(undefined),
       findAll: jest.fn().mockResolvedValue({ data: [], total: 0 }),
       streamAll: jest.fn().mockReturnValue(toAsync([])),
       countByPersona: jest.fn().mockResolvedValue({ total: 0 }),
@@ -48,7 +52,77 @@ describe('WaitlistService', () => {
     service = new WaitlistService(
       asMock<WaitlistRepository>(waitlistRepo),
       asMock<AgendaService>(agendaService),
+      new ConfigService({ JWT_SECRET: 'test-secret' }),
     );
+  });
+
+  describe('unsubscribe', () => {
+    const issueToken = async (entry: WaitlistEntry): Promise<string> => {
+      waitlistRepo.createIfAbsent.mockResolvedValue({ entry, created: true });
+      await service.join({
+        firstName: entry.firstName,
+        email: entry.email,
+        persona: entry.persona,
+      });
+      const [, data] = agendaService.now.mock.calls[0] as [
+        string,
+        { unsubscribeUrl: string },
+      ];
+      return new URL(data.unsubscribeUrl).searchParams.get('token') as string;
+    };
+
+    it('should delete the entry named by a valid token', async () => {
+      // Arrange
+      const entry = makeEntry();
+      const token = await issueToken(entry);
+
+      // Act
+      const result = await service.unsubscribe(token);
+
+      // Assert
+      expect(result).toEqual({ unsubscribed: true });
+      expect(waitlistRepo.deleteById).toHaveBeenCalledWith(
+        entry._id.toString(),
+      );
+    });
+
+    it('should reject a token signed for a different entry', async () => {
+      // Arrange
+      const token = await issueToken(makeEntry());
+      const signature = token.split('.')[1];
+      const forged = `${new Types.ObjectId().toString()}.${signature}`;
+
+      // Act
+      const result = await service.unsubscribe(forged);
+
+      // Assert
+      expect(result).toBeInstanceOf(BadRequestException);
+      expect(waitlistRepo.deleteById).not.toHaveBeenCalled();
+    });
+
+    it.each(['', 'not-a-token', 'abc.def'])(
+      'should reject the malformed token "%s"',
+      async (token) => {
+        // Act
+        const result = await service.unsubscribe(token);
+
+        // Assert
+        expect(result).toBeInstanceOf(BadRequestException);
+        expect(waitlistRepo.deleteById).not.toHaveBeenCalled();
+      },
+    );
+
+    it('should return a server error when the delete fails', async () => {
+      // Arrange
+      const token = await issueToken(makeEntry());
+      waitlistRepo.deleteById.mockRejectedValue(new Error('db down'));
+
+      // Act
+      const result = await service.unsubscribe(token);
+
+      // Assert
+      expect(result).toBeInstanceOf(InternalServerErrorException);
+    });
   });
 
   describe('join', () => {
@@ -92,6 +166,9 @@ describe('WaitlistService', () => {
           to: 'ada@example.com',
           firstName: 'Ada',
           persona: WaitlistPersona.HAS_IDEA,
+          unsubscribeUrl: expect.stringMatching(
+            /^https:\/\/servixos\.com\/unsubscribe\?token=[0-9a-f]{24}\.[0-9a-f]{64}$/,
+          ) as string,
         },
       );
     });
