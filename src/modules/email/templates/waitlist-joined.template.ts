@@ -16,6 +16,7 @@ const PERSONA_MESSAGES: Record<WaitlistPersona, string> = {
 export function waitlistJoinedTemplate(
   firstName: string,
   persona: WaitlistPersona,
+  unsubscribeUrl: string,
 ): string {
   const name = escapeHtml(firstName) || 'there';
   const personaMessage = PERSONA_MESSAGES[persona] ?? '';
@@ -73,7 +74,8 @@ export function waitlistJoinedTemplate(
 
         <p style="font-size:12px;color:hsl(220,10%,50%);line-height:1.6;margin:0;">
           You're receiving this email because you joined the Servix OS waitlist.
-          If this wasn't you, you can safely ignore this message.
+          If this wasn't you, or you'd rather not hear from us,
+          <a href="${escapeHtml(unsubscribeUrl)}" style="color:hsl(217,91%,50%);">unsubscribe here</a>.
         </p>
       </div>`;
 

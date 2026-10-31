@@ -9,15 +9,20 @@ export const WAITLIST_MESSAGES = {
     PERSONA_REQUIRED: 'Please tell us what best describes you',
     PERSONA_INVALID: 'Please select a valid option for what best describes you',
     DATE_INVALID: 'Date must be a valid ISO 8601 date',
+    UNSUBSCRIBE_TOKEN_REQUIRED: 'Unsubscribe token is required',
   },
   SUCCESS: {
     JOINED:
       "You're on the list! We'll keep you updated on ServixOS and let you know when early access becomes available.",
     RETRIEVED: 'Waitlist signups retrieved successfully',
+    UNSUBSCRIBED: "You've been unsubscribed and removed from the waitlist.",
   },
   ERROR: {
     ALREADY_REGISTERED: 'This email address is already on the waitlist',
     JOIN_FAILED:
       "We couldn't add you to the waitlist right now. Please try again in a moment.",
+    INVALID_UNSUBSCRIBE_TOKEN: 'This unsubscribe link is invalid.',
+    UNSUBSCRIBE_FAILED:
+      "We couldn't unsubscribe you right now. Please try again in a moment.",
   },
 } as const;

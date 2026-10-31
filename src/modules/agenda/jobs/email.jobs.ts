@@ -31,6 +31,7 @@ export interface WaitlistJoinedJobData {
   to: string;
   firstName: string;
   persona: WaitlistPersona;
+  unsubscribeUrl: string;
 }
 
 export interface PasswordResetJobData {
@@ -165,13 +166,13 @@ export function defineEmailJobs(
     JOBS.EMAIL_WAITLIST_JOINED,
     { concurrency: 10 },
     async (job: Job) => {
-      const { to, firstName, persona } = job.attrs
+      const { to, firstName, persona, unsubscribeUrl } = job.attrs
         .data as WaitlistJoinedJobData;
       await emailService.send({
         to,
         name: firstName,
         subject: "You're on the Servix OS waitlist 🚀",
-        html: waitlistJoinedTemplate(firstName, persona),
+        html: waitlistJoinedTemplate(firstName, persona, unsubscribeUrl),
       });
     },
   );

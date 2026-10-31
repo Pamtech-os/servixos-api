@@ -1,9 +1,12 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { Readable } from 'stream';
 import { JOBS } from 'src/common/constants/agenda.constants';
 import { AgendaService } from 'src/modules/agenda/services/agenda.service';
@@ -28,6 +31,7 @@ const UTF8_BOM = String.fromCharCode(0xfeff);
 // Rows per write — amortises stream overhead without holding much in memory
 const CSV_BATCH_SIZE = 500;
 const CSV_HEADERS = ['First Name', 'Email', 'Describes Them', 'Joined At'];
+const DEFAULT_WEBSITE_URL = 'https://servixos.com';
 
 @Injectable()
 export class WaitlistService {
@@ -36,6 +40,7 @@ export class WaitlistService {
   constructor(
     private readonly waitlistRepo: WaitlistRepository,
     private readonly agendaService: AgendaService,
+    private readonly config: ConfigService,
   ) {}
 
   /** Register a new waitlist signup and queue a confirmation email; rejects emails that are already registered. */
@@ -58,6 +63,7 @@ export class WaitlistService {
           to: entry.email,
           firstName: entry.firstName,
           persona: entry.persona,
+          unsubscribeUrl: this.buildUnsubscribeUrl(entry._id.toString()),
         })
         .catch((err: unknown) =>
           this.logger.error(
@@ -80,6 +86,26 @@ export class WaitlistService {
       this.logger.error(`join: ${formatError(error)}`);
       return new InternalServerErrorException(
         WAITLIST_MESSAGES.ERROR.JOIN_FAILED,
+      );
+    }
+  }
+
+  /** Remove a signup using the signed token from its email link; repeat requests succeed so the link stays safe to retry. */
+  async unsubscribe(token: string) {
+    const [id] = token.split('.');
+    if (!id || !this.isValidUnsubscribeToken(token, id)) {
+      return new BadRequestException(
+        WAITLIST_MESSAGES.ERROR.INVALID_UNSUBSCRIBE_TOKEN,
+      );
+    }
+
+    try {
+      await this.waitlistRepo.deleteById(id);
+      return { unsubscribed: true };
+    } catch (error) {
+      this.logger.error(`unsubscribe: ${formatError(error)}`);
+      return new InternalServerErrorException(
+        WAITLIST_MESSAGES.ERROR.UNSUBSCRIBE_FAILED,
       );
     }
   }
@@ -139,6 +165,29 @@ export class WaitlistService {
       // Closes the Mongo cursor if the client disconnects mid-download
       await iterator.return?.();
     }
+  }
+
+  private buildUnsubscribeUrl(id: string): string {
+    const websiteUrl = this.config
+      .get<string>('WEBSITE_URL', DEFAULT_WEBSITE_URL)
+      .replace(/\/+$/, '');
+    const token = `${id}.${this.signUnsubscribeId(id)}`;
+    return `${websiteUrl}/unsubscribe?token=${encodeURIComponent(token)}`;
+  }
+
+  // The purpose prefix keeps these signatures from being valid for anything else using JWT_SECRET.
+  private signUnsubscribeId(id: string): string {
+    return createHmac('sha256', this.config.get<string>('JWT_SECRET') ?? '')
+      .update(`waitlist-unsubscribe:${id}`)
+      .digest('hex');
+  }
+
+  private isValidUnsubscribeToken(token: string, id: string): boolean {
+    const actual = Buffer.from(token);
+    const expected = Buffer.from(`${id}.${this.signUnsubscribeId(id)}`);
+    return (
+      actual.length === expected.length && timingSafeEqual(actual, expected)
+    );
   }
 
   private toFilters(dto: ExportWaitlistDto): WaitlistFilters {
